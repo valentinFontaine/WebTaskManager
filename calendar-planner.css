@@ -241,17 +241,53 @@ body {
     min-height: calc(100vh - 80px); /* Hauteur de l'écran moins l'en-tête */
 }
 
-@media (max-width: 768px) {
+@media (min-width: 769px) {
     .main-content {
-        min-height: 100vh; /* Pleine hauteur pour les écrans mobiles */
+        display: flex;
+        flex: 1;
+        overflow: hidden;
+        gap: 1rem;
+        padding: 1rem;
+        background-color: var(--light-bg);
+    }
+    
+    .calendar-column {
+        flex: 0 0 70%;
+    }
+    
+    .tasks-column {
+        flex: 0 0 30%;
     }
 }
 
-.calendar-column {
-    display: flex;
-    flex-direction: column;
-    min-height: 600px;
+@media (max-width: 768px) {
+    .main-content {
+        flex-direction: row;
+        overflow-x: auto;
+        overflow-y: hidden;
+        -webkit-overflow-scrolling: touch;
+        scroll-snap-type: x mandatory;
+        min-height: calc(100vh - 80px); /* Hauteur écran moins header */
+        padding: 1rem;
+        gap: 1rem;
+    }
+
+    .calendar-column {
+        flex: 0 0 100%;
+        min-width: 100%;
+        min-height: calc(100vh - 100px); /* Hauteur disponible */
+        scroll-snap-align: start;
+    }
+    
+    .tasks-column {
+        flex: 0 0 100%;
+        min-width: 100%;
+        min-height: calc(100vh - 100px); /* Hauteur disponible */
+        scroll-snap-align: start;
+    }
 }
+
+
 
 /* ===================================
    Colonne Tâches (Droite - 30%)
@@ -560,7 +596,7 @@ body {
 /* ===================================
    Responsive Design
    =================================== */
-@media (max-width: 1024px) {
+@media (max-width: 1024px) and (min-width: 769px) {
     .main-content {
         flex-direction: column;
     }
