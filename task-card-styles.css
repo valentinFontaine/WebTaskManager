@@ -1,0 +1,171 @@
+/* ===================================
+   Task Card Styles - Commun
+   =================================== */
+
+/* Base task-card styles (from styles.css with calendar-planner enhancements) */
+.task-card {
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 15px;
+    background: #fafafa;
+    transition: all 0.3s ease;
+    position: relative;
+    cursor: pointer;
+}
+
+.task-card:hover {
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    transform: translateY(-1px);
+}
+
+/* Enhanced states from calendar-planner.css */
+.task-card.selected {
+    border-color: #4a90e2;
+    background-color: rgba(74, 144, 226, 0.05);
+    box-shadow: 0 0 0 2px #4a90e2;
+    transform: translateY(-1px);
+}
+
+.task-card.selected .task-priority {
+    color: #4a90e2;
+    font-weight: 600;
+}
+
+.task-card.dragging {
+    opacity: 0.5;
+    cursor: grabbing;
+}
+
+/* Task card header (from calendar-planner.css) */
+.task-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 15px;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.task-priority {
+    padding: 0.2rem 0.6rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.task-priority.high {
+    background-color: #ffe0e0;
+    color: #dc3545;
+}
+
+.task-priority.medium {
+    background-color: #fff4e0;
+    color: #ffc107;
+}
+
+.task-priority.low {
+    background-color: #e0f4ff;
+    color: #4a90e2;
+}
+
+.task-description {
+    font-size: 1rem;
+    font-weight: 500;
+    color: #212529;
+    margin-bottom: 10px;
+    line-height: 1.4;
+}
+
+.task-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    font-size: 0.85rem;
+    color: #6c757d;
+    margin-bottom: 10px;
+}
+
+.task-meta-item {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.task-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-bottom: 10px;
+}
+
+.task-tag {
+    padding: 0.2rem 0.6rem;
+    background-color: #f8f9fa;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    color: #6c757d;
+}
+
+.task-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+/* Button styles for task actions */
+.btn {
+    padding: 6px 12px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-primary {
+    background: #4a90e2;
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #357abd;
+}
+
+.btn-success {
+    background: #28a745;
+    color: white;
+}
+
+.btn-success:hover {
+    background: #218838;
+}
+
+.btn-warning {
+    background: #ffc107;
+    color: #212529;
+}
+
+.btn-warning:hover {
+    background: #e0a800;
+}
+
+.btn-danger {
+    background: #dc3545;
+    color: white;
+}
+
+.btn-danger:hover {
+    background: #c82333;
+}
+
+.btn-small {
+    padding: 4px 8px;
+    font-size: 11px;
+}
