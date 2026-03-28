@@ -576,6 +576,13 @@ class CalendarTaskActionHandler extends TaskActionHandler {
     
     openEditModal(task) {
         console.log('Edit modal opened for task:', task);
+        // Appeler taskEditor si disponible
+        if (typeof taskEditor !== 'undefined') {
+            taskEditor.showForTask(task);
+        } else {
+            console.error('taskEditor is not defined in calendar-planner');
+            alert('Task editor is not available in this view.');
+        }
     }
     
     confirmDelete(taskUuid) {

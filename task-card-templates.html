@@ -11,6 +11,9 @@
         <div class="task-card">
             <div class="task-card-header">
                 <span class="task-priority"><slot name="priority"></slot></span>
+                <button class="btn btn-primary btn-small task-edit" data-task-action="edit">
+                    <span class="icon">✏️</span>
+                </button>
             </div>
             <div class="task-description"><slot name="description"></slot></div>
             <div class="task-meta">
