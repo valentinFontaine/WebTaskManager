@@ -447,6 +447,7 @@ function loadTasks() {
                 
                 // Afficher les détails des tâches planifiées pour le débogage
                 plannedTasks.forEach((task, index) => {
+                    /*
                     console.log(`Tâche planifiée ${index + 1}:`, {
                         description: task.description,
                         scheduled: task.scheduled,
@@ -454,6 +455,7 @@ function loadTasks() {
                         estTime: task.estTime,
                         pool: task.pool
                     });
+                    //*/
                 });
                 
                 // Mettre à jour allTasks avec les tâches non planifiées et planifiées
@@ -527,7 +529,7 @@ function createCalendarEvent(task, scheduledDate) {
             console.error('Date de planification invalide:', scheduledDate, 'formaté en:', isoDate, 'pour la tâche:', task);
             return null;
         } else {
-            console.log('Date convertie avec succès:', scheduledDate, '->', start);
+            //console.log('Date convertie avec succès:', scheduledDate, '->', start);
         }
     } catch (e) {
         console.error('Erreur lors de la création de la date:', e, 'pour la tâche:', task);
@@ -570,19 +572,22 @@ function createCalendarEvent(task, scheduledDate) {
  * TaskActionHandler pour calendar-planner.js
  */
 class CalendarTaskActionHandler extends TaskActionHandler {
-    performTaskAction(taskUuid, action) {
-        console.log('Action performed:', action, 'on task:', taskUuid);
+    constructor() {
+        super({
+            onEditRequest: (task) => {
+                console.log('Appel de la fonction onEditRequest !')
+                if (typeof taskEditor !== 'undefined') {
+                    taskEditor.showForTask(task);
+                } else {
+                    console.error('taskEditor is not defined in calendar-planner');
+                    alert('Task editor is not available in this view.');
+                }
+            }
+        });
     }
     
-    openEditModal(task) {
-        console.log('Edit modal opened for task:', task);
-        // Appeler taskEditor si disponible
-        if (typeof taskEditor !== 'undefined') {
-            taskEditor.showForTask(task);
-        } else {
-            console.error('taskEditor is not defined in calendar-planner');
-            alert('Task editor is not available in this view.');
-        }
+    performTaskAction(taskUuid, action) {
+        console.log('Action performed:', action, 'on task:', taskUuid);
     }
     
     confirmDelete(taskUuid) {

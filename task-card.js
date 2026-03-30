@@ -245,6 +245,14 @@ class TaskCardManager {
         if (poolSlot) {
             poolSlot.textContent = pool;
         }
+        
+        // Pour le mode minimal, ajouter l'UUID au bouton edit dans le header
+        if (mode === 'minimal') {
+            const editButton = card.querySelector('.task-card-header .task-edit');
+            if (editButton) {
+                editButton.dataset.taskUuid = task.uuid;
+            }
+        }
 
         // Date d'échéance (uniquement en mode complet)
         if (mode === 'full') {
