@@ -433,7 +433,7 @@ class TaskEditor {
         }
         
         // Pour la modification, utiliser 'est' au lieu de 'duration'
-        if (isEdit && preparedData.duration) {
+        if (preparedData.duration) {
             preparedData.estTime = preparedData.duration;
             delete preparedData.duration;
         }
