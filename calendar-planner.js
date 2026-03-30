@@ -102,8 +102,9 @@ function setupEventListeners() {
     const prevBtn = document.getElementById('prev-btn');
     const nextBtn = document.getElementById('next-btn');
     const todayBtn = document.getElementById('today-btn');
+    const addTaskBtn = document.getElementById('add-task-btn');
     
-    console.log('Boutons de navigation:', { prevBtn, nextBtn, todayBtn });
+    console.log('Boutons de navigation:', { prevBtn, nextBtn, todayBtn, addTaskBtn });
     
     prevBtn.addEventListener('click', () => {
         console.log('Bouton précédent cliqué');
@@ -136,6 +137,20 @@ function setupEventListeners() {
                 updateCalendarTitle();
             } catch (error) {
                 console.error('Erreur lors du retour à aujourd\'hui:', error);
+            }
+        });
+    }
+    
+    // Bouton pour ajouter une nouvelle tâche
+    if (addTaskBtn) {
+        addTaskBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            console.log('Bouton ajouter tâche cliqué');
+            if (typeof taskEditor !== 'undefined') {
+                taskEditor.show(); // Ouvrir l'éditeur sans données de tâche
+            } else {
+                console.error('taskEditor is not defined');
+                alert('Task editor is not available.');
             }
         });
     }

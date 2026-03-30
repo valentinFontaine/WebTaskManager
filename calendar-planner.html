@@ -68,6 +68,9 @@
                     <h2>Tâches à planifier</h2>
                     <div class="tasks-stats">
                         <span id="task-count" class="stat-badge">0 tâches</span>
+                        <button id="add-task-btn" class="btn btn-success header-add-btn">
+                            <span class="icon">➕</span>
+                        </button>
                     </div>
                 </div>
                 
@@ -128,8 +131,15 @@
                 language: 'fr',
                 onSaveSuccess: (task, isEdit) => {
                     console.log('Task saved successfully:', task);
-                    // Recharger les tâches après modification
-                    loadTasks();
+                    if (isEdit) {
+                        // Si c'est une édition, recharger toutes les tâches
+                        loadTasks();
+                    } else {
+                        // Si c'est une nouvelle tâche, l'ajouter en haut de la liste
+                        unplannedTasks.unshift(task);
+                        displayUnplannedTasks(unplannedTasks);
+                        updateTaskCount();
+                    }
                 },
                 onSaveError: (error) => {
                     console.error('Error saving task:', error);
