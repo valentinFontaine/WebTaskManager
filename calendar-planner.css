@@ -829,8 +829,9 @@ body {
 
 @media (max-width: 480px) {
     .btn {
-        padding: 0.5rem 0.8rem;
-        font-size: 0.85rem;
+        padding: 4px 8px;
+        font-size: 11px;
+        white-space: nowrap;
     }
     
     .btn .icon {
@@ -848,6 +849,14 @@ body {
     .view-btn {
         padding: 0.2rem 0.4rem;
         font-size: 0.7rem;
+    }
+    
+    .task-actions {
+        flex-direction: row;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        gap: 6px;
+        margin-top: 8px;
     }
 }
 

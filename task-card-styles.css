@@ -110,23 +110,25 @@
 
 .task-actions {
     display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-top: 10px;
+    flex-wrap: nowrap;
+    gap: 6px;
+    margin-top: 8px;
+    overflow-x: auto;
 }
 
 /* Button styles for task actions */
 .btn {
-    padding: 6px 12px;
+    padding: 4px 8px;
     border: none;
     border-radius: 6px;
     cursor: pointer;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 500;
     transition: all 0.3s ease;
     display: inline-flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
+    white-space: nowrap;
 }
 
 .btn-primary {
@@ -166,6 +168,6 @@
 }
 
 .btn-small {
-    padding: 4px 8px;
-    font-size: 11px;
+    padding: 3px 6px;
+    font-size: 10px;
 }

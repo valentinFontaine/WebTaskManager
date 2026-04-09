@@ -426,11 +426,18 @@ h2 {
     }
     
     .task-actions {
-        flex-direction: column;
+        flex-direction: row;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        gap: 6px;
+        margin-top: 8px;
     }
     
     .btn {
-        width: 100%;
+        width: auto;
         justify-content: center;
+        padding: 4px 8px;
+        font-size: 11px;
+        white-space: nowrap;
     }
 }
