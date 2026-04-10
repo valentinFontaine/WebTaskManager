@@ -348,15 +348,18 @@ body {
 }
 
 .view-btn {
-    padding: 0.4rem 1rem;
+    padding: 0.25rem 0.6rem;
     border: none;
     background: transparent;
     color: var(--secondary-color);
     border-radius: 6px;
     cursor: pointer;
-    font-size: 0.85rem;
+    font-size: 0.75rem;
     font-weight: 500;
     transition: all 0.2s ease;
+    width: auto;
+    min-width: 0;
+    flex: 0 0 auto;
 }
 
 .view-btn:hover {
@@ -848,7 +851,7 @@ body {
     
     .view-btn {
         padding: 0.2rem 0.4rem;
-        font-size: 0.7rem;
+        font-size: 0.65rem;
     }
     
     .task-actions {
