@@ -246,9 +246,9 @@ class TaskCardManager {
             poolSlot.textContent = pool;
         }
         
-        // Pour le mode minimal, ajouter l'UUID au bouton edit dans le header
+        // Pour le mode minimal, ajouter l'UUID au bouton edit
         if (mode === 'minimal') {
-            const editButton = card.querySelector('.task-card-header .task-edit');
+            const editButton = card.querySelector('.task-edit');
             if (editButton) {
                 editButton.dataset.taskUuid = task.uuid;
             }

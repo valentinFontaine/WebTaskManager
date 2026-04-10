@@ -116,6 +116,13 @@
     overflow-x: auto;
 }
 
+/* Style spécifique pour le bouton edit en mode minimal */
+.task-card-minimal .task-edit {
+    width: auto;
+    min-width: 0;
+    flex: 0 0 auto;
+}
+
 /* Button styles for task actions */
 .btn {
     padding: 4px 8px;
