@@ -56,16 +56,23 @@ class TaskWarriorUI {
 
         // Add event listener for the toggle filter buttons
         const toggleFilterBtn = document.getElementById('filter-planned-incomplete-btn');
-        if (toggleFilterBtn) {
+        const todayFilterBtn = document.getElementById('filter-today-btn');
+        
+        if (toggleFilterBtn && todayFilterBtn) {
             toggleFilterBtn.addEventListener('click', () => {
+                // Désactiver l'autre bouton si actif
+                if (todayFilterBtn.classList.contains('active')) {
+                    todayFilterBtn.classList.remove('active');
+                }
                 toggleFilterBtn.classList.toggle('active');
                 this.applyFilters();
             });
-        }
 
-        const todayFilterBtn = document.getElementById('filter-today-btn');
-        if (todayFilterBtn) {
             todayFilterBtn.addEventListener('click', () => {
+                // Désactiver l'autre bouton si actif
+                if (toggleFilterBtn.classList.contains('active')) {
+                    toggleFilterBtn.classList.remove('active');
+                }
                 todayFilterBtn.classList.toggle('active');
                 this.applyFilters();
             });
