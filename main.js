@@ -179,6 +179,25 @@ class TaskWarriorUI {
                 }
             }
             
+            // Filter by planned & incomplete status
+            if (this.currentFilters.showPlannedIncomplete) {
+                // Check if task has a scheduled date in the past and is not completed
+                if (task.scheduled && !task.completed) {
+                    // Parse scheduled date (format: YYYYMMDDTHHMMSSZ)
+                    const scheduledDate = new Date(task.scheduled.replace(
+                        /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/,
+                        '$1-$2-$3T$4:$5:$6'
+                    ));
+                    const now = new Date();
+                    
+                    // Check if scheduled date is in the past
+                    if (scheduledDate < now) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+            
             return true;
         });
     }
@@ -190,10 +209,12 @@ class TaskWarriorUI {
             .split(',')
             .map(tag => tag.trim())
             .filter(tag => tag.length > 0);
+        const showPlannedIncomplete = document.getElementById('filter-planned-incomplete').checked;
             
         this.currentFilters = {
             project: project || null,
-            tags: tags
+            tags: tags,
+            showPlannedIncomplete: showPlannedIncomplete
         };
         
         this.renderTasks();
@@ -203,10 +224,12 @@ class TaskWarriorUI {
     clearFilters() {
         document.getElementById('filter-project').value = '';
         document.getElementById('filter-tags').value = '';
+        document.getElementById('filter-planned-incomplete').checked = false;
         
         this.currentFilters = {
             project: null,
-            tags: []
+            tags: [],
+            showPlannedIncomplete: false
         };
         
         this.renderTasks();
