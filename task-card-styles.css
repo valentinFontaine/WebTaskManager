@@ -40,11 +40,11 @@
 /* Task card header (from calendar-planner.css) */
 .task-card-header {
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-start;
     align-items: flex-start;
-    margin-bottom: 15px;
+    margin-bottom: 3px;
     flex-wrap: wrap;
-    gap: 10px;
+    gap: 5px;
 }
 
 .task-priority {
@@ -95,26 +95,40 @@
     line-height: 1.4;
 }
 
-.task-meta {
+/* Conteneur pour les éléments de métadonnées (tags, meta, actions) */
+.task-footer {
     display: flex;
     flex-wrap: wrap;
-    gap: 10px;
+    gap: 3px;
+    align-items: flex-start;
+    margin-bottom: 3px;
+}
+
+.task-meta {
+    display: flex;
+    flex-wrap: nowrap; /* Empêcher le wrap interne */
+    gap: 5px;
     font-size: 0.85rem;
     color: #6c757d;
-    margin-bottom: 10px;
+    margin-bottom: 0; /* Retiré la marge car gérée par le conteneur */
+    flex: 1 0 auto; /* Ne pas grandir, mais pouvoir rétrécir */
+    min-width: fit-content; /* Largeur basée sur le contenu */
 }
 
 .task-meta-item {
-    display: flex;
+    flex-wrap: nowrap; /* Empêcher le wrap interne */
     align-items: center;
     gap: 0.25rem;
+    white-space: nowrap; /* Empêcher le wrap du texte */
 }
 
 .task-tags {
     display: flex;
     flex-wrap: wrap;
     gap: 5px;
-    margin-bottom: 10px;
+    margin-bottom: 0; /* Retiré la marge car gérée par le conteneur */
+    flex: 1 1 12rem;
+    min-width: 150px;
 }
 
 .task-tag {
@@ -129,8 +143,10 @@
     display: flex;
     flex-wrap: nowrap;
     gap: 6px;
-    margin-top: 8px;
+    margin-top: 0; /* Retiré la marge car gérée par le conteneur */
     overflow-x: auto;
+    margin-left: auto; /* Pousse les actions à droite si espace disponible */
+    flex: 0 0 auto
 }
 
 /* Style spécifique pour le bouton edit en mode minimal */

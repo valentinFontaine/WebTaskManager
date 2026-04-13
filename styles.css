@@ -421,13 +421,14 @@ h2 {
 
 @media (max-width: 480px) {
     .task-meta {
-        flex-direction: column;
+        flex-direction: row;
+        flex-wrap: wrap;
         gap: 5px;
     }
     
     .task-actions {
         flex-direction: row;
-        flex-wrap: nowrap;
+        flex-wrap: wrap;
         overflow-x: auto;
         gap: 6px;
         margin-top: 8px;
