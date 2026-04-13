@@ -703,7 +703,7 @@ function displayUnplannedTasks(tasks) {
 
     // Crée et ajoute chaque carte de tâche
     tasks.forEach(task => {
-        const taskCard = taskCardManager.createTaskCard(task, 'minimal');
+        const taskCard = taskCardManager.createTaskCard(task, 'full');
         container.appendChild(taskCard);
     });
 }
