@@ -6,8 +6,8 @@
 .task-card {
     border: 1px solid #e0e0e0;
     border-radius: 8px;
-    padding: 20px;
-    margin-bottom: 15px;
+    padding: 6px;
+    margin-bottom: 5px;
     background: #fafafa;
     transition: all 0.3s ease;
     position: relative;
@@ -51,7 +51,7 @@
     font-size: 1rem;
     font-weight: 500;
     color: #212529;
-    margin-bottom: 10px;
+    margin-bottom: 3px;
     line-height: 1.4;
     flex: 1 1 auto; /* Permettre à la description de grandir/rétrécir */
     min-width: 150px; /* Empêcher l'effondrement complet */
