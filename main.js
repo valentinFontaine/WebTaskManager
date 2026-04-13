@@ -54,11 +54,19 @@ class TaskWarriorUI {
             button.addEventListener('click', (e) => this.setContext(e.target.getAttribute('data-context')));
         });
 
-        // Add event listener for the toggle filter button
+        // Add event listener for the toggle filter buttons
         const toggleFilterBtn = document.getElementById('filter-planned-incomplete-btn');
         if (toggleFilterBtn) {
             toggleFilterBtn.addEventListener('click', () => {
                 toggleFilterBtn.classList.toggle('active');
+                this.applyFilters();
+            });
+        }
+
+        const todayFilterBtn = document.getElementById('filter-today-btn');
+        if (todayFilterBtn) {
+            todayFilterBtn.addEventListener('click', () => {
+                todayFilterBtn.classList.toggle('active');
                 this.applyFilters();
             });
         }
@@ -207,6 +215,29 @@ class TaskWarriorUI {
                 return false;
             }
             
+            // Filter by today only
+            if (this.currentFilters.showTodayOnly) {
+                // Check if task is scheduled for today
+                if (task.scheduled) {
+                    // Parse scheduled date (format: YYYYMMDDTHHMMSSZ)
+                    const scheduledDate = new Date(task.scheduled.replace(
+                        /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/,
+                        '$1-$2-$3T$4:$5:$6'
+                    ));
+                    
+                    // Get today's date range (00:00:00 to 23:59:59)
+                    const now = new Date();
+                    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+                    const tomorrowStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0);
+                    
+                    // Check if scheduled date is within today's range
+                    if (scheduledDate >= todayStart && scheduledDate < tomorrowStart) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+            
             return true;
         });
     }
@@ -220,11 +251,14 @@ class TaskWarriorUI {
             .filter(tag => tag.length > 0);
         const toggleFilterBtn = document.getElementById('filter-planned-incomplete-btn');
         const showPlannedIncomplete = toggleFilterBtn ? toggleFilterBtn.classList.contains('active') : false;
+        const todayFilterBtn = document.getElementById('filter-today-btn');
+        const showTodayOnly = todayFilterBtn ? todayFilterBtn.classList.contains('active') : false;
             
         this.currentFilters = {
             project: project || null,
             tags: tags,
-            showPlannedIncomplete: showPlannedIncomplete
+            showPlannedIncomplete: showPlannedIncomplete,
+            showTodayOnly: showTodayOnly
         };
         
         this.renderTasks();
@@ -238,11 +272,16 @@ class TaskWarriorUI {
         if (toggleFilterBtn) {
             toggleFilterBtn.classList.remove('active');
         }
+        const todayFilterBtn = document.getElementById('filter-today-btn');
+        if (todayFilterBtn) {
+            todayFilterBtn.classList.remove('active');
+        }
         
         this.currentFilters = {
             project: null,
             tags: [],
-            showPlannedIncomplete: false
+            showPlannedIncomplete: false,
+            showTodayOnly: false
         };
         
         this.renderTasks();
