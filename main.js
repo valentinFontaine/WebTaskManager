@@ -20,26 +20,7 @@ class TaskWarriorUI {
             onSave: (taskData, isEdit) => this.handleTaskSave(taskData, isEdit),
             onCancel: () => this.handleTaskCancel()
         });
-        
-        // Initialiser le composant TaskEditor en mode inline
-        this.taskCreator = new TaskEditor({
-            showAllFields: true,
-            priorityFormat: 'letters',
-            language: 'en',
-            containerId: 'task-creator-container',
-            inline: true,
-            onSaveSuccess: (task, isEdit) => {
-                if (!isEdit) {
-                    this.tasks.unshift(task);
-                    this.renderTasks();
-                    this.showNotification('Tâche ajoutée avec succès', 'success');
-                }
-            },
-            onSaveError: (error) => {
-                this.showNotification(error || 'Échec de l\'ajout de la tâche', 'error');
-            }
-        });
-        
+       
         // Attendre que les composants soient initialisés avant de charger les tâches
         setTimeout(() => {
             this.initializeEventListeners();
@@ -50,6 +31,23 @@ class TaskWarriorUI {
 
     initializeEventListeners() {
         document.getElementById('refresh-btn').addEventListener('click', () => this.loadTasks());
+        
+        // Add event listener for the add task button
+        const addTaskBtn = document.getElementById('add-task-btn');
+        console.log('Blabla');
+        // Bouton pour ajouter une nouvelle tâche
+        if (addTaskBtn) {
+            addTaskBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                console.log('Bouton ajouter tâche cliqué');
+                if (typeof taskEditor !== 'undefined') {
+                    taskEditor.show(); // Ouvrir l'éditeur sans données de tâche
+                } else {
+                    console.error('taskEditor is not defined');
+                    alert('Task editor is not available.');
+                }
+            });
+        }
         
         // Add context selection event listeners
         document.querySelectorAll('.context-option').forEach(button => {
