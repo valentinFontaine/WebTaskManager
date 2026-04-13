@@ -10,6 +10,7 @@
     <template id="task-card-minimal">
         <div class="task-card">
             <div class="task-card-header">
+                <div class="task-urgency"><slot name="urgency"></slot></div>
                 <div class="task-description"><slot name="description"></slot></div>
             </div>
             <div class="task-meta">
@@ -29,6 +30,7 @@
     <template id="task-card-full">
         <div class="task-card">
             <div class="task-card-header">
+                <div class="task-urgency"><slot name="urgency"></slot></div>
                 <div class="task-description"><slot name="description"></slot></div>
                 <!--
                 <button class="toggle-mode-btn" onclick="taskCardManager.toggleMode(this.closest('.task-card'))">

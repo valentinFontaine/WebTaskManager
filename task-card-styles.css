@@ -55,6 +55,14 @@
     text-transform: uppercase;
 }
 
+.task-urgency {
+    font-size: 1rem;
+    font-weight: 500;
+    color: #212529;
+    margin-right: 10px;
+    line-height: 1.4;
+}
+
 .task-priority.high {
     background-color: #ffe0e0;
     color: #dc3545;
