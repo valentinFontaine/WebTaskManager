@@ -370,12 +370,19 @@ class TaskEditor {
             const dueField = form.querySelector('#task-editor-due');
             const scheduledField = form.querySelector('#task-editor-scheduled');
             
+            // Toujours inclure les champs, même s'ils sont vides, pour permettre la suppression
             if (tagsField) {
                 taskData.tags = tagsField.value.split(',').map(tag => tag.trim()).filter(tag => tag);
             }
-            if (projectField) taskData.project = projectField.value;
-            if (dueField) taskData.due = dueField.value;
-            if (scheduledField) taskData.scheduled = scheduledField.value;
+            if (projectField) {
+                taskData.project = projectField.value; // Inclure même si vide
+            }
+            if (dueField) {
+                taskData.due = dueField.value; // Inclure même si vide
+            }
+            if (scheduledField) {
+                taskData.scheduled = scheduledField.value; // Inclure même si vide
+            }
         }
         
         // Ajouter l'ID si on modifie une tâche existante
@@ -424,12 +431,13 @@ class TaskEditor {
             duration: taskData.duration || null
         };
         
-        // Formater les dates si elles existent
-        if (taskData.due) {
-            preparedData.due = this.formatDateForTask(taskData.due);
+        // Formater les dates si elles existent dans taskData (même si vides)
+        // Utiliser 'in' pour détecter les champs intentionnellement vidés
+        if ('due' in taskData) {
+            preparedData.due = taskData.due ? this.formatDateForTask(taskData.due) : null;
         }
-        if (taskData.scheduled) {
-            preparedData.scheduled = this.formatDateForTask(taskData.scheduled);
+        if ('scheduled' in taskData) {
+            preparedData.scheduled = taskData.scheduled ? this.formatDateForTask(taskData.scheduled) : null;
         }
         
         // Pour la modification, utiliser 'est' au lieu de 'duration'
