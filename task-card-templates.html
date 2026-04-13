@@ -7,32 +7,6 @@
 </head>
 <body>
     <!-- Template pour la version minimaliste -->
-    <template id="task-card-minimal">
-        <div class="task-card">
-            <div class="task-card-header">
-                <div class="task-urgency"><slot name="urgency"></slot></div>
-                <div class="task-description"><slot name="description"></slot></div>
-                <div class="dropdown-container">
-                    <button class="dropdown-btn dropdown-expand" onclick="taskCardManager.toggleDropdown(this)">
-                        &#x23F7; <!-- Symbole ▼ (flèche vers le bas) -->
-                    </button>
-                    <button class="dropdown-btn dropdown-collapse" onclick="taskCardManager.toggleDropdown(this)" style="display: none;">
-                        &#x23F6; <!-- Symbole (flèche vers le haut) -->
-                    </button>
-                </div>
-            </div>
-            <div class="task-meta">
-                <span class="task-meta-item">⏱️ <slot name="duration"></slot></span>
-                <span class="task-meta-item">📂 <slot name="pool"></slot></span>
-                <span class="task-priority"><slot name="priority"></slot></span>
-            </div>
-            <div class="task-actions">
-                <button class="btn btn-primary btn-small task-edit" data-task-action="edit" data-task-uuid="">
-                    <span class="icon">✏️</span> Edit
-                </button>
-            </div>
-        </div>
-    </template>
 
     <!-- Template pour la version complète -->
     <template id="task-card-full">

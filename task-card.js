@@ -117,15 +117,13 @@ class TaskCardManager {
      * Charge les templates depuis le DOM
      */
     loadTemplates() {
-        // Vérifier si les templates sont déjà dans le DOM
-        const minimalTemplate = document.getElementById('task-card-minimal');
+        // Vérifier si le template full est déjà dans le DOM
         const fullTemplate = document.getElementById('task-card-full');
 
-        if (minimalTemplate && fullTemplate) {
-            this.templates.minimal = minimalTemplate;
+        if (fullTemplate) {
             this.templates.full = fullTemplate;
         } else {
-            // Si les templates ne sont pas dans le DOM, les charger dynamiquement
+            // Si le template n'est pas dans le DOM, le charger dynamiquement
             this.loadTemplatesFromFile();
         }
     }
@@ -143,15 +141,12 @@ class TaskCardManager {
             tempDiv.innerHTML = html;
             
             // Extraire les templates
-            const minimalTemplate = tempDiv.querySelector('#task-card-minimal');
             const fullTemplate = tempDiv.querySelector('#task-card-full');
             
-            if (minimalTemplate && fullTemplate) {
-                this.templates.minimal = minimalTemplate;
+            if (fullTemplate) {
                 this.templates.full = fullTemplate;
                 
                 // Ajouter les templates au DOM pour qu'ils soient disponibles
-                document.body.appendChild(minimalTemplate);
                 document.body.appendChild(fullTemplate);
             } else {
                 console.error('Templates non trouvés dans le fichier task-card-templates.html');
@@ -162,14 +157,14 @@ class TaskCardManager {
     }
 
     /**
-     * Crée une TaskCard en utilisant le template approprié
+     * Crée une TaskCard en utilisant le template full
      * @param {Object} task - Les données de la tâche
-     * @param {string} mode - Le mode ('minimal' ou 'full')
+     * @param {string} mode - Le mode (seulement 'full' est supporté)
      * @returns {HTMLElement} - L'élément TaskCard
      */
-    createTaskCard(task, mode = 'minimal') {
-        if (!this.templates[mode]) {
-            console.error(`Template ${mode} non disponible`);
+    createTaskCard(task, mode = 'full') {
+        if (!this.templates.full) {
+            console.error(`Template full non disponible`);
             return null;
         }
 
