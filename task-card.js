@@ -408,10 +408,19 @@ class TaskCardManager {
     }
 
     /**
-     * Bascule l'état du bouton dropdown
+     * Bascule l'état du bouton dropdown et la visibilité du task-footer
      * @param {HTMLElement} clickedButton - Le bouton cliqué
      */
     toggleDropdown(clickedButton) {
+        // Trouver la task-card parente
+        const taskCard = clickedButton.closest('.task-card');
+        if (!taskCard) return;
+        
+        // Trouver le task-footer dans cette task-card
+        const taskFooter = taskCard.querySelector('.task-footer');
+        if (!taskFooter) return;
+        
+        // Trouver le conteneur des boutons dropdown
         const container = clickedButton.closest('.dropdown-container');
         if (!container) return;
         
@@ -419,13 +428,15 @@ class TaskCardManager {
         const collapseBtn = container.querySelector('.dropdown-collapse');
         
         if (clickedButton.classList.contains('dropdown-expand')) {
-            // Basculer vers l'état collapse
+            // Basculer vers l'état collapse (▶) et afficher le footer
             expandBtn.style.display = 'none';
             collapseBtn.style.display = 'inline-flex';
+            taskFooter.classList.add('visible');
         } else {
-            // Basculer vers l'état expand
+            // Basculer vers l'état expand (▼) et cacher le footer
             collapseBtn.style.display = 'none';
             expandBtn.style.display = 'inline-flex';
+            taskFooter.classList.remove('visible');
         }
     }
     

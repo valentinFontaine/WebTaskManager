@@ -143,11 +143,15 @@
 
 /* Conteneur pour les éléments de métadonnées (tags, meta, actions) */
 .task-footer {
-    display: flex;
+    display: none; /* Caché par défaut */
     flex-wrap: wrap;
     gap: 3px;
     align-items: flex-start;
     margin-bottom: 3px;
+}
+
+.task-footer.visible {
+    display: flex; /* Affiché quand la classe visible est ajoutée */
 }
 
 .task-meta {
