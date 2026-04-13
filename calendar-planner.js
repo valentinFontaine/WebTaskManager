@@ -297,6 +297,12 @@ async function handleBeforeCreateEvent(eventObj) {
         // Supprimer la taskCard du DOM
         selectedTaskCard.remove();
 
+        // Supprimer la tâche du tableau unplannedTasks (suppression logique)
+        const taskIndex = unplannedTasks.findIndex(task => task.uuid === selectedTaskData.uuid);
+        if (taskIndex !== -1) {
+            unplannedTasks.splice(taskIndex, 1);
+        }
+
         // Réinitialiser les variables
         selectedTaskCard = null;
         selectedTaskData = null;
