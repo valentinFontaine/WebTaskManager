@@ -102,8 +102,9 @@ function setupEventListeners() {
     const prevBtn = document.getElementById('prev-btn');
     const nextBtn = document.getElementById('next-btn');
     const todayBtn = document.getElementById('today-btn');
+    const addTaskBtn = document.getElementById('add-task-btn');
     
-    console.log('Boutons de navigation:', { prevBtn, nextBtn, todayBtn });
+    console.log('Boutons de navigation:', { prevBtn, nextBtn, todayBtn, addTaskBtn });
     
     prevBtn.addEventListener('click', () => {
         console.log('Bouton précédent cliqué');
@@ -136,6 +137,20 @@ function setupEventListeners() {
                 updateCalendarTitle();
             } catch (error) {
                 console.error('Erreur lors du retour à aujourd\'hui:', error);
+            }
+        });
+    }
+    
+    // Bouton pour ajouter une nouvelle tâche
+    if (addTaskBtn) {
+        addTaskBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            console.log('Bouton ajouter tâche cliqué');
+            if (typeof taskEditor !== 'undefined') {
+                taskEditor.show(); // Ouvrir l'éditeur sans données de tâche
+            } else {
+                console.error('taskEditor is not defined');
+                alert('Task editor is not available.');
             }
         });
     }
@@ -447,6 +462,7 @@ function loadTasks() {
                 
                 // Afficher les détails des tâches planifiées pour le débogage
                 plannedTasks.forEach((task, index) => {
+                    /*
                     console.log(`Tâche planifiée ${index + 1}:`, {
                         description: task.description,
                         scheduled: task.scheduled,
@@ -454,6 +470,7 @@ function loadTasks() {
                         estTime: task.estTime,
                         pool: task.pool
                     });
+                    //*/
                 });
                 
                 // Mettre à jour allTasks avec les tâches non planifiées et planifiées
@@ -527,7 +544,7 @@ function createCalendarEvent(task, scheduledDate) {
             console.error('Date de planification invalide:', scheduledDate, 'formaté en:', isoDate, 'pour la tâche:', task);
             return null;
         } else {
-            console.log('Date convertie avec succès:', scheduledDate, '->', start);
+            //console.log('Date convertie avec succès:', scheduledDate, '->', start);
         }
     } catch (e) {
         console.error('Erreur lors de la création de la date:', e, 'pour la tâche:', task);
@@ -570,12 +587,22 @@ function createCalendarEvent(task, scheduledDate) {
  * TaskActionHandler pour calendar-planner.js
  */
 class CalendarTaskActionHandler extends TaskActionHandler {
-    performTaskAction(taskUuid, action) {
-        console.log('Action performed:', action, 'on task:', taskUuid);
+    constructor() {
+        super({
+            onEditRequest: (task) => {
+                console.log('Appel de la fonction onEditRequest !')
+                if (typeof taskEditor !== 'undefined') {
+                    taskEditor.showForTask(task);
+                } else {
+                    console.error('taskEditor is not defined in calendar-planner');
+                    alert('Task editor is not available in this view.');
+                }
+            }
+        });
     }
     
-    openEditModal(task) {
-        console.log('Edit modal opened for task:', task);
+    performTaskAction(taskUuid, action) {
+        console.log('Action performed:', action, 'on task:', taskUuid);
     }
     
     confirmDelete(taskUuid) {
@@ -676,7 +703,7 @@ function displayUnplannedTasks(tasks) {
 
     // Crée et ajoute chaque carte de tâche
     tasks.forEach(task => {
-        const taskCard = taskCardManager.createTaskCard(task, 'minimal');
+        const taskCard = taskCardManager.createTaskCard(task, 'full');
         container.appendChild(taskCard);
     });
 }

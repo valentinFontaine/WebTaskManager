@@ -117,15 +117,13 @@ class TaskCardManager {
      * Charge les templates depuis le DOM
      */
     loadTemplates() {
-        // Vérifier si les templates sont déjà dans le DOM
-        const minimalTemplate = document.getElementById('task-card-minimal');
+        // Vérifier si le template full est déjà dans le DOM
         const fullTemplate = document.getElementById('task-card-full');
 
-        if (minimalTemplate && fullTemplate) {
-            this.templates.minimal = minimalTemplate;
+        if (fullTemplate) {
             this.templates.full = fullTemplate;
         } else {
-            // Si les templates ne sont pas dans le DOM, les charger dynamiquement
+            // Si le template n'est pas dans le DOM, le charger dynamiquement
             this.loadTemplatesFromFile();
         }
     }
@@ -143,15 +141,12 @@ class TaskCardManager {
             tempDiv.innerHTML = html;
             
             // Extraire les templates
-            const minimalTemplate = tempDiv.querySelector('#task-card-minimal');
             const fullTemplate = tempDiv.querySelector('#task-card-full');
             
-            if (minimalTemplate && fullTemplate) {
-                this.templates.minimal = minimalTemplate;
+            if (fullTemplate) {
                 this.templates.full = fullTemplate;
                 
                 // Ajouter les templates au DOM pour qu'ils soient disponibles
-                document.body.appendChild(minimalTemplate);
                 document.body.appendChild(fullTemplate);
             } else {
                 console.error('Templates non trouvés dans le fichier task-card-templates.html');
@@ -162,14 +157,14 @@ class TaskCardManager {
     }
 
     /**
-     * Crée une TaskCard en utilisant le template approprié
+     * Crée une TaskCard en utilisant le template full
      * @param {Object} task - Les données de la tâche
-     * @param {string} mode - Le mode ('minimal' ou 'full')
+     * @param {string} mode - Le mode (seulement 'full' est supporté)
      * @returns {HTMLElement} - L'élément TaskCard
      */
-    createTaskCard(task, mode = 'minimal') {
-        if (!this.templates[mode]) {
-            console.error(`Template ${mode} non disponible`);
+    createTaskCard(task, mode = 'full') {
+        if (!this.templates.full) {
+            console.error(`Template full non disponible`);
             return null;
         }
 
@@ -215,6 +210,44 @@ class TaskCardManager {
      * @param {string} mode - Le mode ('minimal' ou 'full')
      */
     fillSlots(card, task, mode) {
+        const urgency = task.urgency !== undefined ? task.urgency : 0;
+        const urgencyContainer = card.querySelector('.task-urgency');
+        if (urgencyContainer) {
+            // Remplir le slot avec la valeur arrondie à 1 décimale
+            const urgencySlot = urgencyContainer.querySelector('[name="urgency"]');
+            if (urgencySlot) {
+                urgencySlot.textContent = Math.round(urgency * 10) / 10;
+            }
+            
+            // Définir les couleurs RGB pour le dégradé
+            const minColor = { r: 99, g: 190, b: 123 };  // Vert pour urgency = 2.0
+            const midColor = { r: 255, g: 235, b: 132 };  // Jaune pour urgency = 8.5
+            const maxColor = { r: 248, g: 105, b: 107 }; // Rouge pour urgency = 15.0
+            
+            // Dégradé de couleur en fonction de l'urgence (background-color sur le conteneur)
+            let backgroundColor;
+            if (urgency <= 2.0) {
+                // Vert pour les valeurs ≤ 2.0 (cohérent avec minColor)
+                backgroundColor = `rgb(${minColor.r}, ${minColor.g}, ${minColor.b})`;
+            } else if (urgency >= 15.0) {
+                // Rouge pour les valeurs ≥ 15.0 (cohérent avec maxColor)
+                backgroundColor = `rgb(${maxColor.r}, ${maxColor.g}, ${maxColor.b})`;
+            } else if (urgency <= 8.5) {
+                // Dégradé vert → jaune entre 2.0 et 8.5
+                // Calculer le ratio de progression (0 = minColor, 1 = midColor)
+                const ratio = (urgency - 2.0) / (8.5 - 2.0);
+                backgroundColor = this.colorGradient(minColor, midColor, ratio);
+            } else {
+                // Dégradé jaune → rouge entre 8.5 et 15.0
+                // Calculer le ratio de progression (0 = midColor, 1 = maxColor)
+                const ratio = (urgency - 8.5) / (15.0 - 8.5);
+                backgroundColor = this.colorGradient(midColor, maxColor, ratio);
+            }
+            
+            // Appliquer la couleur de fond au conteneur (pas au slot)
+            urgencyContainer.style.backgroundColor = backgroundColor;
+        }
+
         // Priorité
         const priority = task.priority || 'M';
         const priorityClass = priority === 'H' ? 'high' : priority === 'M' ? 'medium' : 'low';
@@ -244,6 +277,14 @@ class TaskCardManager {
         const poolSlot = card.querySelector('[name="pool"]');
         if (poolSlot) {
             poolSlot.textContent = pool;
+        }
+        
+        // Pour le mode minimal, ajouter l'UUID au bouton edit
+        if (mode === 'minimal') {
+            const editButton = card.querySelector('.task-edit');
+            if (editButton) {
+                editButton.dataset.taskUuid = task.uuid;
+            }
         }
 
         // Date d'échéance (uniquement en mode complet)
@@ -362,6 +403,39 @@ class TaskCardManager {
     }
 
     /**
+     * Bascule l'état du bouton dropdown et la visibilité du task-footer
+     * @param {HTMLElement} clickedButton - Le bouton cliqué
+     */
+    toggleDropdown(clickedButton) {
+        // Trouver la task-card parente
+        const taskCard = clickedButton.closest('.task-card');
+        if (!taskCard) return;
+        
+        // Trouver le task-footer dans cette task-card
+        const taskFooter = taskCard.querySelector('.task-footer');
+        if (!taskFooter) return;
+        
+        // Trouver le conteneur des boutons dropdown
+        const container = clickedButton.closest('.dropdown-container');
+        if (!container) return;
+        
+        const expandBtn = container.querySelector('.dropdown-expand');
+        const collapseBtn = container.querySelector('.dropdown-collapse');
+        
+        if (clickedButton.classList.contains('dropdown-expand')) {
+            // Basculer vers l'état collapse (▶) et afficher le footer
+            expandBtn.style.display = 'none';
+            collapseBtn.style.display = 'inline-flex';
+            taskFooter.classList.add('visible');
+        } else {
+            // Basculer vers l'état expand (▼) et cacher le footer
+            collapseBtn.style.display = 'none';
+            expandBtn.style.display = 'inline-flex';
+            taskFooter.classList.remove('visible');
+        }
+    }
+    
+    /**
      * Parse la durée estimée d'une tâche
      * @param {string} estTime - La durée estimée au format ISO 8601 ou autre
      * @returns {number|null} - La durée en minutes
@@ -398,6 +472,22 @@ class TaskCardManager {
     }
 
 
+    /**
+     * Calcule une couleur intermédiaire entre deux couleurs en fonction d'un ratio
+     * @param {{r: number, g: number, b: number}} minColor - Couleur minimale (RGB)
+     * @param {{r: number, g: number, b: number}} maxColor - Couleur maximale (RGB)
+     * @param {number} ratio - Ratio entre 0 et 1 (0 = minColor, 1 = maxColor)
+     * @returns {string} - Couleur résultat au format "rgb(r,g,b)"
+     */
+    colorGradient(minColor, maxColor, ratio) {
+        // Calculer les valeurs intermédiaires
+        const r = Math.round(minColor.r + (maxColor.r - minColor.r) * ratio);
+        const g = Math.round(minColor.g + (maxColor.g - minColor.g) * ratio);
+        const b = Math.round(minColor.b + (maxColor.b - minColor.b) * ratio);
+        
+        return `rgb(${r}, ${g}, ${b})`;
+    }
+    
     /**
      * Échappe les caractères HTML pour éviter les attaques XSS
      * @param {string} text - Le texte à échapper

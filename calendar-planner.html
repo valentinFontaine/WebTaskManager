@@ -12,11 +12,15 @@
     
     <!-- Custom CSS -->
     <link rel="stylesheet" href="calendar-planner.css">
+    <link rel="stylesheet" href="task-card-styles.css">
+    <link rel="stylesheet" href="task-editor-styles.css">
     
     <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght=300;400;500;700&display=swap" rel="stylesheet">
 </head>
 <body>
+    <!-- Task Editor Modal (will be created dynamically) -->
+    <div id="task-editor-modal"></div>
     <div class="app-container">
         <header class="app-header">
             <h1>📅 Planificateur Calendrier</h1>
@@ -64,6 +68,9 @@
                     <h2>Tâches à planifier</h2>
                     <div class="tasks-stats">
                         <span id="task-count" class="stat-badge">0 tâches</span>
+                        <button id="add-task-btn" class="btn btn-success header-add-btn">
+                            <span class="icon">➕</span>
+                        </button>
                     </div>
                 </div>
                 
@@ -114,6 +121,32 @@
     <script src="https://uicdn.toast.com/calendar/v2.1.3/toastui-calendar.min.js"></script>
     <!-- Custom JS -->
     <script src="task-card.js"></script>
+    <script src="task-editor.js"></script>
     <script src="calendar-planner.js"></script>
+    <script>
+        // Initialiser taskEditor pour calendar-planner
+        document.addEventListener('DOMContentLoaded', () => {
+            taskEditor = new TaskEditor({
+                showAllFields: true,
+                language: 'fr',
+                onSaveSuccess: (task, isEdit) => {
+                    console.log('Task saved successfully:', task);
+                    if (isEdit) {
+                        // Si c'est une édition, recharger toutes les tâches
+                        loadTasks();
+                    } else {
+                        // Si c'est une nouvelle tâche, l'ajouter en haut de la liste
+                        unplannedTasks.unshift(task);
+                        displayUnplannedTasks(unplannedTasks);
+                        updateTaskCount();
+                    }
+                },
+                onSaveError: (error) => {
+                    console.error('Error saving task:', error);
+                    alert('Erreur lors de la sauvegarde: ' + error);
+                }
+            });
+        });
+    </script>
 </body>
 </html>

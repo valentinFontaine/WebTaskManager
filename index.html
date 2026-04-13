@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TaskWarrior Web UI</title>
     <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="task-card-styles.css">
+    <link rel="stylesheet" href="task-editor-styles.css">
     <script src="task-editor.js"></script>
     <script src="task-card.js"></script>
     <script src="main.js"></script>
@@ -32,6 +34,9 @@
                     <span class="icon">📆</span>
                     Calendrier
                 </a>
+                <button id="add-task-btn" class="btn btn-success header-add-btn">
+                    <span class="icon">➕</span>
+                </button>
                 <button id="refresh-btn" class="btn btn-primary">
                     <span class="icon">🔄</span>
                     Refresh
@@ -39,10 +44,7 @@
             </div>
         </header>
 
-        <div class="add-task-section">
-            <h2>Add New Task</h2>
-            <div id="task-creator-container"></div>
-        </div>
+
 
         <div class="filters-section">
             <h2>Advanced Filters</h2>
