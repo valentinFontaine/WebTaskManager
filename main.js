@@ -54,6 +54,15 @@ class TaskWarriorUI {
             button.addEventListener('click', (e) => this.setContext(e.target.getAttribute('data-context')));
         });
 
+        // Add event listener for the toggle filter button
+        const toggleFilterBtn = document.getElementById('filter-planned-incomplete-btn');
+        if (toggleFilterBtn) {
+            toggleFilterBtn.addEventListener('click', () => {
+                toggleFilterBtn.classList.toggle('active');
+                this.applyFilters();
+            });
+        }
+
         // Add advanced filters event listeners
         document.getElementById('apply-filters').addEventListener('click', () => this.applyFilters());
         document.getElementById('clear-filters').addEventListener('click', () => this.clearFilters());
@@ -209,7 +218,8 @@ class TaskWarriorUI {
             .split(',')
             .map(tag => tag.trim())
             .filter(tag => tag.length > 0);
-        const showPlannedIncomplete = document.getElementById('filter-planned-incomplete').checked;
+        const toggleFilterBtn = document.getElementById('filter-planned-incomplete-btn');
+        const showPlannedIncomplete = toggleFilterBtn ? toggleFilterBtn.classList.contains('active') : false;
             
         this.currentFilters = {
             project: project || null,
@@ -224,7 +234,10 @@ class TaskWarriorUI {
     clearFilters() {
         document.getElementById('filter-project').value = '';
         document.getElementById('filter-tags').value = '';
-        document.getElementById('filter-planned-incomplete').checked = false;
+        const toggleFilterBtn = document.getElementById('filter-planned-incomplete-btn');
+        if (toggleFilterBtn) {
+            toggleFilterBtn.classList.remove('active');
+        }
         
         this.currentFilters = {
             project: null,
