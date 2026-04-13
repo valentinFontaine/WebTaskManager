@@ -12,6 +12,14 @@
             <div class="task-card-header">
                 <div class="task-urgency"><slot name="urgency"></slot></div>
                 <div class="task-description"><slot name="description"></slot></div>
+                <div class="dropdown-container">
+                    <button class="dropdown-btn dropdown-expand" onclick="taskCardManager.toggleDropdown(this)">
+                        &#x23F7; <!-- Symbole ▼ (flèche vers le bas) -->
+                    </button>
+                    <button class="dropdown-btn dropdown-collapse" onclick="taskCardManager.toggleDropdown(this)" style="display: none;">
+                        &#x23F6; <!-- Symbole (flèche vers le haut) -->
+                    </button>
+                </div>
             </div>
             <div class="task-meta">
                 <span class="task-meta-item">⏱️ <slot name="duration"></slot></span>
@@ -32,11 +40,14 @@
             <div class="task-card-header">
                 <div class="task-urgency"><slot name="urgency"></slot></div>
                 <div class="task-description"><slot name="description"></slot></div>
-                <!--
-                <button class="toggle-mode-btn" onclick="taskCardManager.toggleMode(this.closest('.task-card'))">
-                    <span class="icon">🔄</span>
-                </button>
-                -->
+                <div class="dropdown-container">
+                    <button class="dropdown-btn dropdown-expand" onclick="taskCardManager.toggleDropdown(this)">
+                        &#x23F7; <!-- Symbole (flèche vers le bas) -->
+                    </button>
+                    <button class="dropdown-btn dropdown-collapse" onclick="taskCardManager.toggleDropdown(this)" style="display: none;">
+                        &#x23F6; <!-- Symbole (flèche vers le haut) -->
+                    </button>
+                </div>
             </div>
             <div class="task-footer">
                 <div class="task-tags">

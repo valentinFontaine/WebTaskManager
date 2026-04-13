@@ -408,6 +408,28 @@ class TaskCardManager {
     }
 
     /**
+     * Bascule l'état du bouton dropdown
+     * @param {HTMLElement} clickedButton - Le bouton cliqué
+     */
+    toggleDropdown(clickedButton) {
+        const container = clickedButton.closest('.dropdown-container');
+        if (!container) return;
+        
+        const expandBtn = container.querySelector('.dropdown-expand');
+        const collapseBtn = container.querySelector('.dropdown-collapse');
+        
+        if (clickedButton.classList.contains('dropdown-expand')) {
+            // Basculer vers l'état collapse
+            expandBtn.style.display = 'none';
+            collapseBtn.style.display = 'inline-flex';
+        } else {
+            // Basculer vers l'état expand
+            collapseBtn.style.display = 'none';
+            expandBtn.style.display = 'inline-flex';
+        }
+    }
+    
+    /**
      * Parse la durée estimée d'une tâche
      * @param {string} estTime - La durée estimée au format ISO 8601 ou autre
      * @returns {number|null} - La durée en minutes
