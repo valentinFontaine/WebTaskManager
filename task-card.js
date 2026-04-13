@@ -224,26 +224,25 @@ class TaskCardManager {
                 urgencySlot.textContent = Math.round(urgency * 10) / 10;
             }
             
+            // Définir les couleurs RGB pour le dégradé
+            const minColor = { r: 99, g: 190, b: 123 };  // Vert pour urgency = 2.0
+            const midColor = { r: 255, g: 235, b: 132 };  // Jaune pour urgency = 8.5
+            const maxColor = { r: 248, g: 105, b: 107 }; // Rouge pour urgency = 15.0
+            
             // Dégradé de couleur en fonction de l'urgence (background-color sur le conteneur)
             let backgroundColor;
-            if (urgency < 2.0) {
-                // Vert pur pour les valeurs < 2.0
-                backgroundColor = '#28a745';
-            } else if (urgency > 15.0) {
-                // Rouge pur pour les valeurs > 15.0
-                backgroundColor = '#dc3545';
+            if (urgency <= 2.0) {
+                // Vert pour les valeurs ≤ 2.0 (cohérent avec minColor)
+                backgroundColor = `rgb(${minColor.r}, ${minColor.g}, ${minColor.b})`;
+            } else if (urgency >= 15.0) {
+                // Rouge pour les valeurs ≥ 15.0 (cohérent avec maxColor)
+                backgroundColor = `rgb(${maxColor.r}, ${maxColor.g}, ${maxColor.b})`;
             } else {
-                // Dégradé vert → jaune/orange → rouge entre 2.0 et 15.0
-                // Calculer le ratio de progression (0 = vert, 1 = rouge)
+                // Dégradé vert → rouge entre 2.0 et 15.0
+                // Calculer le ratio de progression (0 = minColor, 1 = maxColor)
                 const ratio = (urgency - 2.0) / (15.0 - 2.0);
-                
-                // Convertir le ratio en couleurs RGB
-                // Vert (99, 190, 123) → Jaune (255, 235, 132) → Rouge (248, 105, 107)
-                const r = Math.round(99 + (248 - 99) * ratio);
-                const g = Math.round(190 + (105 - 190) * ratio);
-                const b = Math.round(123 + (107 - 123) * ratio);
-                
-                backgroundColor = `rgb(${r}, ${g}, ${b})`;
+                // Utiliser la fonction colorGradient pour calculer la couleur
+                backgroundColor = this.colorGradient(minColor, maxColor, ratio);
             }
             
             // Appliquer la couleur de fond au conteneur (pas au slot)
@@ -441,6 +440,22 @@ class TaskCardManager {
     }
 
 
+    /**
+     * Calcule une couleur intermédiaire entre deux couleurs en fonction d'un ratio
+     * @param {{r: number, g: number, b: number}} minColor - Couleur minimale (RGB)
+     * @param {{r: number, g: number, b: number}} maxColor - Couleur maximale (RGB)
+     * @param {number} ratio - Ratio entre 0 et 1 (0 = minColor, 1 = maxColor)
+     * @returns {string} - Couleur résultat au format "rgb(r,g,b)"
+     */
+    colorGradient(minColor, maxColor, ratio) {
+        // Calculer les valeurs intermédiaires
+        const r = Math.round(minColor.r + (maxColor.r - minColor.r) * ratio);
+        const g = Math.round(minColor.g + (maxColor.g - minColor.g) * ratio);
+        const b = Math.round(minColor.b + (maxColor.b - minColor.b) * ratio);
+        
+        return `rgb(${r}, ${g}, ${b})`;
+    }
+    
     /**
      * Échappe les caractères HTML pour éviter les attaques XSS
      * @param {string} text - Le texte à échapper
