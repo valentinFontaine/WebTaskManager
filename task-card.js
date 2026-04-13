@@ -216,10 +216,38 @@ class TaskCardManager {
      */
     fillSlots(card, task, mode) {
         const urgency = task.urgency !== undefined ? task.urgency : 0;
-        const urgencySlot = card.querySelector('[name="urgency"]');
-        if (urgencySlot) {
-            // Arrondir à 1 décimale pour l'affichage seulement
-            urgencySlot.textContent = Math.round(urgency * 10) / 10; 
+        const urgencyContainer = card.querySelector('.task-urgency');
+        if (urgencyContainer) {
+            // Remplir le slot avec la valeur arrondie à 1 décimale
+            const urgencySlot = urgencyContainer.querySelector('[name="urgency"]');
+            if (urgencySlot) {
+                urgencySlot.textContent = Math.round(urgency * 10) / 10;
+            }
+            
+            // Dégradé de couleur en fonction de l'urgence (background-color sur le conteneur)
+            let backgroundColor;
+            if (urgency < 2.0) {
+                // Vert pur pour les valeurs < 2.0
+                backgroundColor = '#28a745';
+            } else if (urgency > 15.0) {
+                // Rouge pur pour les valeurs > 15.0
+                backgroundColor = '#dc3545';
+            } else {
+                // Dégradé vert → jaune/orange → rouge entre 2.0 et 15.0
+                // Calculer le ratio de progression (0 = vert, 1 = rouge)
+                const ratio = (urgency - 2.0) / (15.0 - 2.0);
+                
+                // Convertir le ratio en couleurs RGB
+                // Vert (99, 190, 123) → Jaune (255, 235, 132) → Rouge (248, 105, 107)
+                const r = Math.round(99 + (248 - 99) * ratio);
+                const g = Math.round(190 + (105 - 190) * ratio);
+                const b = Math.round(123 + (107 - 123) * ratio);
+                
+                backgroundColor = `rgb(${r}, ${g}, ${b})`;
+            }
+            
+            // Appliquer la couleur de fond au conteneur (pas au slot)
+            urgencyContainer.style.backgroundColor = backgroundColor;
         }
 
         // Priorité
