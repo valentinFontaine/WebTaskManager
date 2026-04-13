@@ -237,12 +237,16 @@ class TaskCardManager {
             } else if (urgency >= 15.0) {
                 // Rouge pour les valeurs ≥ 15.0 (cohérent avec maxColor)
                 backgroundColor = `rgb(${maxColor.r}, ${maxColor.g}, ${maxColor.b})`;
+            } else if (urgency <= 8.5) {
+                // Dégradé vert → jaune entre 2.0 et 8.5
+                // Calculer le ratio de progression (0 = minColor, 1 = midColor)
+                const ratio = (urgency - 2.0) / (8.5 - 2.0);
+                backgroundColor = this.colorGradient(minColor, midColor, ratio);
             } else {
-                // Dégradé vert → rouge entre 2.0 et 15.0
-                // Calculer le ratio de progression (0 = minColor, 1 = maxColor)
-                const ratio = (urgency - 2.0) / (15.0 - 2.0);
-                // Utiliser la fonction colorGradient pour calculer la couleur
-                backgroundColor = this.colorGradient(minColor, maxColor, ratio);
+                // Dégradé jaune → rouge entre 8.5 et 15.0
+                // Calculer le ratio de progression (0 = midColor, 1 = maxColor)
+                const ratio = (urgency - 8.5) / (15.0 - 8.5);
+                backgroundColor = this.colorGradient(midColor, maxColor, ratio);
             }
             
             // Appliquer la couleur de fond au conteneur (pas au slot)
