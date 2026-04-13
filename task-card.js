@@ -215,11 +215,11 @@ class TaskCardManager {
      * @param {string} mode - Le mode ('minimal' ou 'full')
      */
     fillSlots(card, task, mode) {
-        // Urgence (affichage texte simple)
         const urgency = task.urgency !== undefined ? task.urgency : 0;
         const urgencySlot = card.querySelector('[name="urgency"]');
         if (urgencySlot) {
-            urgencySlot.textContent = urgency;
+            // Arrondir à 1 décimale pour l'affichage seulement
+            urgencySlot.textContent = Math.round(urgency * 10) / 10; 
         }
 
         // Priorité
