@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Kill any existing instance on port 5000, then start fresh
+existing=$(lsof -ti :5000 2>/dev/null)
+if [ -n "$existing" ]; then
+    echo "Stopping existing instance(s) on :5000..."
+    kill $existing
+    sleep 0.5
+fi
+cd "$(dirname "$0")"
+exec python3 app.py

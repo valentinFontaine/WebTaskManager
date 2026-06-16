@@ -1,74 +1,60 @@
 <!DOCTYPE html>
 <html>
-<head>
-    <title>Task Editor Templates</title>
-</head>
+<head><title>Task Editor Templates</title></head>
 <body>
-    <!-- Template pour la modale d'édition de tâche -->
-    <template id="task-editor-modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 id="task-editor-title"><slot name="title">Add Task</slot></h3>
-                <span class="close task-editor-close">&times;</span>
-            </div>
-            <form id="task-editor-form">
-                <div class="form-group">
-                    <label for="task-editor-description"><slot name="description-label">Description</slot>:</label>
-                    <input type="text" id="task-editor-description" required>
-                </div>
-                
-                <div class="extended-fields" style="display: none;">
-                    <div class="form-group">
-                        <label for="task-editor-tags"><slot name="tags-label">Tags</slot>:</label>
-                        <input type="text" id="task-editor-tags" placeholder="Comma-separated tags">
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="task-editor-project"><slot name="project-label">Project</slot>:</label>
-                        <input type="text" id="task-editor-project" placeholder="Project name" list="task-editor-project-options">
-                        <datalist id="task-editor-project-options"></datalist>
-                    </div>
-                </div>
-                
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="task-editor-priority"><slot name="priority-label">Priority</slot>:</label>
-                        <select id="task-editor-priority">
-                            <option value=""><slot name="no-priority">None</slot></option>
-                            <slot name="priority-options"></slot>
-                        </select>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="task-editor-duration"><slot name="duration-label">Duration</slot>:</label>
-                        <input type="text" id="task-editor-duration" placeholder="e.g., 30min, 1h30m, 2d">
-                    </div>
-                </div>
-                
-                <div class="extended-dates" style="display: none;">
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="task-editor-due"><slot name="due-label">Due Date</slot>:</label>
-                            <input type="datetime-local" id="task-editor-due">
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="task-editor-scheduled"><slot name="scheduled-label">Scheduled</slot>:</label>
-                            <input type="datetime-local" id="task-editor-scheduled">
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="modal-actions">
-                    <button type="submit" class="btn btn-primary" id="task-editor-save">
-                        <slot name="save-button">Save</slot>
-                    </button>
-                    <button type="button" class="btn btn-secondary" id="task-editor-cancel">
-                        <slot name="cancel-button">Cancel</slot>
-                    </button>
-                </div>
-            </form>
+<template id="task-editor-modal">
+    <div class="modal-content te-panel">
+        <div class="te-header">
+            <span id="task-editor-title">Add Task</span>
+            <span class="close task-editor-close">&times;</span>
         </div>
-    </template>
+        <form id="task-editor-form" autocomplete="off">
+
+            <!-- Row 1: Description full width -->
+            <input type="text" id="task-editor-description" placeholder="Description" required>
+
+            <!-- Row 2: Project full width -->
+            <input type="text" id="task-editor-project" placeholder="Project"
+                   list="task-editor-project-options">
+            <datalist id="task-editor-project-options"></datalist>
+
+            <!-- Row 3: Priority 25% | Tags 75% -->
+            <div class="te-row te-row-1-3">
+                <input type="text" id="task-editor-priority" placeholder="Pri (1-6,H,M,L)" maxlength="2" autocomplete="off">
+                <input type="text" id="task-editor-tags" placeholder="Tags (comma-sep)">
+            </div>
+
+            <!-- Row 4: Due 70% | due_duration 30% -->
+            <div class="te-row te-row-7-3">
+                <div class="te-date-field">
+                    <small>Due</small>
+                    <div class="te-date-row">
+                        <input type="datetime-local" id="task-editor-due">
+                        <button type="button" class="te-clr" data-clears="task-editor-due" title="Clear">×</button>
+                    </div>
+                </div>
+                <input type="text" id="task-editor-due-duration" placeholder="Due dur">
+            </div>
+
+            <!-- Row 5: Scheduled 70% | sched_duration 30% -->
+            <div class="te-row te-row-7-3">
+                <div class="te-date-field">
+                    <small>Scheduled</small>
+                    <div class="te-date-row">
+                        <input type="datetime-local" id="task-editor-scheduled">
+                        <button type="button" class="te-clr" data-clears="task-editor-scheduled" title="Clear">×</button>
+                    </div>
+                </div>
+                <input type="text" id="task-editor-sched-duration" placeholder="Sched dur">
+            </div>
+
+            <div class="te-actions">
+                <button type="submit"  class="btn btn-primary   btn-sm" id="task-editor-save">Save</button>
+                <button type="button"  class="btn btn-secondary btn-sm" id="task-editor-cancel">Cancel</button>
+            </div>
+
+        </form>
+    </div>
+</template>
 </body>
 </html>

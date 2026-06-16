@@ -9,7 +9,7 @@ class TaskEditor {
             // Configuration par défaut
             showAllFields: true,
             priorityFormat: 'letters', // 'letters' (H/M/L) ou 'words' (high/medium/low)
-            language: 'fr', // 'fr' ou 'en'
+            language: 'en', // 'en' or 'fr'
             modalId: 'task-editor-modal',
             inline: false, // Mode inline ou modal
             containerId: null, // ID du conteneur pour le mode inline
@@ -140,22 +140,7 @@ class TaskEditor {
             }
         });
         
-        // Remplir les options de priorité
-        const prioritySelect = this.modal.querySelector('#task-editor-priority');
-        if (prioritySelect) {
-            // Supprimer les options existantes (sauf la première option "None")
-            while (prioritySelect.options.length > 1) {
-                prioritySelect.remove(1);
-            }
-            
-            // Ajouter les nouvelles options
-            priorityOptions.forEach(option => {
-                const opt = document.createElement('option');
-                opt.value = option.value;
-                opt.textContent = option.label;
-                prioritySelect.appendChild(opt);
-            });
-        }
+        // Priority is now a plain text input — no options to populate
         
         // Gérer l'affichage des champs étendus
         this.toggleExtendedFields(this.options.showAllFields);
@@ -251,6 +236,24 @@ class TaskEditor {
             });
         }
         
+        // Auto-uppercase h→H, m→M, l→L in priority field
+        const priField = this.modal.querySelector('#task-editor-priority');
+        if (priField) {
+            priField.addEventListener('input', () => {
+                const v = priField.value;
+                const up = v.replace(/[hml]/g, c => c.toUpperCase());
+                if (up !== v) { priField.value = up; }
+            });
+        }
+
+        // Date field clear buttons
+        this.modal.querySelectorAll('.te-clr').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const target = this.modal.querySelector('#' + btn.dataset.clears);
+                if (target) target.value = '';
+            });
+        });
+
         // Événement de soumission du formulaire
         if (form) {
             form.addEventListener('submit', (e) => {
@@ -269,7 +272,7 @@ class TaskEditor {
     
     show(task = null) {
         this.currentTask = task;
-        
+
         // Assurer que le modal et le template sont chargés
         if (!this.modal || !this.template) {
             if (this.options.inline) {
@@ -279,10 +282,10 @@ class TaskEditor {
             }
             return;
         }
-        
+
         const title = this.modal.querySelector('#task-editor-title');
         const texts = this.getTexts();
-        
+
         if (task) {
             if (title) title.textContent = texts.editTask;
             this.populateForm(task);
@@ -290,18 +293,13 @@ class TaskEditor {
             if (title) title.textContent = texts.addTask;
             this.clearForm();
         }
-        
-        if (this.options.inline) {
-            this.modal.style.display = 'block';
-        } else {
-            this.modal.style.display = 'block';
-        }
-        
-        // Focus sur le premier champ
+
+        this.modal.style.display = 'block';
+
         setTimeout(() => {
             const descField = this.modal.querySelector('#task-editor-description');
             if (descField) descField.focus();
-        }, 100);
+        }, 80);
     }
     
     showForTask(task) {
@@ -332,7 +330,9 @@ class TaskEditor {
             const priorityValue = task.priority ?  task.priority : '';
             priorityField.value = priorityValue;
         }
-        if (durationField) durationField.value = task.estTime || '';
+        const dueDurField = form.querySelector('#task-editor-due-duration');
+        if (durationField) durationField.value = '';   // legacy field — unused
+        if (dueDurField) dueDurField.value = task.due_duration || '';
         
         // Champs étendus si disponibles
         if (this.options.showAllFields) {
@@ -345,6 +345,9 @@ class TaskEditor {
             if (projectField) projectField.value = task.project || '';
             if (dueField) dueField.value = this.formatDateForInput(task.due);
             if (scheduledField) scheduledField.value = this.formatDateForInput(task.scheduled);
+
+            const schedDurField = form.querySelector('#task-editor-sched-duration');
+            if (schedDurField) schedDurField.value = task.sched_duration || '';
         }
     }
     
@@ -359,24 +362,22 @@ class TaskEditor {
         
         const taskData = {
             description: form.querySelector('#task-editor-description').value,
-            priority: form.querySelector('#task-editor-priority').value,
-            duration: form.querySelector('#task-editor-duration').value
+            priority:    form.querySelector('#task-editor-priority').value,
         };
-        
-        // Ajouter les champs étendus si disponibles
-        if (this.options.showAllFields) {
-            const tagsField = form.querySelector('#task-editor-tags');
-            const projectField = form.querySelector('#task-editor-project');
-            const dueField = form.querySelector('#task-editor-due');
-            const scheduledField = form.querySelector('#task-editor-scheduled');
-            
-            if (tagsField) {
-                taskData.tags = tagsField.value.split(',').map(tag => tag.trim()).filter(tag => tag);
-            }
-            if (projectField) taskData.project = projectField.value;
-            if (dueField) taskData.due = dueField.value;
-            if (scheduledField) taskData.scheduled = scheduledField.value;
-        }
+
+        const tagsField     = form.querySelector('#task-editor-tags');
+        const projectField  = form.querySelector('#task-editor-project');
+        const dueField      = form.querySelector('#task-editor-due');
+        const dueDurField   = form.querySelector('#task-editor-due-duration');
+        const schedField    = form.querySelector('#task-editor-scheduled');
+        const schedDurField = form.querySelector('#task-editor-sched-duration');
+
+        if (tagsField)     taskData.tags          = tagsField.value.split(',').map(t => t.trim()).filter(Boolean);
+        if (projectField)  taskData.project        = projectField.value;
+        if (dueField)      taskData.due            = dueField.value;
+        if (dueDurField)   taskData.due_duration   = dueDurField.value;
+        if (schedField)    taskData.scheduled      = schedField.value;
+        if (schedDurField) taskData.sched_duration = schedDurField.value;
         
         // Ajouter l'ID si on modifie une tâche existante
         if (this.currentTask) {
@@ -418,10 +419,9 @@ class TaskEditor {
     prepareTaskDataForAPI(taskData, isEdit) {
         const preparedData = {
             description: taskData.description,
-            tags: taskData.tags || [],
-            project: taskData.project || null,
-            priority: taskData.priority || null,
-            duration: taskData.duration || null
+            tags:        taskData.tags     || [],
+            project:     taskData.project  || null,
+            priority:    taskData.priority || null,
         };
         
         // Formater les dates si elles existent
@@ -432,11 +432,8 @@ class TaskEditor {
             preparedData.scheduled = this.formatDateForTask(taskData.scheduled);
         }
         
-        // Pour la modification, utiliser 'est' au lieu de 'duration'
-        if (preparedData.duration) {
-            preparedData.estTime = preparedData.duration;
-            delete preparedData.duration;
-        }
+        if (taskData.due_duration)   preparedData.due_duration   = taskData.due_duration;
+        if (taskData.sched_duration) preparedData.sched_duration = taskData.sched_duration;
         
         return preparedData;
     }

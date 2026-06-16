@@ -1,119 +1,118 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Planificateur Calendrier</title>
-    
-    <!-- Toast UI Calendar CSS - The order is important ! -->
-    <link rel="stylesheet" href="https://uicdn.toast.com/tui.time-picker/latest/tui-time-picker.css" />
-    <link rel="stylesheet" href="https://uicdn.toast.com/tui.date-picker/latest/tui-date-picker.css" />
-    <link rel="stylesheet" href="https://uicdn.toast.com/calendar/v2.1.3/toastui-calendar.min.css" />
-    
+    <meta name="theme-color" content="#1a1a1a">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="apple-touch-icon" href="/logo-192.png">
+    <title>Calendar Planner</title>
+
+    <!-- FullCalendar v5 (local — avoids PWA sandbox CDN issues) -->
+    <link rel="stylesheet" href="/fullcalendar.min.css">
+
     <!-- Custom CSS -->
+    <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="calendar-planner.css">
-    
-    <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <script src="/nav.js"></script>
+    <script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js");</script>
 </head>
-<body>
+<body class="cal-page">
+    <!-- DEBUG banner — remove once calendar is working -->
+    <div id="cal-debug-banner" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:99999;background:#c0392b;color:#fff;padding:8px 12px;font-size:12px;white-space:pre-wrap;word-break:break-all;max-height:30vh;overflow-y:auto;pointer-events:none;"></div>
+
     <div class="app-container">
-        <header class="app-header">
-            <h1>📅 Planificateur Calendrier</h1>
-            <div class="header-actions">
-                <a href="index.html" class="btn btn-secondary">
-                    <span class="icon">🏠</span>
-                    Accueil
-                </a>
-                <button id="today-btn" class="btn btn-primary">
-                    <span class="icon">📍</span>
-                    Aujourd'hui
-                </button>
-                <button id="refresh-btn" class="btn btn-secondary">
-                    <span class="icon">🔄</span>
-                    Actualiser
-                </button>
+        <div class="cal-topbar">
+            <button id="prev-btn" class="nav-btn">◀</button>
+            <span id="calendar-title" class="cal-title-text"></span>
+            <div class="cal-topbar-right">
+                <button id="today-btn" class="view-btn active">Today</button>
+                <button class="view-btn" data-view="day">Day</button>
+                <button class="view-btn active" data-view="week">Week</button>
+                <button class="view-btn" data-view="month">Month</button>
+                <button id="next-btn" class="nav-btn">▶</button>
             </div>
-        </header>
+        </div>
 
         <div class="main-content">
-            <!-- Colonne de gauche : Calendrier (70%) -->
+            <!-- Left column: calendar (70%) -->
             <div class="calendar-column">
-                <div class="calendar-header">
-                    <button id="prev-btn" class="nav-btn">
-                        <span class="icon">◀</span>
-                    </button>
-                    <div class="calendar-title">
-                        <h2 id="calendar-title">Calendrier</h2>
-                        <div class="view-controls">
-                            <button class="view-btn active" data-view="week">Semaine</button>
-                            <button class="view-btn" data-view="day">Jour</button>
-                            <button class="view-btn" data-view="month">Mois</button>
-                        </div>
-                    </div>
-                    <button id="next-btn" class="nav-btn">
-                        <span class="icon">▶</span>
-                    </button>
-                </div>
                 <div id="calendar" class="calendar-container"></div>
             </div>
 
-            <!-- Colonne de droite : Tâches non planifiées (30%) -->
+            <!-- Right column: unscheduled tasks (30%) -->
             <div class="tasks-column">
-                <div class="tasks-header">
-                    <h2>Tâches à planifier</h2>
-                    <div class="tasks-stats">
-                        <span id="task-count" class="stat-badge">0 tâches</span>
+                <div class="tasks-controls">
+                    <div class="sort-wrap">
+                        <button id="cal-sort-btn" class="view-btn" title="Sort">⇅</button>
+                        <div id="cal-sort-popup" class="sort-popup" style="display:none">
+                            <div class="sort-fields" id="cal-sort-fields"></div>
+                            <label class="sort-reverse-label">
+                                <input type="checkbox" id="cal-sort-reverse"> Reverse
+                            </label>
+                        </div>
                     </div>
+                    <button id="cal-view-card" class="view-btn active" title="Card view">⊞</button>
+                    <button id="cal-view-list" class="view-btn" title="List view">≡</button>
                 </div>
-                
-                <div class="tasks-filters">
-                    <select id="filter-pool" class="filter-select">
-                        <option value="all">Tous les pools</option>
-                        <option value="pro">Pro</option>
-                        <option value="perso">Perso</option>
-                    </select>
-                    <select id="sort-tasks" class="filter-select">
-                        <option value="urgency">Par urgence</option>
-                        <option value="due">Par échéance</option>
-                        <option value="duration">Par durée</option>
-                    </select>
-                </div>
-                
                 <div class="tasks-container" id="unplanned-tasks">
                     <div class="loading-message">
                         <span class="icon">⏳</span>
-                        Chargement des tâches...
+                        Loading tasks...
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Modal pour les détails de tâche -->
+    <!-- Task detail modal -->
     <div id="task-detail-modal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h3 id="modal-task-title">Détails de la tâche</h3>
+                <h3 id="modal-task-title">Task Details</h3>
                 <button class="modal-close" id="modal-close-btn">&times;</button>
             </div>
-            <div class="modal-body" id="modal-task-body">
-                <!-- Contenu dynamique -->
-            </div>
-            <div class="modal-footer">
-                <button id="modal-unschedule-btn" class="btn btn-warning">Déplanifier</button>
-                <button id="modal-done-btn" class="btn btn-success">Terminer</button>
-                <button id="modal-cancel-btn" class="btn btn-secondary">Fermer</button>
+            <div class="modal-body" id="modal-task-body"></div>
+            <div class="modal-footer modal-crud-footer">
+                <button id="modal-start-btn"       class="ca-btn ca-start"  title="Start">▶</button>
+                <button id="modal-stop-btn"        class="ca-btn ca-stop"   title="Stop">⏸</button>
+                <button id="modal-edit-btn"        class="ca-btn ca-edit"   title="Edit">✏</button>
+                <button id="modal-unschedule-btn"  class="ca-btn ca-unsched" title="Unschedule">📅</button>
+                <button id="modal-done-btn"        class="ca-btn ca-done"   title="Done">✓</button>
+                <button id="modal-delete-btn"      class="ca-btn ca-delete" title="Delete">✕</button>
             </div>
         </div>
     </div>
 
-    <!-- Toast UI Calendar JS - The order is important-->
-    <script src="https://uicdn.toast.com/tui.time-picker/latest/tui-time-picker.js"></script>
-    <script src="https://uicdn.toast.com/tui.date-picker/latest/tui-date-picker.js"></script>
-    <script src="https://uicdn.toast.com/calendar/v2.1.3/toastui-calendar.min.js"></script>
+    <!-- Sync dialog -->
+    <div id="sync-dialog" class="sync-dialog-backdrop" style="display:none">
+        <div class="sync-dialog">
+            <div class="sync-dialog-header">
+                <span>Sync</span>
+                <button id="sync-dialog-close" class="sync-dialog-close">×</button>
+            </div>
+            <div class="sync-dialog-body">
+                <div id="sync-method" class="sync-method"></div>
+                <button id="sync-now-btn" class="sync-now-btn">Sync Now</button>
+                <pre id="sync-output" class="sync-output" style="display:none"></pre>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification -->
+    <div id="notification" class="notification">
+        <span id="notif-text"></span>
+        <button class="notif-close" id="notif-close">&times;</button>
+    </div>
+
+    <!-- FullCalendar v5: core + view plugins (local — avoids PWA sandbox CDN issues) -->
+    <script src="/fullcalendar.min.js"></script>
+    <script src="/fullcalendar-daygrid.min.js"></script>
+    <script src="/fullcalendar-timegrid.min.js"></script>
+    <script src="/fullcalendar-interaction.min.js"></script>
     <!-- Custom JS -->
     <script src="task-card.js"></script>
+    <script src="task-editor.js"></script>
     <script src="calendar-planner.js"></script>
 </body>
 </html>

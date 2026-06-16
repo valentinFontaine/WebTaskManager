@@ -38,10 +38,13 @@ class TaskActionHandler {
                 } else if (data.task) {
                     this.onTaskUpdate(data.task);
                 } else {
-                    // Si pas de tâche retournée, on déclenche une recharge complète
                     this.onTaskUpdate(null);
                 }
-                this.showNotification(`Task ${action} successful`, 'success');
+                if (data.warnings && data.warnings.length > 0) {
+                    this.showNotification(data.warnings.join(' | '), 'warning');
+                } else {
+                    this.showNotification(`Task ${action} successful`, 'success');
+                }
             } else {
                 this.showNotification(data.message || `Failed to ${action} task`, 'error');
             }
@@ -92,321 +95,120 @@ class ScriptTaskActionHandler extends TaskActionHandler {
 }
 
 
-/**
- * TaskCardManager - Gestionnaire centralisé pour la création et la gestion des TaskCards
- * Permet de basculer entre les modes minimaliste et complet
- */
-
 class TaskCardManager {
+    static SYSTEM_TAGS = new Set(['PENDING','UNBLOCKED','TAGGED','ACTIVE','ANNOTATED','RECURRING','WAITING','DELETED','COMPLETED']);
+
     constructor(actionHandler = null) {
-        this.templates = {};
         this.actionHandler = actionHandler || new TaskActionHandler();
-        this.eventListenerAdded = false;
-        this.loadTemplates();
-    }
-
-    /**
-     * Définit un gestionnaire d'actions personnalisé
-     * @param {TaskActionHandler} handler - Le gestionnaire d'actions à utiliser
-     */
-    setActionHandler(handler) {
-        this.actionHandler = handler;
-    }
-
-    /**
-     * Charge les templates depuis le DOM
-     */
-    loadTemplates() {
-        // Vérifier si les templates sont déjà dans le DOM
-        const minimalTemplate = document.getElementById('task-card-minimal');
-        const fullTemplate = document.getElementById('task-card-full');
-
-        if (minimalTemplate && fullTemplate) {
-            this.templates.minimal = minimalTemplate;
-            this.templates.full = fullTemplate;
-        } else {
-            // Si les templates ne sont pas dans le DOM, les charger dynamiquement
-            this.loadTemplatesFromFile();
-        }
-    }
-
-    /**
-     * Charge les templates depuis le fichier HTML
-     */
-    async loadTemplatesFromFile() {
-        try {
-            const response = await fetch('task-card-templates.html');
-            const html = await response.text();
-            
-            // Créer un élément temporaire pour parser le HTML
-            const tempDiv = document.createElement('div');
-            tempDiv.innerHTML = html;
-            
-            // Extraire les templates
-            const minimalTemplate = tempDiv.querySelector('#task-card-minimal');
-            const fullTemplate = tempDiv.querySelector('#task-card-full');
-            
-            if (minimalTemplate && fullTemplate) {
-                this.templates.minimal = minimalTemplate;
-                this.templates.full = fullTemplate;
-                
-                // Ajouter les templates au DOM pour qu'ils soient disponibles
-                document.body.appendChild(minimalTemplate);
-                document.body.appendChild(fullTemplate);
+        // Single delegated listener for all action buttons
+        document.addEventListener('click', (e) => {
+            const btn = e.target.closest('[data-task-action]');
+            if (!btn) return;
+            const uuid   = btn.dataset.taskUuid;
+            const action = btn.dataset.taskAction;
+            if (!uuid || !action) return;
+            if (action === 'delete') {
+                this.actionHandler.confirmDelete(uuid);
+            } else if (action === 'edit') {
+                const card = btn.closest('.task-card');
+                if (card && typeof taskEditor !== 'undefined') {
+                    taskEditor.showForTask(JSON.parse(card.dataset.taskData));
+                }
             } else {
-                console.error('Templates non trouvés dans le fichier task-card-templates.html');
+                this.actionHandler.performTaskAction(uuid, action);
             }
-        } catch (error) {
-            console.error('Erreur lors du chargement des templates:', error);
-        }
+        });
     }
 
-    /**
-     * Crée une TaskCard en utilisant le template approprié
-     * @param {Object} task - Les données de la tâche
-     * @param {string} mode - Le mode ('minimal' ou 'full')
-     * @returns {HTMLElement} - L'élément TaskCard
-     */
-    createTaskCard(task, mode = 'minimal') {
-        if (!this.templates[mode]) {
-            console.error(`Template ${mode} non disponible`);
-            return null;
-        }
+    createTaskCard(task) {
+        const pri   = String(task.priority || '');
+        const tags  = (task.tags || []).filter(t => !TaskCardManager.SYSTEM_TAGS.has(t));
+        const active = !!task.start;
 
-        // Cloner le template
-        const template = this.templates[mode];
-        const card = template.content.cloneNode(true).querySelector('.task-card');
+        const priClass = ['1','2','H'].includes(pri) ? 'pri-high'
+                       : ['3','4','M'].includes(pri) ? 'pri-med'
+                       : ['5','6','L'].includes(pri) ? 'pri-low' : '';
 
-        // Remplir les slots avec les données de la tâche
-        this.fillSlots(card, task, mode);
+        const proj     = task.project ? `<span class="card-proj">${this._e(task.project)}</span>` : '';
+        const dueHtml  = this._due(task.due);
+        const schedHtml = this._sched(task.scheduled);
+        const durHtml  = task.sched_duration ? `<span class="card-dur">⏱ ${this._fmtDur(this._parseDur(task.sched_duration))}</span>` : '';
+        const tagsHtml = tags.map(t => `<span class="card-tag">+${this._e(t)}</span>`).join('');
 
-        // Ajouter les données de la tâche à l'élément
-        card.dataset.taskId = task.uuid;
-        card.dataset.taskData = JSON.stringify(task).replace(/'/g, "&apos;");
+        const anns = task.annotations || [];
+        const annHtml = anns.length
+            ? `<div class="card-annotations">${anns.map(a => `<div class="card-ann">${this._e(a.description)}</div>`).join('')}</div>`
+            : '';
 
-        // Ajouter un gestionnaire d'événements pour la sélection
-        card.addEventListener('click', function(e) {
-            // Ne pas déclencher si le clic est sur le bouton de bascule ou sur un bouton d'action
-            if (e.target.closest('.toggle-mode-btn') || e.target.closest('.btn')) {
-                return;
-            }
-            
-            // Basculer la classe 'selected' sur la carte
-            card.classList.toggle('selected');
-            
-            // Dispatcher un événement personnalisé avec les données de la tâche
-            const taskSelectedEvent = new CustomEvent('taskSelected', {
-                detail: {
-                    taskData: task,
-                    cardElement: card
-                },
-                bubbles: true
-            });
-            card.dispatchEvent(taskSelectedEvent);
-        });
+        const card = document.createElement('div');
+        card.className = 'task-card';
+        if (active) card.classList.add('task-started');
+        card.dataset.taskId   = task.uuid;
+        card.dataset.taskData = JSON.stringify(task);
+        if (pri) card.dataset.pri = pri;
+        if      (task.scheduled && task.due) card.dataset.type = 'both';
+        else if (task.scheduled)             card.dataset.type = 'scheduled';
+        else if (task.due)                   card.dataset.type = 'due';
+
+        card.innerHTML =
+            `<div class="card-main">` +
+                `<div class="card-desc">${this._e(task.description)}</div>` +
+                `<div class="card-meta">` +
+                    (pri ? `<span class="card-pri ${priClass}">${pri}</span>` : '') +
+                    proj + dueHtml + schedHtml + durHtml + tagsHtml +
+                `</div>` +
+                annHtml +
+            `</div>` +
+            `<div class="card-actions">` +
+                `<button class="ca-btn ca-stop"   data-task-action="stop"   data-task-uuid="${task.uuid}" ${active ? '' : 'style="display:none"'}>⏸</button>` +
+                `<button class="ca-btn ca-start"  data-task-action="start"  data-task-uuid="${task.uuid}" ${active ? 'style="display:none"' : ''}>▶</button>` +
+                `<button class="ca-btn ca-edit"   data-task-action="edit"   data-task-uuid="${task.uuid}">✏</button>` +
+                `<button class="ca-btn ca-done"   data-task-action="done"   data-task-uuid="${task.uuid}">✓</button>` +
+                `<button class="ca-btn ca-delete" data-task-action="delete" data-task-uuid="${task.uuid}">✕</button>` +
+            `</div>`;
 
         return card;
     }
 
-    /**
-     * Remplit les slots d'une TaskCard avec les données de la tâche
-     * @param {HTMLElement} card - L'élément TaskCard
-     * @param {Object} task - Les données de la tâche
-     * @param {string} mode - Le mode ('minimal' ou 'full')
-     */
-    fillSlots(card, task, mode) {
-        // Priorité
-        const priority = task.priority || 'M';
-        const priorityClass = priority === 'H' ? 'high' : priority === 'M' ? 'medium' : 'low';
-        const priorityText = priority === 'H' ? 'Haute' : priority === 'M' ? 'Moyenne' : 'Basse';
-        const prioritySlot = card.querySelector('[name="priority"]');
-        if (prioritySlot) {
-            prioritySlot.textContent = priorityText;
-            prioritySlot.className = `task-priority ${priorityClass}`;
-        }
-
-        // Description
-        const descriptionSlot = card.querySelector('[name="description"]');
-        if (descriptionSlot) {
-            descriptionSlot.textContent = this.escapeHtml(task.description);
-        }
-
-        // Durée
-        const duration = this.parseEstTime(task.estTime);
-        const durationText = duration ? this.formatDuration(duration) : 'Non estimé';
-        const durationSlot = card.querySelector('[name="duration"]');
-        if (durationSlot) {
-            durationSlot.textContent = durationText;
-        }
-
-        // Pool
-        const pool = task.pool || 'pro';
-        const poolSlot = card.querySelector('[name="pool"]');
-        if (poolSlot) {
-            poolSlot.textContent = pool;
-        }
-
-        // Date d'échéance (uniquement en mode complet)
-        if (mode === 'full') {
-            let dueDate = '';
-            if (task.due) {
-                try {
-                    const date = new Date(task.due);
-                    if (!isNaN(date.getTime())) {
-                        dueDate = date.toLocaleDateString('fr-FR');
-                    }
-                } catch (e) {
-                    console.error('Format de date invalide pour la tâche:', task);
-                }
-            }
-            const dueSlot = card.querySelector('[name="due"]');
-            if (dueSlot) {
-                dueSlot.textContent = dueDate;
-            }
-
-            // Tags
-            const tags = task.tags || [];
-            const tagsSlot = card.querySelector('[name="tags"]');
-            if (tagsSlot) {
-                tagsSlot.innerHTML = tags.map(tag => `<span class="task-tag">#${this.escapeHtml(tag)}</span>`).join('');
-            }
-
-            // Actions
-            const actionsContainer = card.querySelector('.task-actions');
-            if (actionsContainer) {
-                // Ajouter l'UUID de la tâche aux boutons d'action
-                const taskUuid = task.uuid;
-                actionsContainer.querySelectorAll('[data-task-action]').forEach(button => {
-                    button.dataset.taskUuid = taskUuid;
-                });
-                
-                // Gérer l'affichage des boutons Start/Stop en fonction de l'état de la tâche
-                const startButton = actionsContainer.querySelector('.task-start');
-                const stopButton = actionsContainer.querySelector('.task-stop');
-                
-                if (task.start) {
-                    startButton.style.display = 'none';
-                    stopButton.style.display = 'inline-block';
-                } else {
-                    startButton.style.display = 'inline-block';
-                    stopButton.style.display = 'none';
-                }
-            }
-        }
-
-        // Ajouter un écouteur d'événements global pour la délégation d'événements
-        if (!this.eventListenerAdded) {
-            document.addEventListener('click', (e) => {
-                const button = e.target.closest('[data-task-action]');
-                if (button) {
-                    const taskUuid = button.dataset.taskUuid;
-                    const action = button.dataset.taskAction;
-                    
-                    if (taskUuid && action) {
-                        if (action === 'delete') {
-                            this.actionHandler.confirmDelete(taskUuid);
-                        } else if (action === 'edit') {
-                            // Pour l'édition, il faut récupérer les données de la tâche
-                            const card = button.closest('.task-card');
-                            if (card) {
-                                const taskData = JSON.parse(card.dataset.taskData);
-                                console.log('Task data retrieved from dataset:', taskData);
-                                if (typeof taskEditor !== 'undefined') {
-                                    taskEditor.showForTask(taskData);
-                                } else {
-                                    console.error('taskEditor is not defined');
-                                }
-                            }
-                        } else {
-                            this.actionHandler.performTaskAction(taskUuid, action);
-                        }
-                    }
-                }
-            });
-            this.eventListenerAdded = true;
-        }
-
+    _due(due) {
+        if (!due) return '';
+        const m = due.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/);
+        if (!m) return '';
+        const d    = new Date(Date.UTC(+m[1], +m[2]-1, +m[3], +m[4], +m[5], +m[6]));
+        const days = (d - Date.now()) / 86400000;
+        const cls  = days < 0 ? 'overdue' : days < 3 ? 'due-soon' : '';
+        const lbl  = d.toLocaleDateString(undefined, {month:'short', day:'numeric'});
+        return `<span class="card-due ${cls}">${lbl}</span>`;
     }
 
-    /** Formate la durée en minutes pour l'affichage
-     * @param {number} minutes - La durée en minutes
-     * @returns {string} - La durée formatée
-     */
-    formatDuration(minutes) {
-        const hours = Math.floor(minutes / 60);
-        const mins = minutes % 60;
-        
-        if (hours > 0 && mins > 0) {
-            return `${hours}h${mins}min`;
-        } else if (hours > 0) {
-            return `${hours}h`;
-        } else {
-            return `${mins}min`;
+    _sched(scheduled) {
+        if (!scheduled) return '';
+        const m = scheduled.match(/^(\d{4})(\d{2})(\d{2})/);
+        if (!m) return '';
+        const lbl = new Date(+m[1], +m[2]-1, +m[3]).toLocaleDateString(undefined, {month:'short', day:'numeric'});
+        return `<span class="card-sched">${lbl}</span>`;
+    }
+
+    _parseDur(s) {
+        if (!s) return 0;
+        if (s.startsWith('PT')) {
+            const m = s.match(/PT(?:(\d+)H)?(?:(\d+)M)?/);
+            return m ? (+m[1]||0)*60 + (+m[2]||0) : 0;
         }
+        const m = s.match(/(?:(\d+)h)?(?:(\d+)min)?/);
+        return m ? (+m[1]||0)*60 + (+m[2]||0) : 0;
     }
 
-    /**
-     * Basculer entre les modes minimaliste et complet
-     * @param {HTMLElement} cardElement - L'élément TaskCard
-     */
-    toggleMode(cardElement) {
-        const taskData = JSON.parse(cardElement.dataset.taskData);
-        const currentMode = cardElement.classList.contains('full-mode') ? 'full' : 'minimal';
-        const newMode = currentMode === 'minimal' ? 'full' : 'minimal';
-
-        // Créer une nouvelle carte avec le mode opposé
-        const newCard = this.createTaskCard(taskData, newMode);
-        
-        // Remplacer l'ancienne carte par la nouvelle
-        cardElement.parentNode.replaceChild(newCard, cardElement);
+    _fmtDur(mins) {
+        if (!mins) return '';
+        const h = Math.floor(mins/60), m = mins%60;
+        return h && m ? `${h}h${m}m` : h ? `${h}h` : `${m}m`;
     }
 
-    /**
-     * Parse la durée estimée d'une tâche
-     * @param {string} estTime - La durée estimée au format ISO 8601 ou autre
-     * @returns {number|null} - La durée en minutes
-     */
-    parseEstTime(estTime) {
-        if (!estTime) return null;
-        
-        // Gérer le format ISO 8601 (PT2H30M)
-        if (estTime.startsWith('PT')) {
-            const match = estTime.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
-            if (match) {
-                const hours = parseInt(match[1] || 0);
-                const minutes = parseInt(match[2] || 0);
-                const seconds = parseInt(match[3] || 0);
-                
-                return hours * 60 + minutes + Math.round(seconds / 60);
-            }
-        }
-        
-        // Gérer l'ancien format (1h30min, 30min, etc.)
-        const match = estTime.match(/(\d+)h|(\d+)min/g);
-        if (!match) return null;
-        
-        let minutes = 0;
-        match.forEach(part => {
-            if (part.includes('h')) {
-                minutes += parseInt(part) * 60;
-            } else if (part.includes('min')) {
-                minutes += parseInt(part);
-            }
-        });
-        
-        return minutes;
-    }
-
-
-    /**
-     * Échappe les caractères HTML pour éviter les attaques XSS
-     * @param {string} text - Le texte à échapper
-     * @returns {string} - Le texte échappé
-     */
-    escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
+    _e(t) {
+        const d = document.createElement('div');
+        d.textContent = String(t ?? '');
+        return d.innerHTML;
     }
 }
 

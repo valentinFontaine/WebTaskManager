@@ -1,4 +1,6 @@
 /* TaskWarrior Web UI Styles */
+
+/* Nav styles are self-contained in nav.js */
 * {
     margin: 0;
     padding: 0;
@@ -15,7 +17,68 @@ body {
 .container {
     max-width: 1200px;
     margin: 0 auto;
-    padding: 20px;
+    padding: 12px 20px 20px;
+}
+
+/* List page header row */
+.list-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0 6px;
+}
+.list-header h2 {
+    font-size: 1.05em;
+    font-weight: 600;
+    color: #444;
+}
+.list-header-right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.filter-badge {
+    font-size: 0.78em;
+    color: #555;
+    background: #e8f0fe;
+    border-radius: 10px;
+    padding: 2px 9px;
+    display: none;
+}
+.filter-badge.visible { display: inline-block; }
+.view-btn {
+    background: none;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 2px 7px;
+    cursor: pointer;
+    font-size: 1.1em;
+    color: #888;
+    line-height: 1.4;
+}
+.view-btn.active { background: #3498db; border-color: #3498db; color: #fff; }
+.view-btn:hover:not(.active) { background: #f0f0f0; }
+.view-btn.sort-active { border-color: #f0b429; color: #f0b429; }
+
+.sort-wrap { position: relative; }
+.sort-popup {
+    position: absolute; right: 0; top: calc(100% + 4px);
+    background: #fff; border: 1px solid #ccc; border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 1000;
+    padding: 8px 0 6px; min-width: 180px;
+}
+.sort-fields { display: flex; flex-direction: column; }
+.sort-fields label {
+    display: flex; align-items: center; gap: 8px;
+    padding: 4px 14px; font-size: 0.9em; cursor: pointer;
+    white-space: nowrap;
+}
+.sort-fields label:hover { background: #f5f5f5; }
+.sort-fields input[type="radio"] { accent-color: #3498db; }
+.sort-reverse-label {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 14px 2px; font-size: 0.9em; cursor: pointer;
+    border-top: 1px solid #eee; margin-top: 4px;
 }
 
 .header-content {
@@ -251,115 +314,199 @@ h2 {
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
+/* ── Task Cards ──────────────────────────────────────────────── */
 .task-card {
-    border: 1px solid #e0e0e0;
-    border-radius: 8px;
-    padding: 20px;
-    margin-bottom: 15px;
-    background: #fafafa;
-    transition: all 0.3s ease;
-}
-
-.task-card:hover {
-    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-    transform: translateY(-1px);
-}
-
-.task-header {
     display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 15px;
-    flex-wrap: wrap;
-    gap: 10px;
+    align-items: stretch;
+    background: #fff;
+    border: 1px solid #e8e8e8;
+    border-left:  3px solid transparent;   /* due/sched type — matches calendar colors */
+    border-right: 3px solid transparent;   /* priority */
+    border-radius: 6px;
+    margin-bottom: 7px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    transition: box-shadow 0.15s;
+    overflow: hidden;
 }
+.task-card:hover { box-shadow: 0 3px 8px rgba(0,0,0,0.1); }
+.task-card.task-started { background-color: #fffde7; border-color: #f9a825; }
 
-.task-info {
+/* Right border — priority (bookends the left type indicator) */
+.task-card[data-pri="1"], .task-card[data-pri="2"] { border-right-color: #e74c3c; }
+.task-card[data-pri="3"], .task-card[data-pri="4"] { border-right-color: #f39c12; }
+.task-card[data-pri="5"], .task-card[data-pri="6"] { border-right-color: #27ae60; }
+
+/* Left border — due/scheduled type, colours match calendar event palette */
+.task-card[data-type="due"]       { border-left-color: #e74c3c; }   /* calendar 'due' red */
+.task-card[data-type="scheduled"] { border-left-color: #4a90e2; }   /* calendar 'scheduled' blue */
+.task-card[data-type="both"]      { border-left-color: #4a90e2; }   /* scheduled takes precedence */
+
+.card-main {
     flex: 1;
-    min-width: 200px;
+    padding: 8px 12px;
+    min-width: 0;
 }
-
-.task-description {
-    font-size: 1.1rem;
-    font-weight: 600;
-    color: #2c3e50;
-    margin-bottom: 8px;
+.card-desc {
+    font-size: 0.92em;
+    color: #222;
+    margin-bottom: 4px;
+    word-break: break-word;
 }
-
-.task-meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 15px;
-    font-size: 0.9rem;
-    color: #666;
-    margin-bottom: 10px;
-}
-
-.task-id {
-    background: #ecf0f1;
-    padding: 2px 8px;
-    border-radius: 4px;
-    font-weight: 500;
-}
-
-.task-status {
-    padding: 2px 8px;
-    border-radius: 4px;
-    font-weight: 500;
-    text-transform: uppercase;
-    font-size: 0.8rem;
-}
-
-.status-pending {
-    background: #fff3cd;
-    color: #856404;
-}
-
-.status-active {
-    background: #d4edda;
-    color: #155724;
-}
-
-.task-tags {
+.card-meta {
     display: flex;
     flex-wrap: wrap;
     gap: 5px;
-    margin-bottom: 10px;
+    align-items: center;
 }
-
-.tag {
-    background: #3498db;
-    color: white;
-    padding: 3px 8px;
-    border-radius: 12px;
-    font-size: 0.8rem;
-    font-weight: 500;
+.card-pri {
+    font-size: 0.72em;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 3px;
 }
+.card-pri.pri-high { background: #fde8e8; color: #b71c1c; }
+.card-pri.pri-med  { background: #fff3e0; color: #bf360c; }
+.card-pri.pri-low  { background: #f1f8e9; color: #33691e; }
+.card-proj { font-size: 0.78em; color: #1565c0; background: #e8f4fd; padding: 1px 6px; border-radius: 10px; }
+.card-due  { font-size: 0.78em; color: #888; }
+.card-due.overdue  { color: #b71c1c; font-weight: 600; }
+.card-due.due-soon { color: #e65100; }
+.card-sched { font-size: 0.78em; color: #4a90e2; }
+.card-dur  { font-size: 0.78em; color: #999; }
+.card-tag  { font-size: 0.75em; color: #555; background: #f5f5f5; padding: 1px 5px; border-radius: 8px; }
 
-.task-dates {
-    font-size: 0.85rem;
+.card-annotations { margin-top: 5px; }
+.card-ann {
+    font-size: 0.8em;
     color: #666;
-    margin-bottom: 15px;
+    padding: 2px 0 2px 10px;
+    border-left: 2px solid #d0d0d0;
+    margin-top: 3px;
+    white-space: pre-wrap;
 }
 
-.task-actions {
+/* Action column — right side */
+.card-actions {
     display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
+    flex-direction: column;
+    justify-content: center;
+    gap: 2px;
+    padding: 5px 7px;
+    border-left: 1px solid #f0f0f0;
+    background: #fafafa;
+    flex-shrink: 0;
+}
+.ca-btn {
+    border: none;
+    background: none;
+    cursor: pointer;
+    font-size: 0.88em;
+    padding: 3px 5px;
+    border-radius: 3px;
+    color: #aaa;
+    line-height: 1;
+}
+.ca-btn:hover        { background: #eee; color: #333; }
+.ca-start:hover      { color: #27ae60; }
+.ca-stop:hover       { color: #e67e22; }
+.ca-done:hover       { color: #27ae60; }
+.ca-delete:hover     { color: #e74c3c; }
+.ca-unsched:hover    { color: #e67e22; }
+
+/* Calendar event detail modal — CRUD footer */
+.modal-crud-footer {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    padding: 10px 16px 14px;
+    border-top: 1px solid var(--border-color);
+}
+.modal-crud-footer .ca-btn {
+    font-size: 1.2rem;
+    padding: 8px 14px;
+    border-radius: 6px;
+    color: #888;
 }
 
-/* Priority indicators */
-.priority-H {
-    border-left: 4px solid #e74c3c;
+/* ── List view ───────────────────────────────────────────────── */
+:is(#tasks-container, #unplanned-tasks).list-view .task-card {
+    margin-bottom: 2px;
+    border-radius: 3px;
+    padding: 0;
+    cursor: pointer;
 }
+:is(#tasks-container, #unplanned-tasks).list-view .card-main {
+    display: flex;
+    flex-wrap: wrap;          /* meta wraps below desc when there's no room */
+    align-items: baseline;
+    gap: 0 8px;
+    padding: 3px 8px;
+}
+:is(#tasks-container, #unplanned-tasks).list-view .card-desc {
+    /* Description wins: takes all available width, truncates rather than wraps */
+    flex: 1 1 0;
+    min-width: min(160px, 100%);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 0;
+    font-size: 0.88rem;
+}
+:is(#tasks-container, #unplanned-tasks).list-view .card-meta {
+    flex: 0 0 auto;           /* meta never squeezes desc; wraps to next line if needed */
+    white-space: nowrap;
+    gap: 4px;
+}
+:is(#tasks-container, #unplanned-tasks).list-view .card-meta .card-pri,
+:is(#tasks-container, #unplanned-tasks).list-view .card-meta .card-dur { display: none; }
+:is(#tasks-container, #unplanned-tasks).list-view .card-actions { display: none; }
+:is(#tasks-container, #unplanned-tasks).list-view .task-card:not(.expanded) .card-annotations { display: none; }
+:is(#tasks-container, #unplanned-tasks).list-view .task-card:hover { box-shadow: none; background: #f8f8f8; }
 
-.priority-M {
-    border-left: 4px solid #f39c12;
+/* ── Collapsed card within card view ────────────────────────── */
+:is(#tasks-container, #unplanned-tasks):not(.list-view) .task-card.collapsed {
+    margin-bottom: 2px;
+    border-radius: 3px;
+    cursor: pointer;
 }
+:is(#tasks-container, #unplanned-tasks):not(.list-view) .task-card.collapsed .card-main {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 4px 10px;
+}
+:is(#tasks-container, #unplanned-tasks):not(.list-view) .task-card.collapsed .card-desc {
+    margin-bottom: 0;
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+:is(#tasks-container, #unplanned-tasks):not(.list-view) .task-card.collapsed .card-meta .card-pri,
+:is(#tasks-container, #unplanned-tasks):not(.list-view) .task-card.collapsed .card-meta .card-dur { display: none; }
+:is(#tasks-container, #unplanned-tasks):not(.list-view) .task-card.collapsed .card-actions { display: none; }
+:is(#tasks-container, #unplanned-tasks):not(.list-view) .task-card.collapsed .card-annotations { display: none; }
+:is(#tasks-container, #unplanned-tasks):not(.list-view) .task-card.collapsed:hover { box-shadow: none; background: #f8f8f8; }
 
-.priority-L {
-    border-left: 4px solid #27ae60;
+/* ── Expanded card within list view ─────────────────────────── */
+:is(#tasks-container, #unplanned-tasks).list-view .task-card.expanded {
+    margin-bottom: 7px;
+    border-radius: 6px;
+    cursor: default;
 }
+:is(#tasks-container, #unplanned-tasks).list-view .task-card.expanded .card-main {
+    display: block;
+    padding: 8px 12px;
+}
+:is(#tasks-container, #unplanned-tasks).list-view .task-card.expanded .card-desc {
+    margin-bottom: 4px;
+    white-space: normal;
+}
+:is(#tasks-container, #unplanned-tasks).list-view .task-card.expanded .card-meta .card-pri,
+:is(#tasks-container, #unplanned-tasks).list-view .task-card.expanded .card-meta .card-due,
+:is(#tasks-container, #unplanned-tasks).list-view .task-card.expanded .card-meta .card-dur { display: inline; }
+:is(#tasks-container, #unplanned-tasks).list-view .task-card.expanded .card-actions { display: flex; }
+:is(#tasks-container, #unplanned-tasks).list-view .task-card.expanded:hover { box-shadow: 0 3px 8px rgba(0,0,0,0.1); background: #fff; }
 
 /* Modal */
 .modal {
@@ -419,6 +566,124 @@ h2 {
     margin-top: 20px;
 }
 
+/* ── Task Editor — styled to match Sync dialog ── */
+.task-editor-modal {
+    z-index: 10001;
+    background: rgba(0,0,0,0.5);
+    /* centred — overrides .modal which uses top:0/left:0/width/height */
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+}
+/* show() sets display:block; override that back to flex so centering works */
+.task-editor-modal[style*="display: block"],
+.task-editor-modal[style*="display:block"] {
+    display: flex !important;
+}
+.task-editor-modal .te-panel {
+    background: #2c3e50;
+    color: #ecf0f1;
+    border-radius: 8px;
+    width: min(380px, 92vw);
+    max-height: 88vh;
+    overflow-y: auto;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+}
+.te-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 16px 10px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    font-size: 1rem;
+    font-weight: 600;
+}
+.te-header .close {
+    background: none; border: none;
+    color: #aaa; font-size: 1.25rem;
+    line-height: 1; padding: 0 4px; cursor: pointer;
+}
+.te-header .close:hover { color: #fff; }
+
+#task-editor-form {
+    padding: 14px 16px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+#task-editor-form input[type="text"],
+#task-editor-form input[type="datetime-local"],
+#task-editor-form select {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 5px;
+    font-size: 0.85rem;
+    box-sizing: border-box;
+    background: rgba(255,255,255,0.08);
+    color: #ecf0f1;
+    color-scheme: dark;
+}
+#task-editor-form input::placeholder { color: rgba(255,255,255,0.35); }
+#task-editor-form input:focus,
+#task-editor-form select:focus {
+    border-color: #3498db;
+    outline: none;
+    background: rgba(255,255,255,0.12);
+}
+#task-editor-form select option { background: #2c3e50; color: #ecf0f1; }
+
+.te-row {
+    display: flex;
+    gap: 6px;
+    align-items: flex-end;
+}
+.te-row > * { flex: 1; min-width: 0; }
+.te-row-7-3 > :first-child { flex: 7; }
+.te-row-7-3 > :last-child  { flex: 3; }
+.te-row-1-3 > :first-child { flex: 1; }
+.te-row-1-3 > :last-child  { flex: 3; }
+
+.te-date-field {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+    min-width: 0;
+}
+.te-date-field small {
+    font-size: 0.68rem;
+    color: rgba(255,255,255,0.4);
+    padding-left: 2px;
+    line-height: 1;
+    user-select: none;
+}
+.te-date-row { display: flex; align-items: center; gap: 2px; }
+.te-date-row input { flex: 1; min-width: 0; }
+.te-clr {
+    background: none; border: none;
+    color: rgba(255,255,255,0.3);
+    font-size: 1rem; line-height: 1;
+    padding: 0 4px; cursor: pointer; flex-shrink: 0; border-radius: 3px;
+}
+.te-clr:hover { color: #e74c3c; background: rgba(231,76,60,0.15); }
+
+.te-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    margin-top: 4px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(255,255,255,0.1);
+}
+.btn-sm { padding: 6px 18px !important; font-size: 0.85rem !important; }
+.task-editor-modal .btn-primary   { background: #3498db !important; color: #fff !important; border: none !important; }
+.task-editor-modal .btn-primary:hover { background: #2980b9 !important; }
+.task-editor-modal .btn-secondary { background: rgba(255,255,255,0.1) !important; color: #ecf0f1 !important; border: none !important; }
+.task-editor-modal .btn-secondary:hover { background: rgba(255,255,255,0.18) !important; }
+
 /* Loading and Error States */
 .loading {
     text-align: center;
@@ -439,27 +704,67 @@ h2 {
 /* Notifications */
 .notification {
     position: fixed;
-    top: 20px;
+    bottom: 20px;
     right: 20px;
-    padding: 15px 20px;
+    padding: 10px 14px;
     border-radius: 6px;
     color: white;
     font-weight: 500;
-    z-index: 1001;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    gap: 4px;
     transform: translateX(400px);
     transition: transform 0.3s ease;
 }
+.notification.show { transform: translateX(0); }
+.notification.success { background: #27ae60; }
+.notification.error   { background: #e74c3c; }
+.notification.warning { background: #e67e22; }
 
-.notification.show {
-    transform: translateX(0);
+.notif-close {
+    background: none; border: none; color: rgba(255,255,255,0.7);
+    cursor: pointer; font-size: 18px; padding: 0 0 0 8px; line-height: 1;
 }
+.notif-close:hover { color: #fff; }
 
-.notification.success {
-    background: #27ae60;
+/* Sync dialog */
+.sync-dialog-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 1100;
+    display: flex; align-items: center; justify-content: center;
 }
-
-.notification.error {
-    background: #e74c3c;
+.sync-dialog {
+    background: #2c3e50; color: #ecf0f1;
+    border-radius: 8px; min-width: 320px; max-width: 480px; width: 90%;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+}
+.sync-dialog-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 16px 10px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    font-size: 16px; font-weight: 600;
+}
+.sync-dialog-close {
+    background: none; border: none; color: #aaa;
+    font-size: 20px; cursor: pointer; line-height: 1; padding: 0 4px;
+}
+.sync-dialog-close:hover { color: #fff; }
+.sync-dialog-body { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.sync-method { font-size: 12px; color: #95a5a6; }
+.sync-now-btn {
+    background: #3498db; color: #fff; border: none;
+    padding: 10px 20px; border-radius: 5px; font-size: 14px; font-weight: 600;
+    cursor: pointer; align-self: flex-start;
+}
+.sync-now-btn:hover { background: #2980b9; }
+.sync-now-btn:disabled { background: #555; cursor: default; }
+.sync-output {
+    background: #1a252f; color: #bdc3c7;
+    border-radius: 4px; padding: 10px 12px;
+    font-size: 12px; white-space: pre-wrap; word-break: break-word;
+    margin: 0; max-height: 200px; overflow-y: auto;
 }
 
 /* Icons */
@@ -487,16 +792,6 @@ h2 {
         flex-direction: column;
     }
     
-    .task-header {
-        flex-direction: column;
-        align-items: stretch;
-    }
-    
-    .task-actions {
-        justify-content: center;
-        margin-top: 15px;
-    }
-    
     .modal-content {
         margin: 10% auto;
         width: 95%;
@@ -512,17 +807,36 @@ h2 {
 }
 
 @media (max-width: 480px) {
-    .task-meta {
-        flex-direction: column;
-        gap: 5px;
-    }
-    
-    .task-actions {
-        flex-direction: column;
-    }
-    
     .btn {
         width: 100%;
         justify-content: center;
     }
+}
+
+/* ── Agenda page ─────────────────────────────────────────────────────────── */
+.agenda-date-header {
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--text-muted, #888);
+    padding: 0.9rem 0 0.3rem;
+    border-bottom: 1px solid var(--border-color, #e0e0e0);
+    margin-bottom: 0.5rem;
+}
+.agenda-date-header.overdue {
+    color: #dc3545;
+}
+.agenda-date-header.today {
+    background: #4a90e2;
+    color: #fff;
+    border-bottom: none;
+    border-radius: 4px;
+    padding: 0.4rem 0.75rem;
+    margin-bottom: 0.75rem;
+    letter-spacing: 0.08em;
+}
+.empty-state {
+    text-align: center;
+    padding: 2rem;
+    color: var(--text-muted, #888);
 }

@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#1a1a1a">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="apple-touch-icon" href="/logo-192.png">
+    <title>TaskWarrior Kanban</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="/nav.js"></script>
+    <style>
+        /* kanban needs full viewport width — override the global container cap */
+        .container {
+            max-width: none;
+        }
+        .kanban-board {
+            display: flex;
+            gap: 16px;
+            overflow-x: auto;
+            padding: 8px 0 24px;
+            min-height: 70vh;
+            align-items: flex-start;
+        }
+        .kanban-column {
+            min-width: 260px;
+            width: 260px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+        }
+        .column-header {
+            padding: 12px 16px;
+            border-radius: 8px 8px 0 0;
+            font-weight: 600;
+            font-size: 0.95em;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: white;
+        }
+        .column-count {
+            background: rgba(255,255,255,0.35);
+            border-radius: 12px;
+            padding: 1px 8px;
+            font-size: 0.85em;
+            font-weight: 500;
+        }
+        .card-list {
+            padding: 8px;
+            min-height: 80px;
+            flex: 1;
+        }
+        .task-card {
+            background: white;
+            border: 1px solid #e8e8e8;
+            border-radius: 6px;
+            padding: 10px 12px;
+            margin-bottom: 8px;
+            cursor: grab;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+            transition: box-shadow 0.15s, transform 0.1s;
+            user-select: none;
+        }
+        .task-card:hover {
+            box-shadow: 0 3px 8px rgba(0,0,0,0.12);
+        }
+        .task-card.sortable-ghost {
+            opacity: 0.35;
+            background: #f0f4ff;
+        }
+        .task-card.sortable-chosen {
+            cursor: grabbing;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.18);
+        }
+        .card-description {
+            font-size: 0.88em;
+            line-height: 1.4;
+            margin-bottom: 7px;
+            color: #222;
+        }
+        .card-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+        }
+        .badge {
+            padding: 1px 7px;
+            border-radius: 10px;
+            font-size: 0.75em;
+            white-space: nowrap;
+        }
+        .badge-project  { background: #e8f4fd; color: #1565c0; }
+        .badge-pri-1    { background: #fde8e8; color: #b71c1c; font-weight: 600; }
+        .badge-pri-2    { background: #fde8e8; color: #b71c1c; font-weight: 600; }
+        .badge-pri-3    { background: #fff3e0; color: #bf360c; }
+        .badge-pri-4    { background: #fff3e0; color: #bf360c; }
+        .badge-pri-5    { background: #f1f8e9; color: #33691e; }
+        .badge-pri-6    { background: #f1f8e9; color: #33691e; }
+        .badge-tag      { background: #f5f5f5; color: #555; }
+        .badge-due      { background: #f5f5f5; color: #777; }
+        .badge-due.overdue   { background: #fde8e8; color: #b71c1c; font-weight: 600; }
+        .badge-due.due-soon  { background: #fff8e1; color: #e65100; }
+        .unassigned-hint {
+            font-size: 0.8em;
+            color: #bbb;
+            font-style: italic;
+            padding: 4px 4px 8px;
+            text-align: center;
+        }
+        .status-line {
+            font-size: 0.82em;
+            color: #999;
+            margin-top: 4px;
+        }
+        .status-line.error { color: #c62828; }
+    </style>
+    <script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js");</script>
+</head>
+<body>
+<div class="container">
+    <header>
+        <div class="header-content">
+            <h1>TaskWarrior Kanban</h1>
+            <div class="status-line" id="status-bar">Loading...</div>
+        </div>
+        <div class="header-actions">
+            <button id="refresh-btn" class="btn btn-primary">Refresh</button>
+        </div>
+    </header>
+
+    <div id="board" class="kanban-board"></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
+<script>
+'use strict';
+
+const COLUMN_COLORS = [
+    '#5b8def', '#e8874a', '#4aae72', '#9b6dd6',
+    '#e05c5c', '#3aacad', '#c97c30', '#6b7db3',
+];
+
+let columns = [];
+let tasks   = [];
+
+// ── data ─────────────────────────────────────────────────────────────────────
+
+async function loadColumns() {
+    const r = await fetch('/api/kanban/columns');
+    const d = await r.json();
+    columns = d.columns;
+}
+
+async function loadTasks() {
+    const params = window.twNav ? window.twNav.stateToParams() : 'status=pending';
+    const r = await fetch('/api/tasks?' + params);
+    const d = await r.json();
+    tasks = d.tasks || [];
+}
+
+// ── rendering ─────────────────────────────────────────────────────────────────
+
+function formatDue(due) {
+    if (!due) return '';
+    // TW date format: 20250415T120000Z
+    const m = due.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/);
+    if (!m) return '';
+    const d = new Date(Date.UTC(+m[1], +m[2]-1, +m[3], +m[4], +m[5], +m[6]));
+    const days = (d - Date.now()) / 86400000;
+    let cls = 'badge badge-due';
+    if (days < 0)  cls += ' overdue';
+    else if (days < 3) cls += ' due-soon';
+    const label = d.toLocaleDateString(undefined, {month:'short', day:'numeric'});
+    return `<span class="${cls}">due ${label}</span>`;
+}
+
+const SYSTEM_TAGS = new Set(['PENDING','UNBLOCKED','TAGGED','ACTIVE','ANNOTATED']);
+
+function renderCard(task) {
+    const prio = task.priority
+        ? `<span class="badge badge-pri-${task.priority}">${task.priority}</span>` : '';
+    const proj = task.project
+        ? `<span class="badge badge-project">${task.project}</span>` : '';
+    const due  = formatDue(task.due);
+    const tags = (task.tags || [])
+        .filter(t => !SYSTEM_TAGS.has(t))
+        .slice(0, 3)
+        .map(t => `<span class="badge badge-tag">+${t}</span>`)
+        .join('');
+    return `<div class="task-card" data-uuid="${task.uuid}">
+        <div class="card-description">${task.description}</div>
+        <div class="card-meta">${prio}${proj}${due}${tags}</div>
+    </div>`;
+}
+
+function makeSortable(el) {
+    new Sortable(el, {
+        group:      'kanban',
+        animation:  150,
+        ghostClass: 'sortable-ghost',
+        chosenClass:'sortable-chosen',
+        onEnd(evt) {
+            const uuid    = evt.item.dataset.uuid;
+            const newState = evt.to.dataset.col;
+            updateState(uuid, newState);
+        }
+    });
+}
+
+function renderBoard() {
+    const board = document.getElementById('board');
+    board.innerHTML = '';
+
+    const assignedStates = new Set(columns);
+
+    // Unassigned column — leftmost, tasks with no state or unknown state
+    const unassigned = tasks.filter(t => !assignedStates.has(t.state || ''));
+    if (unassigned.length > 0) {
+        const div = document.createElement('div');
+        div.className = 'kanban-column';
+        div.innerHTML = `
+            <div class="column-header" style="background:#999">
+                <span>Unassigned</span>
+                <span class="column-count">${unassigned.length}</span>
+            </div>
+            <div class="card-list" data-col="">
+                <div class="unassigned-hint">no state set — drag to a column</div>
+                ${unassigned.map(renderCard).join('')}
+            </div>`;
+        board.appendChild(div);
+        makeSortable(div.querySelector('.card-list'));
+    }
+
+    // Configured columns — left to right workflow
+    columns.forEach((col, i) => {
+        const colTasks = tasks.filter(t => (t.state || '') === col);
+        const color    = COLUMN_COLORS[i % COLUMN_COLORS.length];
+
+        const div = document.createElement('div');
+        div.className = 'kanban-column';
+        div.innerHTML = `
+            <div class="column-header" style="background:${color}">
+                <span>${col}</span>
+                <span class="column-count">${colTasks.length}</span>
+            </div>
+            <div class="card-list" data-col="${col}">
+                ${colTasks.map(renderCard).join('')}
+            </div>`;
+        board.appendChild(div);
+        makeSortable(div.querySelector('.card-list'));
+    });
+
+    const total = tasks.length;
+    setStatus(`${total} pending task${total !== 1 ? 's' : ''} — drag cards to change state`);
+}
+
+// ── API calls ─────────────────────────────────────────────────────────────────
+
+async function updateState(uuid, newState) {
+    try {
+        const r = await fetch(`/api/task/${uuid}/modify`, {
+            method:  'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body:    JSON.stringify({state: newState}),
+        });
+        const d = await r.json();
+        if (!d.success) {
+            setStatus(`Error: ${d.message || d.error}`, true);
+            console.error('State update failed:', d);
+        }
+    } catch (e) {
+        setStatus('Network error updating task', true);
+        console.error(e);
+    }
+}
+
+// ── status bar ────────────────────────────────────────────────────────────────
+
+function setStatus(msg, isError = false) {
+    const bar = document.getElementById('status-bar');
+    bar.textContent = msg;
+    bar.className   = 'status-line' + (isError ? ' error' : '');
+}
+
+// ── init ──────────────────────────────────────────────────────────────────────
+
+async function init() {
+    setStatus('Loading...');
+    try {
+        await Promise.all([loadColumns(), loadTasks()]);
+        renderBoard();
+    } catch (e) {
+        setStatus('Failed to load — is the Flask server running?', true);
+        console.error(e);
+    }
+}
+
+document.getElementById('refresh-btn').addEventListener('click', init);
+document.addEventListener('tw-filter-change', init);
+init();
+</script>
+</body>
+</html>

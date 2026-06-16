@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#1a1a1a">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="apple-touch-icon" href="/logo-192.png">
+    <title>Add Task — Taskwarrior</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="/nav.js"></script>
+    <script src="task-editor.js"></script>
+    <script src="task-card.js"></script>
+    <style>
+        .add-page {
+            max-width: 640px;
+            margin: 32px auto;
+            padding: 0 20px;
+        }
+        .add-page h1 {
+            font-size: 1.3em;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: #222;
+        }
+        .back-link {
+            display: inline-block;
+            margin-top: 16px;
+            color: #3498db;
+            text-decoration: none;
+            font-size: 0.9em;
+        }
+        .back-link:hover { text-decoration: underline; }
+        #add-notification {
+            padding: 10px 14px;
+            border-radius: 6px;
+            margin-bottom: 16px;
+            display: none;
+            font-size: 0.9em;
+        }
+        #add-notification.success { background: #e8f5e9; color: #2e7d32; }
+        #add-notification.error   { background: #fde8e8; color: #b71c1c; }
+    </style>
+    <script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js");</script>
+</head>
+<body>
+<div class="add-page">
+    <h1>Add Task</h1>
+    <div id="add-notification"></div>
+    <div id="task-creator-container"></div>
+    <a href="/" class="back-link">← Back to list</a>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    // Suppress the global taskCardManager/taskEditor globals that task-editor.js may expect
+    if (typeof taskCardManager === 'undefined') window.taskCardManager = null;
+    if (typeof taskEditor === 'undefined') window.taskEditor = null;
+
+    const note = document.getElementById('add-notification');
+
+    new TaskEditor({
+        showAllFields: true,
+        priorityFormat: 'letters',
+        language: 'en',
+        containerId: 'task-creator-container',
+        inline: true,
+        onSaveSuccess: (task) => {
+            note.textContent = `"${task.description}" added.`;
+            note.className = 'success';
+            note.style.display = 'block';
+            // Brief pause then back to list
+            setTimeout(() => window.location.href = '/', 1200);
+        },
+        onSaveError: (error) => {
+            note.textContent = error || 'Failed to add task.';
+            note.className = 'error';
+            note.style.display = 'block';
+        }
+    });
+});
+</script>
+</body>
+</html>

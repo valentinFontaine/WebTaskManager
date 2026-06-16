@@ -3,66 +3,37 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#1a1a1a">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="apple-touch-icon" href="/logo-192.png">
     <title>TaskWarrior Web UI</title>
     <link rel="stylesheet" href="styles.css">
+    <script src="nav.js"></script>
     <script src="task-editor.js"></script>
     <script src="task-card.js"></script>
     <script src="main.js"></script>
+    <script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js");</script>
 </head>
 <body>
     <div class="container">
-        <header>
-            <div class="header-content">
-                <h1>TaskWarrior Web UI</h1>
-                <div class="context-selector">
-                    <span class="context-label">Context:</span>
-                    <div class="context-options">
-                        <button type="button" class="context-option" data-context="">All</button>
-                        <button type="button" class="context-option" data-context="pro">Pro</button>
-                        <button type="button" class="context-option" data-context="perso">Perso</button>
-                    </div>
-                </div>
-            </div>
-            <div class="header-actions">
-                <a href="day-planner.html" class="btn btn-secondary">
-                    <span class="icon">📅</span>
-                    Planificateur de Journée
-                </a>
-                <a href="calendar-planner.html" class="btn btn-secondary">
-                    <span class="icon">📆</span>
-                    Calendrier
-                </a>
-                <button id="refresh-btn" class="btn btn-primary">
-                    <span class="icon">🔄</span>
-                    Refresh
-                </button>
-            </div>
-        </header>
-
-        <div class="add-task-section">
-            <h2>Add New Task</h2>
-            <div id="task-creator-container"></div>
-        </div>
-
-        <div class="filters-section">
-            <h2>Advanced Filters</h2>
-            <div class="filters-container">
-                <div class="form-group">
-                    <label for="filter-project">Filter by Project:</label>
-                    <input type="text" id="filter-project" placeholder="Enter project name" list="project-suggestions">
-                    <datalist id="project-suggestions"></datalist>
-                </div>
-                <div class="form-group">
-                    <label for="filter-tags">Filter by Tag:</label>
-                    <input type="text" id="filter-tags" placeholder="Enter tag (comma-separated)">
-                </div>
-                <button id="apply-filters" class="btn btn-primary">Apply Filters</button>
-                <button id="clear-filters" class="btn btn-secondary">Clear Filters</button>
-            </div>
-        </div>
-
         <div class="tasks-section">
-            <h2>Pending Tasks</h2>
+            <div class="list-header">
+                <h2 id="tasks-heading">Tasks</h2>
+                <div class="list-header-right">
+                    <span id="filter-badge" class="filter-badge"></span>
+                    <div class="sort-wrap">
+                        <button id="sort-btn" class="view-btn" title="Sort">⇅</button>
+                        <div id="sort-popup" class="sort-popup" style="display:none">
+                            <div class="sort-fields" id="sort-fields"></div>
+                            <label class="sort-reverse-label">
+                                <input type="checkbox" id="sort-reverse"> Reverse
+                            </label>
+                        </div>
+                    </div>
+                    <button id="view-card" class="view-btn active" title="Card view">⊞</button>
+                    <button id="view-list" class="view-btn"        title="List view">≡</button>
+                </div>
+            </div>
             <div id="loading" class="loading">Loading tasks...</div>
             <div id="error-message" class="error-message" style="display: none;"></div>
             <div id="tasks-container"></div>
@@ -71,7 +42,24 @@
 
     <!-- Le modal d'édition sera créé dynamiquement par TaskEditor -->
 
-    <div id="notification" class="notification"></div>
+    <div id="sync-dialog" class="sync-dialog-backdrop" style="display:none">
+        <div class="sync-dialog">
+            <div class="sync-dialog-header">
+                <span>Sync</span>
+                <button id="sync-dialog-close" class="sync-dialog-close">×</button>
+            </div>
+            <div class="sync-dialog-body">
+                <div id="sync-method" class="sync-method"></div>
+                <button id="sync-now-btn" class="sync-now-btn">Sync Now</button>
+                <pre id="sync-output" class="sync-output" style="display:none"></pre>
+            </div>
+        </div>
+    </div>
+
+    <div id="notification" class="notification">
+        <span id="notif-text"></span>
+        <button class="notif-close" id="notif-close">×</button>
+    </div>
 
 </body>
 </html>

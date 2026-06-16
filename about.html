@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#1a1a1a">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="apple-touch-icon" href="/logo-192.png">
+    <title>About — tw-web</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="/nav.js"></script>
+    <style>
+        .about-container {
+            max-width: 600px;
+            margin: 40px auto;
+            padding: 0 20px;
+        }
+        .about-container h1 { margin-bottom: 8px; }
+        .about-container p  { margin-bottom: 12px; color: #555; line-height: 1.7; }
+        .about-container ul { margin: 0 0 12px 20px; color: #555; line-height: 1.9; }
+        .about-container a  { color: #3498db; }
+    </style>
+    <script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js");</script>
+</head>
+<body>
+<div class="about-container">
+    <h1>tw-web</h1>
+    <p>A lightweight web interface for <a href="https://taskwarrior.org" target="_blank">Taskwarrior</a> 2.6.x, part of the <strong>awesome-taskwarrior</strong> fleet.</p>
+    <p>Upstream project: <a href="https://github.com/valentinFontaine/WebTaskManager" target="_blank">valentinFontaine/WebTaskManager</a></p>
+    <h2 style="margin: 20px 0 8px">Views</h2>
+    <ul>
+        <li><strong>Task List</strong> — browse, filter, add, edit and action pending tasks</li>
+        <li><strong>Kanban</strong> — drag tasks between workflow columns by <code>state</code> UDA</li>
+        <li><strong>Day Planner</strong> — drag tasks into hourly time blocks for daily scheduling</li>
+        <li><strong>Calendar</strong> — week/month view of scheduled tasks</li>
+    </ul>
+    <h2 style="margin: 20px 0 8px">Required UDAs</h2>
+    <ul>
+        <li><code>uda.state.type=string</code> — kanban column assignment</li>
+        <li><code>uda.priority.values=1,2,3,4,5,6,H,M,L</code> — numeric priority (need-priority hook)</li>
+    </ul>
+</div>
+</body>
+</html>

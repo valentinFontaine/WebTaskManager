@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   xmlns:dc="http://purl.org/dc/elements/1.1/"
+   xmlns:cc="http://creativecommons.org/ns#"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   width="210mm"
+   height="297mm"
+   viewBox="0 0 744.09448819 1052.3622047"
+   id="svg4278"
+   version="1.1"
+   inkscape:version="0.91 r13725"
+   sodipodi:docname="logo.svg">
+  <defs
+     id="defs4280" />
+  <sodipodi:namedview
+     id="base"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:pageopacity="0.0"
+     inkscape:pageshadow="2"
+     inkscape:zoom="0.35"
+     inkscape:cx="-83.571429"
+     inkscape:cy="405.71429"
+     inkscape:document-units="px"
+     inkscape:current-layer="layer1"
+     showgrid="false"
+     inkscape:window-width="1256"
+     inkscape:window-height="817"
+     inkscape:window-x="62"
+     inkscape:window-y="68"
+     inkscape:window-maximized="0" />
+  <metadata
+     id="metadata4283">
+    <rdf:RDF>
+      <cc:Work
+         rdf:about="">
+        <dc:format>image/svg+xml</dc:format>
+        <dc:type
+           rdf:resource="http://purl.org/dc/dcmitype/StillImage" />
+        <dc:title />
+      </cc:Work>
+    </rdf:RDF>
+  </metadata>
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1">
+    <circle
+       style="opacity:1;fill:#606060;fill-opacity:1;stroke:#000000;stroke-width:1;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1"
+       id="path4230"
+       cx="431.42859"
+       cy="680.93365"
+       r="231.42857"
+       inkscape:export-xdpi="24.84"
+       inkscape:export-ydpi="24.84"
+       inkscape:export-filename="/home/vorobyev/Dev/Taskw2/desktop/res/icon.png" />
+    <g
+       transform="matrix(4.9074483,0,0,4.9074483,-1069.436,-1261.6479)"
+       id="Layer_3"
+       style="fill:#eeeeee;fill-opacity:1"
+       inkscape:export-xdpi="24.84"
+       inkscape:export-ydpi="24.84"
+       inkscape:export-filename="/home/vorobyev/Dev/Taskw2/desktop/res/icon.png">
+      <path
+         style="fill:#eeeeee;fill-opacity:1"
+         inkscape:connector-curvature="0"
+         id="path4884"
+         d="m 301.125,430.001 0,-29.375 c 0,0 -11.042,-7.875 -11,-8.667 l -0.625,-3.625 c 0,0 11.625,2.042 16.167,2.208 4.542,0.166 16.292,-2.208 16.292,-2.208 l -0.541,4.208 -11.084,8.125 0.042,29.333 c 0,0 9.667,-3.584 18.792,-13.542 0,0 -7.667,-19.084 -2.667,-29.209 1.938,-5.875 -0.25,-25.063 -19.875,-25.563 -19.313,0 -22.75,14.75 -21.688,25.063 5.688,9.938 -2.063,28.063 -2.438,29.688 4.563,5.251 15.438,13.252 18.625,13.564 z" />
+    </g>
+  </g>
+</svg>

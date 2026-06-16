@@ -1,1089 +1,856 @@
-/**
- * Calendar Planner - Intégration Toast UI Calendar avec Taskwarrior
- * Permet de glisser-déposer des tâches non planifiées dans le calendrier
- */
+'use strict';
 
-/**
- * Valriables globales
- */
+// ── Globals ───────────────────────────────────────────────────────────────────
 let calendar;
-let unplannedTasks = [];
-let allTasks = [];
-let currentFilter = {
-    pool: 'all',
-    sort: 'urgency'
-};
-let selectedTaskCard = null;
-let selectedTaskData = null;
-let tempEventData = null; 
+let taskEditor;
+let taskCardManager;
+let unplannedTasks   = [];
+let allTasks         = [];
+let dueTasks         = [];
+let _calEventSource  = null;  // managed FC event source — remove before re-adding
+let _loadId          = 0;     // increment each loadTasks() call; cancelled calls are ignored
 
-/**
- * Initialisation
- */
+// ── Priority helper ───────────────────────────────────────────────────────────
+function calPriClass(pri) {
+    if (!pri) return '';
+    const n = parseInt(pri);
+    if (!isNaN(n)) return n <= 2 ? 'high' : n <= 4 ? 'med' : 'low';
+    if (pri === 'H') return 'high';
+    if (pri === 'M') return 'med';
+    if (pri === 'L') return 'low';
+    return '';
+}
+
+// ── Debug helper (temporary) ──────────────────────────────────────────────────
+function _dbg(msg) {
+    console.error('[cal-debug]', msg);
+    fetch('/api/debug', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ msg: String(msg) }) }).catch(() => {});
+    const el = document.getElementById('cal-debug-banner');
+    if (el) { el.textContent = msg; el.style.display = 'block'; }
+}
+window.onerror = (msg, src, line, col, err) => {
+    _dbg(`JS ERROR: ${msg} @ ${src}:${line}:${col}${err ? ' — ' + err.stack : ''}`);
+};
+// Unhandled promise rejections — log only, don't show banner (SSE/nav churn is benign)
+window.onunhandledrejection = (e) => {
+    const msg = e.reason?.message || String(e.reason);
+    console.warn('[cal-debug] Unhandled promise:', msg);
+    fetch('/api/debug', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ msg: 'Unhandled promise: ' + msg }) }).catch(() => {});
+};
+
+// ── DOMContentLoaded ──────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-    // Initialiser taskCardManager avec le gestionnaire d'actions pour calendar-planner
-    taskCardManager = new TaskCardManager(new CalendarTaskActionHandler());
-    initializeCalendar();
-    setupEventListeners();
-    loadTasks();
-    console.log('SetupTasksSelection');
-    console.log('Setup Task Selection Done');
-    
-    // Ajouter un écouteur d'événements pour les événements taskSelected
-    document.addEventListener('taskSelected', (e) => {
-        handleTaskCardClick(e.detail.cardElement);
+    const _step = (name, fn) => { try { fn(); } catch(e) { _dbg(`CRASH in ${name}: ${e.message}\n${e.stack}`); throw e; } };
+
+    _step('TaskCardManager', () => {
+        taskCardManager = new TaskCardManager(new CalendarTaskActionHandler());
     });
+
+    _step('TaskEditor', () => {
+        taskEditor = new TaskEditor({
+            showAllFields:  true,
+            priorityFormat: 'letters',
+            language:       'en',
+            modalId:        'unified-task-editor',
+            onSaveSuccess:  () => loadTasks(),
+            onSaveError:    (err) => showCalNotification(err, 'error'),
+            onCancel:       () => {}
+        });
+    });
+
+    _step('initializeCalendar', () => initializeCalendar());
+    _step('setupEventListeners', () => setupEventListeners());
+    _step('initSidebarControls', () => initSidebarControls());
+    _step('loadTasks', () => loadTasks());
+    _step('setupCalTooltip', () => setupCalTooltip());
+
+    document.addEventListener('tw-open-add',      () => { if (taskEditor) taskEditor.show(null); });
+    document.addEventListener('tw-filter-change', () => loadTasks());
+    document.addEventListener('tw-menu-action', (e) => {
+        if (e.detail?.action === 'sync') openSyncDialog();
+    });
+    document.addEventListener('tw-show-notification', (e) => {
+        const { message, type } = e.detail || {};
+        if (message) showCalNotification(message, type || 'info');
+    });
+    document.getElementById('notif-close')?.addEventListener('click', () =>
+        document.getElementById('notification')?.classList.remove('show'));
+
+    // Navigate to date/view from URL params (e.g. Agenda page date-header click)
+    const params    = new URLSearchParams(location.search);
+    const paramView = params.get('view');
+    const paramDate = params.get('date');
+    if (paramView) changeView(paramView);
+    if (paramDate && /^\d{8}$/.test(paramDate)) {
+        const y = +paramDate.slice(0, 4), mo = +paramDate.slice(4, 6) - 1, d = +paramDate.slice(6, 8);
+        calendar.gotoDate(new Date(y, mo, d));
+    }
 });
 
-/**
- * Initialisation du calendrier Toast UI
- */
+// ── Calendar initialisation ───────────────────────────────────────────────────
 function initializeCalendar() {
-    const calendarEl = document.getElementById('calendar');
-    
-    calendar = new tui.Calendar(calendarEl, {
-        defaultView: 'week',
-        useFormPopup: true,
-        useDetailPopup: true,
-        usageStatistics: false,
-        isReadOnly: false,
-        week: {
-            startDayOfWeek: 1, // Lundi
-            dayNames: ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'],
-            hourStart: 6,
-            hourEnd: 23,
-            taskView: true,
-            eventView: ['time'],
-            collapseDuplicateEvents: {
-                getDuplicateEvents: (targetEvent, events) => {
-                    return events.filter(event => event.title === targetEvent.title);
-                },
-                getMainEvent: (events) => events[0]
-            }
+    const el = document.getElementById('calendar');
+
+    calendar = new FullCalendar.Calendar(el, {
+        initialView:     'timeGridWeek',
+        headerToolbar:   false,          // we render our own toolbar
+        expandRows:      true,           // slots expand to fill height — height set via fitCalHeight()
+        slotMinTime:     '06:00:00',
+        slotMaxTime:     '23:00:00',
+        firstDay:        1,              // Monday
+        nowIndicator:    true,
+        allDaySlot:      false,          // due events are timed; no allday strip needed
+        editable:        true,           // drag + resize on scheduled events
+        droppable:       true,           // accept external drags from sidebar
+        eventMinHeight:  18,
+
+        eventTimeFormat: {
+            hour:           'numeric',
+            minute:         '2-digit',
+            omitZeroMinute: true,
+            meridiem:       'short'
         },
-        month: {
-            dayNames: ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'],
-            startDayOfWeek: 1,
-            narrowWeekend: true
-        },
-        template: {
-            time(event) {
-                const { title } = event;
-                return `<div class="calendar-event-title">${title}</div>`;
-            },
-            popupSave() {
-              return 'Ajouter';
-            }
-        },
-        calendars: [
-            {
-                id: 'pro',
-                name: 'Pool Pro',
-                backgroundColor: '#28a745',
-                borderColor: '#1e7e34',
-            },
-            {
-                id: 'perso',
-                name: 'Pool Perso',
-                backgroundColor: '#ffc107',
-                borderColor: '#e0a800',
-            }
-        ]
+
+        // Custom event content: description text + priority bar
+        eventContent: renderEventContent,
+
+        // Callbacks
+        eventClick:   (info) => showEventModal(info.event),
+        eventDrop:    handleEventDrop,
+        eventResize:  handleEventResize,
+        eventReceive: handleEventReceive,
+        dateClick:    handleDateClick,
+
+        datesSet: () => updateCalendarTitle(),
     });
 
+    calendar.render();
+    setupExternalDrag();
+
+    // Set explicit pixel height after flex layout settles, and on every resize
+    requestAnimationFrame(fitCalHeight);
+    window.addEventListener('resize', fitCalHeight);
+    new ResizeObserver(fitCalHeight).observe(el);
+}
+
+function fitCalHeight() {
+    if (!calendar) return;
+    const col   = document.querySelector('.calendar-column');
+    const calEl = document.getElementById('calendar');
+    const h     = col ? col.clientHeight : 0;
+    const msg   = `fitCalHeight: col=${h} calEl=${calEl?.clientHeight} win=${window.innerWidth}x${window.innerHeight} mobile=${window.innerWidth <= 768}`;
+    console.log('[cal-debug]', msg);
+    fetch('/api/debug', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ msg }) }).catch(() => {});
+
+    if (window.innerWidth <= 768) {
+        calendar.setOption('height', 'auto');
+        return;
+    }
+    if (h > 0) calendar.setOption('height', h);
+}
+
+// ── External drag: sidebar task cards → calendar ──────────────────────────────
+function setupExternalDrag() {
+    const container = document.getElementById('unplanned-tasks');
+    if (!container || typeof FullCalendar?.Draggable === 'undefined') return;
+
+    new FullCalendar.Draggable(container, {
+        itemSelector: '.task-card',
+        eventData(cardEl) {
+            const task = JSON.parse(cardEl.dataset.taskData || '{}');
+            const mins = parseEstTime(task.sched_duration) || 30;
+            return {
+                id:              task.uuid,
+                title:           task.description || '',
+                duration:        { hours: Math.floor(mins / 60), minutes: mins % 60 },
+                backgroundColor: '#4a90e2',
+                borderColor:     '#357abd',
+                textColor:       '#fff',
+                extendedProps:   { raw: task },
+            };
+        }
+    });
+}
+
+// ── Click empty slot → create new task ───────────────────────────────────────
+function handleDateClick(info) {
+    if (!taskEditor) return;
+
+    // Format clicked date as local YYYY-MM-DDTHH:MM for the datetime-local input
+    const d   = info.date;
+    const pad = (n) => String(n).padStart(2, '0');
+    const localDT = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+
+    taskEditor.show(null);   // open as new task (clears form)
+
+    // Set scheduled field after show() renders the form
+    requestAnimationFrame(() => {
+        const modal = document.getElementById('unified-task-editor');
+        const schedField = modal?.querySelector('#task-editor-scheduled');
+        if (schedField) schedField.value = localDT;
+    });
+}
+
+// ── Event content renderer ────────────────────────────────────────────────────
+function renderEventContent(arg) {
+    const task = arg.event.extendedProps?.raw || {};
+    const desc = arg.event.title;
+    const pc   = calPriClass(task.priority);
+    const view = calendar.view.type;
+
+    const wrap = document.createElement('div');
+    wrap.className  = 'fc-ev-wrap';
+    wrap.dataset.desc = desc;
+
+    const body = document.createElement('div');
+    body.className = 'fc-ev-body';
+
+    const title = document.createElement('span');
+    title.className   = 'fc-ev-title';
+    title.textContent = desc;
+    body.appendChild(title);
+
+    // Project: only in day view where there's more room
+    if (task.project && view === 'timeGridDay') {
+        const proj = document.createElement('span');
+        proj.className   = 'fc-ev-project';
+        proj.textContent = task.project;
+        body.appendChild(proj);
+    }
+
+    // Priority dot — leads the text, no horizontal padding
+    if (pc) {
+        const dot = document.createElement('span');
+        dot.className = `fc-pri-dot fc-pri-${pc}`;
+        wrap.insertBefore(dot, body);
+    }
+
+    wrap.appendChild(body);
+    return { domNodes: [wrap] };
+}
+
+// ── Optimistic event drop/resize ──────────────────────────────────────────────
+async function handleEventDrop(info) {
+    const task = info.event.extendedProps?.raw;
+    if (!task?.uuid) return;
+
+    const modData = { scheduled: toLocalISOString(info.event.start) };
+    if (info.event.end) {
+        const mins = Math.round((info.event.end - info.event.start) / 60000);
+        modData.sched_duration = minsToISO(mins);
+    }
+    const result = await modifyTaskInBackend(task.uuid, modData);
+    if (!result.success) {
+        info.revert();
+        showCalNotification('Failed to move task: ' + (result.error || ''), 'error');
+    }
+}
+
+async function handleEventResize(info) {
+    const task = info.event.extendedProps?.raw;
+    if (!task?.uuid) return;
+
+    const mins   = Math.round((info.event.end - info.event.start) / 60000);
+    const result = await modifyTaskInBackend(task.uuid, {
+        scheduled:      toLocalISOString(info.event.start),
+        sched_duration: minsToISO(mins)
+    });
+    if (!result.success) {
+        info.revert();
+        showCalNotification('Failed to resize: ' + (result.error || ''), 'error');
+    }
+}
+
+// External drag received from sidebar
+async function handleEventReceive(info) {
+    const task = info.event.extendedProps?.raw;
+    if (!task?.uuid) { info.event.remove(); return; }
+
+    const result = await modifyTaskInBackend(task.uuid, {
+        scheduled: toLocalISOString(info.event.start)
+    });
+    if (!result.success) {
+        info.event.remove();
+        showCalNotification('Failed to schedule task: ' + (result.error || ''), 'error');
+        return;
+    }
+    loadTasks();  // reload sidebar + calendar
+}
+
+function minsToISO(mins) {
+    const h = Math.floor(mins / 60), m = mins % 60;
+    if (h > 0 && m > 0) return `PT${h}H${m}M`;
+    if (h > 0)           return `PT${h}H`;
+    return `PT${m}M`;
+}
+
+// ── Navigation ────────────────────────────────────────────────────────────────
+function setupEventListeners() {
+    document.getElementById('prev-btn').addEventListener('click',  () => { calendar.prev();  updateCalendarTitle(); });
+    document.getElementById('next-btn').addEventListener('click',  () => { calendar.next();  updateCalendarTitle(); });
+    document.getElementById('today-btn').addEventListener('click', () => { calendar.today(); updateCalendarTitle(); });
+
+    document.querySelectorAll('.view-btn[data-view]').forEach(btn =>
+        btn.addEventListener('click', (e) => changeView(e.currentTarget.dataset.view))
+    );
+}
+
+function changeView(view) {
+    const fcViews = { week: 'timeGridWeek', day: 'timeGridDay', month: 'dayGridMonth' };
+    if (fcViews[view]) calendar.changeView(fcViews[view]);
+    document.getElementById('calendar').dataset.view = view;
+    document.querySelectorAll('.view-btn[data-view]').forEach(btn =>
+        btn.classList.toggle('active', btn.dataset.view === view)
+    );
     updateCalendarTitle();
 }
 
-/**
- * Configuration des écouteurs d'événements 
- */
-function setupEventListeners() {
-    // Navigation du calendrier
-    const prevBtn = document.getElementById('prev-btn');
-    const nextBtn = document.getElementById('next-btn');
+function updateCalendarTitle() {
+    const titleEl = document.getElementById('calendar-title');
+    if (titleEl) titleEl.textContent = calendar.view.title;
+
     const todayBtn = document.getElementById('today-btn');
-    
-    console.log('Boutons de navigation:', { prevBtn, nextBtn, todayBtn });
-    
-    prevBtn.addEventListener('click', () => {
-        console.log('Bouton précédent cliqué');
-        try {
-            calendar.prev();
-            console.log('Navigation précédente effectuée');
-            updateCalendarTitle();
-        } catch (error) {
-            console.error('Erreur lors de la navigation précédente:', error);
-        }
-    });
-
-    nextBtn.addEventListener('click', () => {
-        console.log('Bouton suivant cliqué');
-        try {
-            calendar.next();
-            console.log('Navigation suivante effectuée');
-            updateCalendarTitle();
-        } catch (error) {
-            console.error('Erreur lors de la navigation suivante:', error);
-        }
-    });
-
     if (todayBtn) {
-        todayBtn.addEventListener('click', () => {
-            console.log('Bouton aujourd\'hui cliqué');
-            try {
-                calendar.today();
-                console.log('Retour à aujourd\'hui effectué');
-                updateCalendarTitle();
-            } catch (error) {
-                console.error('Erreur lors du retour à aujourd\'hui:', error);
-            }
-        });
-    }
-
-    // Changement de vue
-    document.querySelectorAll('.view-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            const view = e.target.dataset.view;
-            changeView(view);
-        });
-    });
-
-    // Actualiser
-    document.getElementById('refresh-btn').addEventListener('click', () => {
-        loadTasks();
-    });
-
-    // Filtres
-    document.getElementById('filter-pool').addEventListener('change', (e) => {
-        currentFilter.pool = e.target.value;
-        filterAndDisplayTasks();
-    });
-
-    document.getElementById('sort-tasks').addEventListener('change', (e) => {
-        currentFilter.sort = e.target.value;
-        filterAndDisplayTasks();
-    });
-
-    // Evenements liées à tui-calendar
-    calendar.on('selectDateTime', handleSelectDateTimeEvent);
-
-    calendar.on('beforeCreateEvent', handleBeforeCreateEvent);
-
-    calendar.on('beforeUpdateEvent', handleBeforeUpdateEvent);
-
-    // Écouter la suppression
-    calendar.on('beforeDeleteEvent', handleBeforeDeleteEvent);
-
-}
-
-function handleSelectDateTimeEvent(eventInfo) {
-    // If a task is selected, adjust the end date based on task duration
-    if (selectedTaskData) {
-        // Parse the task duration
-        const duration = parseEstTime(selectedTaskData.estTime);
-        
-        if (duration) {
-            // Calculate new end date based on task duration
-            const newEndDate = new Date(eventInfo.start.getTime() + duration * 60000);
-            
-             // Update the form fields in the popup
-            setTimeout(() => {
-                // Find the input fields by class and name attribute
-                const endInput = document.querySelector('input.toastui-calendar-content[name="end"]');
-                const titleInput = document.querySelector('input.toastui-calendar-content[name="title"]');
-                
-                if (endInput) {
-                    // Format the new end date as 'YYYY-MM-DD HH:MM'
-                    const formattedEndDate = formatDateTimeForInput(newEndDate);
-                    endInput.value = formattedEndDate;
-                } else {
-                    console.warn('End date input field not found');
-                }
-                
-                if (titleInput) {
-                    titleInput.value = selectedTaskData.description;
-                } else {
-                    console.warn('Title input field not found');
-                }
-            }, 100);   
-
-            // Store the modified event data for use in beforeCreateEvent
-            tempEventData = {
-                id: selectedTaskData.uuid,
-                start: eventInfo.start,
-                end: newEndDate,
-                title: selectedTaskData.description,
-                isAllday: eventInfo.isAllday
-            };
-        }
+        const now = new Date();
+        todayBtn.classList.toggle('active',
+            calendar.view.currentStart <= now && now < calendar.view.currentEnd);
     }
 }
 
-/**
- * Fonction pour gérer l'événement beforeCreateEvent 
- */
-async function handleBeforeCreateEvent(eventObj) {
-    let newEvent;
-    // Use the temporarily stored event data if available
-    if (tempEventData) {
-        // Create the event with our modified data
-        newEvent = {
-            ...tempEventData,
-            calendarId: eventObj.calendarId || 'scheduled'
-        };
-        tempEventData = null;// Clear the temporary data
-    } else {
-        // Default behavior if no temp data
-        newEvent = {
-            ...eventObj,
-            id: 'toast_' + String(Date.now()),
-            calendarId: eventObj.calendarId || 'scheduled'
-        };
-    }
-    
-    // Handle toast-prefixed events (new tasks)
-    if (newEvent.id && newEvent.id.startsWith('toast_')) {
-        // Create new task via API
-        const newTaskData = {
-            description: newEvent.title,
-            scheduled: newEvent.start ? (newEvent.start instanceof Date ? DateFromISOtoTW(newEvent.start.toISOString()) : DateFromISOtoTW(newEvent.start)) : null,
-            estTime: calculateDurationFromEvent(newEvent)
-        };
-
-        const result = await addTaskToBackend(newTaskData);
-        if (result.success && result.task && result.task.uuid) {
-            // Update the event with the real UUID
-            newEvent.id = result.task.uuid;
-        } else {
-            console.error('Failed to create task to backend:', result.error || 'Unknown error');
-            // Show error to user
-            showError('Failed to create task to backend: ' + (result.error || 'Unknown error'));
-        }
-    }
-    // Sync to backend if this is a TaskWarrior task (not a toast_ prefixed ID)
-    else if (newEvent.id && !newEvent.id.startsWith('toast_')) {
-        // Prepare task data in the format expected by the backend
-        const modifiedTaskData = {
-            description: newEvent.title,
-            scheduled: newEvent.start ? DateFromISOtoTW(newEvent.start.toISOString()) : null
-        };
-
-        const result = await modifyTaskInBackend(newEvent.id, modifiedTaskData);
-        if (!result.success) {
-            console.error('Failed to sync task to backend:', result.error);
-        }
-    }
-
-    calendar.createEvents([newEvent]);
-    console.log('Event created :', newEvent);
-
-    // NOUVEAU CODE : Suppression de la taskCard et réinitialisation
-    if (selectedTaskCard && selectedTaskData) {
-        // Supprimer la taskCard du DOM
-        selectedTaskCard.remove();
-
-        // Réinitialiser les variables
-        selectedTaskCard = null;
-        selectedTaskData = null;
-        tempEventData = null;
-
-        // Mettre à jour le compteur de tâches
-        updateTaskCount();
-    }
-}
-
-/**
- * Fonction pour gérer l'événement beforeUpdateEvent
- */
-async function handleBeforeUpdateEvent({ event, changes }) {
-    // Only handle TaskWarrior tasks (not toast_ prefixed IDs)
-    if (event.id && !event.id.startsWith('toast_')) {
-        // Prepare task data in the format expected by the backend
-        const modifiedTaskData = {
-            description: changes.title || event.title,
-            scheduled: null
-        };
-
-        // Handle scheduled date using the new helper function
-        console.log("Processing date changes - changes.start:", changes.start);
-        console.log("Processing date changes - event.start:", event.start);
-        
-        // Extract dates using the helper function
-        const extractedStartDate = extractDateFromToastChange(changes.start);
-        const extractedEndDate = extractDateFromToastChange(changes.end);
-        
-        // Use extracted start date or fall back to event start date
-        const finalStartDate = extractedStartDate || extractDateFromToastChange(event.start);
-        const finalEndDate = extractedEndDate || extractDateFromToastChange(event.end);
-        
-        console.log("Extracted start date:", finalStartDate);
-        console.log("Extracted end date:", finalEndDate);
-        
-        // Set scheduled date if we have a valid start date
-        if (finalStartDate) {
-            modifiedTaskData.scheduled = DateFromISOtoTW(finalStartDate.toISOString());
-            console.log("Final scheduled date for backend:", modifiedTaskData.scheduled);
-        } else {
-            console.warn("No valid start date found - scheduled will remain null");
-        }
-        
-        // Add duration if we have valid dates
-        if (finalStartDate && finalEndDate) {
-            const duration = calculateDurationFromEvent({
-                start: finalStartDate,
-                end: finalEndDate
-            });
-            modifiedTaskData.estTime = duration;
-            console.log("Calculated duration:", duration);
-        } else if (finalStartDate) {
-            // If we have a start date but no end date, use default duration
-            modifiedTaskData.estTime = 'PT30M';
-            console.log("Using default duration PT30M (no end date available)");
-        }
-
-        try {
-            console.log("Status : modifiedTaskData : ", modifiedTaskData);
-            const result = await modifyTaskInBackend(event.id, modifiedTaskData);
-            if (!result.success) {
-                console.error('Failed to sync task update to backend:', result.error);
-                showError('Failed to update task: ' + (result.error || 'Unknown error'));
-                return false; // Prevent the update if backend sync fails
-            }
-            console.log('Task updated successfully:', event.id);
-        } catch (error) {
-            console.error('Error updating task:', error);
-            showError('Error updating task: ' + error.message);
-            return false;
-        }
-    }
-
-    // Allow the update to proceed
-    calendar.updateEvent(event.id, event.calendarId, changes);
-    return true;
-
-}
-
-/**
- * Fonction pour gérer l'événement beforeDeleteEvent
- * Supprime la date planifiée d'une tâche au lieu de la supprimer complètement
- */
-async function handleBeforeDeleteEvent(event) {
-    // Only handle TaskWarrior tasks (not toast_ prefixed IDs)
-    if (event.id && !event.id.startsWith('toast_')) {
-        console.log('Handling delete event for task:', event.id);
-        
-        try {
-            // Prepare task data to remove the scheduled date
-            // Setting scheduled to null or empty string will unschedule the task
-            const modifiedTaskData = {
-                scheduled: null  // This removes the scheduled date from the task
-            };
-
-            console.log('Attempting to unschedule task by removing scheduled date:', modifiedTaskData);
-            
-            // Call the backend to modify the task (remove scheduled date)
-            const result = await modifyTaskInBackend(event.id, modifiedTaskData);
-            
-            if (result.success) {
-                console.log('Task unscheduled successfully:', event.id);
-                showSuccess('Task has been unscheduled and moved back to the unplanned tasks list.');
-                
-                // Remove from calendar frontend
-                calendar.deleteEvent(event.id, event.calendarId);
-                
-                // Refresh the unplanned tasks list to show the newly unscheduled task
-                loadTasks();
-                
-                return true;
-            } else {
-                console.error('Failed to unschedule task:', result.error);
-                showError('Failed to unschedule task: ' + (result.error || 'Unknown error'));
-                return false; // Prevent deletion if backend sync fails
-            }
-        } catch (error) {
-            console.error('Error unscheduling task:', error);
-            showError('Error unscheduling task: ' + error.message);
-            return false;
-        }
-    } else {
-        // For toast_ prefixed events (new events not yet saved), just delete from calendar
-        console.log('Deleting temporary event (toast_ prefixed):', event.id);
-        calendar.deleteEvent(event.id, event.calendarId);
-        return true;
-    }
-}
-
-/**
- * Chargement des tâches depuis l'API 
- */
+// ── Data loading ──────────────────────────────────────────────────────────────
 function loadTasks() {
-    console.log('Chargement des tâches...');
-    // Charger les tâches non planifiées
-    fetch('/api/tasks')
-        .then(response => response.json())
-        .then(data => {
-            console.log('Tâches non planifiées reçues:', data);
-            if (data.success) {
-                // Réinitialiser allTasks avant d'ajouter les nouvelles tâches
-                allTasks = [];
-                const initialTasks = data.tasks || [];
-                unplannedTasks = initialTasks.filter(task => !task.scheduled);
-                console.log(`${unplannedTasks.length} tâches non planifiées trouvées`);
-                filterAndDisplayTasks();
+    const myId        = ++_loadId;   // mark this wave; older in-flight calls become stale
+    const params      = window.twNav ? window.twNav.stateToParams() : 'status=pending';
+    const navState    = window.twNav ? window.twNav.getState() : {};
+    const statusParam = 'status=' + encodeURIComponent((navState.statuses || ['pending']).join(','));
 
-                // Charger les tâches planifiées
-                console.log('Chargement des tâches planifiées...');
-                return fetch('/api/tasks/planned');
-            } else {
-                throw new Error(data.error || 'Erreur lors du chargement des tâches');
-            }
+    function _fetch(attempt) {
+        Promise.all([
+            fetch('/api/tasks?'         + params      ).then(r => r.json()),
+            fetch('/api/tasks/planned?' + statusParam ).then(r => r.json()),
+            fetch('/api/tasks/due?'     + statusParam ).then(r => r.json()),
+        ])
+        .then(([data, plannedData, dueData]) => {
+            if (myId !== _loadId) return;   // superseded by a newer loadTasks() call
+            if (!data.success) throw new Error(data.error || 'Failed to load tasks');
+
+            const allFetched   = data.tasks || [];
+            const plannedTasks = plannedData.success ? (plannedData.data || []) : [];
+            dueTasks           = dueData.success      ? (dueData.data  || []) : [];
+
+            unplannedTasks = allFetched.filter(t => !t.scheduled);
+            allTasks       = [...unplannedTasks, ...plannedTasks];
+
+            applyFiltersAndDisplay();
+            processTasksForCalendar(plannedTasks);
         })
-        .then(response => response.json())
-        .then(data => {
-            console.log('Tâches planifiées reçues:', data);
-            if (data.success) {
-                const plannedTasks = data.data || [];
-                console.log(`${plannedTasks.length} tâches planifiées trouvées`);
-                
-                // Afficher les détails des tâches planifiées pour le débogage
-                plannedTasks.forEach((task, index) => {
-                    console.log(`Tâche planifiée ${index + 1}:`, {
-                        description: task.description,
-                        scheduled: task.scheduled,
-                        due: task.due,
-                        estTime: task.estTime,
-                        pool: task.pool
-                    });
-                });
-                
-                // Mettre à jour allTasks avec les tâches non planifiées et planifiées
-                allTasks = [...unplannedTasks, ...plannedTasks];
-                console.log(`Total des tâches chargées: ${allTasks.length} (${unplannedTasks.length} non planifiées, ${plannedTasks.length} planifiées)`);
-                processTasksForCalendar();
+        .catch(err => {
+            if (myId !== _loadId) return;   // stale — a newer call is handling things
+            // Retry up to 2× on transient WebKit body-read errors (SW race, stream drop)
+            if (attempt < 2 && /object|network|fetch/i.test(err.message || '')) {
+                const delay = attempt === 0 ? 1200 : 2500;
+                setTimeout(() => { if (myId === _loadId) _fetch(attempt + 1); }, delay);
             } else {
-                console.error('Erreur lors du chargement des tâches planifiées:', data.error);
+                showCalNotification('Failed to load tasks: ' + err.message, 'error');
             }
-        })
-        .catch(error => {
-            console.error('Erreur lors du chargement des tâches:', error);
-            showError('Erreur lors du chargement des tâches: ' + error.message);
         });
+    }
+
+    _fetch(0);
 }
 
-/**
- * Traitement des tâches pour le calendrier 
- */
-function processTasksForCalendar() {
-    // Séparer les tâches planifiées et non planifiées
-    const scheduledTasks = [];
-    unplannedTasks = [];
+function processTasksForCalendar(scheduledTasks) {
+    // Remove the previous event source cleanly (removeAllEvents() leaves stale
+    // sources that FC may re-evaluate; tracking one source avoids this).
+    if (_calEventSource) {
+        try { _calEventSource.remove(); } catch (_) {}
+        _calEventSource = null;
+    }
 
-    allTasks.forEach(task => {
-        if (task.scheduled) {
-            scheduledTasks.push(task);
-        } else {
-            unplannedTasks.push(task);
-        }
-    });
-
-    // Créer les événements pour les tâches planifiées
     const events = [];
-    scheduledTasks.forEach(task => {
-        try {
-            const event = createCalendarEvent(task, task.scheduled);
-            if (event) {
-                events.push(event);
-            }
-        } catch (e) {
-            console.error('Erreur lors de la création de l\'événement pour la tâche:', task, e);
-        }
+    scheduledTasks.filter(matchesNavFilter).forEach(task => {
+        try { const e = createCalendarEvent(task); if (e) events.push(e); } catch (_) {}
     });
-    
-    // Effacer les événements existants et ajouter les nouveaux
-    calendar.clear();
-    if (events.length > 0) {
-        calendar.createEvents(events);
-    }
-    
-    // Mettre à jour l'affichage
-    calendar.render();
+    dueTasks.filter(matchesNavFilter).forEach(task => {
+        try { const e = createDueEvent(task); if (e) events.push(e); } catch (_) {}
+    });
+
+    _calEventSource = calendar.addEventSource(events);
+
+    // diagnostics — remove once calendar is confirmed working
+    const fcEvents = calendar.getEvents();
+    const view     = calendar.view;
+    const evDates  = events.slice(0, 5).map(e => e.start instanceof Date
+        ? e.start.toISOString() : String(e.start));
+    const _evMsg   = `cal: addEventSource(${events.length}) → getEvents()=${fcEvents.length} | view=${view?.type} start=${view?.currentStart?.toISOString?.()} | evDates=${JSON.stringify(evDates)}`;
+    console.log('[cal-debug]', _evMsg);
+    fetch('/api/debug', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ msg: _evMsg }) }).catch(() => {});
+
+    // Check DOM after FC renders (~400ms)
+    setTimeout(() => {
+        const fcWrap  = document.querySelector('.fc');
+        const fcViewH = document.querySelector('.fc-view-harness');
+        const evEls   = document.querySelectorAll('.fc-timegrid-event, .fc-daygrid-event');
+        const msg2    = `fcDOM: wrap=${fcWrap?.clientHeight} viewH=${fcViewH?.clientHeight} eventEls=${evEls.length} fcH=${document.getElementById('calendar')?.clientHeight}`;
+        console.log('[cal-debug]', msg2);
+        fetch('/api/debug', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ msg: msg2 }) }).catch(() => {});
+    }, 400);
 }
 
-/**
- * Créer un événement calendrier depuis une tâche 
- */
-function createCalendarEvent(task, scheduledDate) {
-    // Vérifier et formater la date de planification au format ISO 8601 (20251220T120000Z)
-    let start;
-    try {
-        // Convertir le format 20251220T120000Z en 2025-12-20T12:00:00Z pour une meilleure compatibilité
-        const isoDate = scheduledDate.replace(
-            /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/,
-            '$1-$2-$3T$4:$5:$6Z'
-        );
-        start = new Date(isoDate);
-        
-        if (isNaN(start.getTime())) {
-            console.error('Date de planification invalide:', scheduledDate, 'formaté en:', isoDate, 'pour la tâche:', task);
-            return null;
-        } else {
-            console.log('Date convertie avec succès:', scheduledDate, '->', start);
-        }
-    } catch (e) {
-        console.error('Erreur lors de la création de la date:', e, 'pour la tâche:', task);
-        return null;
-    }
-    
-    // Définir une durée par défaut si nécessaire
-    let duration;
-    if (task.estTime && task.estTime.startsWith('PT')) {
-        // Format ISO 8601 pour la durée (ex: PT1H pour 1 heure, PT30M pour 30 minutes)
-        const durationMatch = task.estTime.match(/PT(\d+H)?(\d+M)?/);
-        let hours = 0, minutes = 0;
-        if (durationMatch) {
-            if (durationMatch[1]) hours = parseInt(durationMatch[1]);
-            if (durationMatch[2]) minutes = parseInt(durationMatch[2]);
-        }
-        duration = hours * 60 + minutes;
-    }
-    
-    // Durée par défaut de 60 minutes si non spécifiée ou invalide
-    duration = duration || 60;
-    const end = new Date(start.getTime() + duration * 60000);
+// ── Event object factories ─────────────────────────────────────────────────────
+function createCalendarEvent(task) {
+    if (!task.scheduled) return null;
+    // Keep Z — TW exports UTC; let JS parse as UTC so FullCalendar displays in local time
+    const isoDate = task.scheduled.replace(
+        /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/, '$1-$2-$3T$4:$5:$6Z'
+    );
+    const start = new Date(isoDate);
+    if (isNaN(start.getTime())) return null;
 
-    // Déterminer le pool et l'ID du calendrier
-    const pool = (task.pool || 'scheduled').toLowerCase();
-    const calendarId = ['pro', 'perso'].includes(pool) ? pool : 'scheduled';
+    let mins = 60;
+    if (task.sched_duration?.startsWith('PT')) {
+        const m = task.sched_duration.match(/PT(?:(\d+)H)?(?:(\d+)M)?/);
+        if (m) mins = (parseInt(m[1] || 0) * 60 + parseInt(m[2] || 0)) || 60;
+    }
 
-    return {
-        id: task.uuid,
-        calendarId: calendarId,
-        title: task.description,
-        start: start,
-        end: end,
-        isReadOnly: false,
-        raw: task
+    const ev = {
+        id:              task.uuid,
+        title:           task.description,
+        start,
+        end:             new Date(start.getTime() + mins * 60000),
+        backgroundColor: '#4a90e2',
+        borderColor:     '#357abd',
+        textColor:       '#fff',
+        editable:        true,
+        extendedProps:   { raw: task },
+    };
+    if (task.status === 'completed') { ev.backgroundColor = '#78909c'; ev.borderColor = '#546e7a'; ev.editable = false; }
+    if (task.status === 'deleted')   { ev.backgroundColor = '#ab47bc'; ev.borderColor = '#8e24aa'; ev.editable = false; }
+    return ev;
+}
+
+function createDueEvent(task) {
+    if (!task.due) return null;
+    const isoDate = task.due.replace(
+        /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/, '$1-$2-$3T$4:$5:$6Z'
+    );
+    const start = new Date(isoDate);
+    if (isNaN(start.getTime())) return null;
+
+    let mins = 30;
+    if (task.due_duration?.startsWith('PT')) {
+        const m = task.due_duration.match(/PT(?:(\d+)H)?(?:(\d+)M)?/);
+        if (m) mins = (parseInt(m[1] || 0) * 60 + parseInt(m[2] || 0)) || 30;
+    }
+
+    const ev = {
+        id:              task.uuid + '_due',
+        title:           '⚑ ' + task.description,
+        start,
+        end:             new Date(start.getTime() + mins * 60000),
+        backgroundColor: '#e74c3c',
+        borderColor:     '#c0392b',
+        textColor:       '#fff',
+        editable:        false,   // due date events are read-only on the calendar
+        extendedProps:   { raw: task },
+    };
+    if (task.status === 'completed') { ev.backgroundColor = '#78909c'; ev.borderColor = '#546e7a'; }
+    if (task.status === 'deleted')   { ev.backgroundColor = '#ab47bc'; ev.borderColor = '#8e24aa'; }
+    return ev;
+}
+
+// ── Task detail modal ─────────────────────────────────────────────────────────
+function showEventModal(fcEvent) {
+    const task  = fcEvent.extendedProps?.raw || {};
+    const modal = document.getElementById('task-detail-modal');
+    if (!modal) return;
+
+    document.getElementById('modal-task-title').textContent =
+        task.description || fcEvent.title || 'Task';
+
+    const fmt = (twDate) => {
+        const m = (twDate || '').match(/^(\d{4})(\d{2})(\d{2})T?(\d{2})?(\d{2})?/);
+        if (!m) return twDate;
+        return m[4] ? `${m[3]}/${m[2]}/${m[1]} ${m[4]}:${m[5]}` : `${m[3]}/${m[2]}/${m[1]}`;
+    };
+
+    const rows = [];
+    if (task.status && task.status !== 'pending')
+        rows.push(`<tr><th>Status</th><td><em>${task.status}</em></td></tr>`);
+    if (task.project)  rows.push(`<tr><th>Project</th><td>${task.project}</td></tr>`);
+    if (task.priority) {
+        const label = { H: 'High', M: 'Medium', L: 'Low' }[task.priority] || task.priority;
+        rows.push(`<tr><th>Priority</th><td>${label}</td></tr>`);
+    }
+    if (task.due)            rows.push(`<tr><th>Due</th><td>${fmt(task.due)}</td></tr>`);
+    if (task.scheduled)      rows.push(`<tr><th>Scheduled</th><td>${fmt(task.scheduled)}</td></tr>`);
+    if (task.sched_duration) rows.push(`<tr><th>Duration</th><td>${task.sched_duration}</td></tr>`);
+    if (task.tags?.length)
+        rows.push(`<tr><th>Tags</th><td>${task.tags.map(t => `<span class="card-tag">${t}</span>`).join(' ')}</td></tr>`);
+    if (task.urgency != null)
+        rows.push(`<tr><th>Urgency</th><td>${Number(task.urgency).toFixed(1)}</td></tr>`);
+
+    document.getElementById('modal-task-body').innerHTML = rows.length
+        ? `<table class="task-detail-table">${rows.join('')}</table>`
+        : '<em>No details available.</em>';
+
+    const close = () => modal.classList.remove('show');
+    const isActive    = !!task.start;
+    const isEditable  = fcEvent.editable !== false;
+
+    // Start / Stop
+    const startBtn = document.getElementById('modal-start-btn');
+    const stopBtn  = document.getElementById('modal-stop-btn');
+    startBtn.style.display = (isActive || !isEditable) ? 'none' : '';
+    stopBtn.style.display  = (!isActive || !isEditable) ? 'none' : '';
+    startBtn.onclick = async () => {
+        await taskCardManager.actionHandler.performTaskAction(task.uuid, 'start');
+        close(); loadTasks();
+    };
+    stopBtn.onclick = async () => {
+        await taskCardManager.actionHandler.performTaskAction(task.uuid, 'stop');
+        close(); loadTasks();
+    };
+
+    // Edit
+    document.getElementById('modal-edit-btn').onclick = () => {
+        close();
+        if (taskEditor) taskEditor.showForTask(task);
+    };
+
+    // Unschedule (calendar-specific — hide for non-editable/due events)
+    const unschedBtn = document.getElementById('modal-unschedule-btn');
+    unschedBtn.style.display = isEditable ? '' : 'none';
+    unschedBtn.onclick = async () => {
+        const r = await modifyTaskInBackend(task.uuid, { scheduled: null });
+        if (r.success) { close(); loadTasks(); }
+    };
+
+    // Done
+    document.getElementById('modal-done-btn').onclick = async () => {
+        await taskCardManager.actionHandler.performTaskAction(task.uuid, 'done');
+        close(); loadTasks();
+    };
+
+    // Delete
+    document.getElementById('modal-delete-btn').onclick = () => {
+        close();
+        taskCardManager.actionHandler.confirmDelete(task.uuid);
+    };
+
+    document.getElementById('modal-close-btn').onclick = close;
+    modal.onclick = (e) => { if (e.target === modal) close(); };
+    modal.classList.add('show');
+}
+
+// ── Action handler ────────────────────────────────────────────────────────────
+class CalendarTaskActionHandler extends TaskActionHandler {
+    constructor() {
+        super({
+            onTaskUpdate: () => loadTasks(),
+            onTaskDelete: () => loadTasks(),
+            showNotification: (msg, type) =>
+                document.dispatchEvent(new CustomEvent('tw-show-notification', { detail: { message: msg, type } }))
+        });
+    }
+}
+
+// ── Sidebar: filter + display ─────────────────────────────────────────────────
+// Shared client-side filter predicate — used by both sidebar and calendar
+function matchesNavFilter(task) {
+    const state    = window.twNav ? window.twNav.getState() : {};
+    const filter   = (state.filter   || '').trim().toLowerCase();
+    const priority = (state.priority || '').trim().toLowerCase();
+    const project  = (state.project  || '').trim().toLowerCase();
+    const tags     = (state.tags     || '').split(',').map(t => t.trim()).filter(Boolean);
+    if (filter   && !(task.description || '').toLowerCase().includes(filter))       return false;
+    if (priority && !String(task.priority || '').toLowerCase().includes(priority))  return false;
+    if (project  && !(task.project      || '').toLowerCase().includes(project))     return false;
+    if (tags.length && !tags.every(t => (task.tags || []).includes(t)))             return false;
+    return true;
+}
+
+function applyFiltersAndDisplay() {
+    const filtered = unplannedTasks.filter(matchesNavFilter);
+    window.twNav?.setCount(filtered.length, unplannedTasks.length);
+    displayUnplannedTasks(sortUnplanned(filtered));
+}
+
+function displayUnplannedTasks(tasks) {
+    const container = document.getElementById('unplanned-tasks');
+    if (tasks.length === 0) {
+        container.innerHTML = unplannedTasks.length === 0
+            ? `<div class="empty-message"><span class="icon">✅</span><p>No tasks to schedule</p></div>`
+            : `<div class="empty-message"><p>No tasks match the current filter</p></div>`;
+        return;
+    }
+    container.innerHTML = '';
+    tasks.forEach(task => {
+        const card = taskCardManager.createTaskCard(task);
+        card.dataset.taskData = JSON.stringify(task);  // required by FullCalendar.Draggable
+        container.appendChild(card);
+    });
+}
+
+// ── Sidebar sort ──────────────────────────────────────────────────────────────
+const SIDEBAR_SORT_FIELDS = [
+    { value: 'urgency',     label: 'Urgency (default)' },
+    { value: 'priority',    label: 'Priority' },
+    { value: 'due',         label: 'Due date' },
+    { value: 'description', label: 'Description' },
+    { value: 'project',     label: 'Project' },
+    { value: 'entry',       label: 'Created' },
+    { value: 'modified',    label: 'Modified' },
+    { value: 'start',       label: 'Started' },
+    { value: 'scheduled',   label: 'Scheduled' },
+    { value: 'wait',        label: 'Wait date' },
+    { value: 'id',          label: 'ID' },
+    { value: 'tags',        label: 'Tags' },
+];
+
+function sortUnplanned(tasks) {
+    const field = localStorage.getItem('tw-sort-field') || 'urgency';
+    const rev   = localStorage.getItem('tw-sort-reverse') === 'true' ? -1 : 1;
+    if (field === 'urgency') return rev === 1 ? tasks : [...tasks].reverse();
+    const PRI = { H: 3, M: 2, L: 1 };
+    return [...tasks].sort((a, b) => {
+        let av = a[field], bv = b[field];
+        if (field === 'priority') { av = PRI[av] || 0; bv = PRI[bv] || 0; }
+        else if (field === 'tags') { av = (av || []).join(','); bv = (bv || []).join(','); }
+        av = av ?? ''; bv = bv ?? '';
+        if (av < bv) return -1 * rev;
+        if (av > bv) return  1 * rev;
+        return 0;
+    });
+}
+
+function initSidebarControls() {
+    const cardBtn   = document.getElementById('cal-view-card');
+    const listBtn   = document.getElementById('cal-view-list');
+    const container = document.getElementById('unplanned-tasks');
+
+    const setView = (mode) => {
+        localStorage.setItem('tw-view-mode', mode);
+        cardBtn.classList.toggle('active', mode === 'card');
+        listBtn.classList.toggle('active', mode === 'list');
+        if (container) container.classList.toggle('list-view', mode === 'list');
+    };
+    setView(localStorage.getItem('tw-view-mode') || 'card');
+    cardBtn?.addEventListener('click', () => setView('card'));
+    listBtn?.addEventListener('click', () => setView('list'));
+
+    if (container) {
+        container.addEventListener('click', (e) => {
+            if (e.target.closest('[data-task-action]')) return;
+            const card = e.target.closest('.task-card');
+            if (!card) return;
+            const mode = localStorage.getItem('tw-view-mode') || 'card';
+            if (mode === 'list') card.classList.toggle('expanded');
+            else card.classList.toggle('collapsed');
+        });
+    }
+
+    const sortBtn    = document.getElementById('cal-sort-btn');
+    const sortPopup  = document.getElementById('cal-sort-popup');
+    const sortFields = document.getElementById('cal-sort-fields');
+    const revBox     = document.getElementById('cal-sort-reverse');
+    if (!sortBtn || !sortPopup || !sortFields || !revBox) return;
+
+    const curField = localStorage.getItem('tw-sort-field') || 'urgency';
+    sortFields.innerHTML = SIDEBAR_SORT_FIELDS.map(f =>
+        `<label><input type="radio" name="cal-sort" value="${f.value}"${f.value === curField ? ' checked' : ''}> ${f.label}</label>`
+    ).join('');
+    revBox.checked = localStorage.getItem('tw-sort-reverse') === 'true';
+
+    const updateSortBtn = () => {
+        const f   = localStorage.getItem('tw-sort-field') || 'urgency';
+        const rev = localStorage.getItem('tw-sort-reverse') === 'true';
+        const def = f === 'urgency' && !rev;
+        sortBtn.classList.toggle('sort-active', !def);
+        sortBtn.title = def ? 'Sort'
+            : `Sort: ${SIDEBAR_SORT_FIELDS.find(x => x.value === f)?.label || f}${rev ? ' ↑' : ' ↓'}`;
+    };
+    updateSortBtn();
+
+    sortBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        sortPopup.style.display = sortPopup.style.display === 'none' ? 'block' : 'none';
+    });
+    sortFields.addEventListener('change', (e) => {
+        if (e.target.name === 'cal-sort') {
+            localStorage.setItem('tw-sort-field', e.target.value);
+            updateSortBtn();
+            applyFiltersAndDisplay();
+        }
+    });
+    revBox.addEventListener('change', () => {
+        localStorage.setItem('tw-sort-reverse', revBox.checked);
+        updateSortBtn();
+        applyFiltersAndDisplay();
+    });
+    document.addEventListener('click', () => { sortPopup.style.display = 'none'; });
+    sortPopup.addEventListener('click', (e) => e.stopPropagation());
+}
+
+// ── Hover tooltip (shows full description when event block is small) ───────────
+function setupCalTooltip() {
+    const tip = document.createElement('div');
+    tip.id = 'cal-tooltip';
+    tip.className = 'cal-tooltip';
+    tip.style.display = 'none';
+    document.body.appendChild(tip);
+
+    const calEl = document.getElementById('calendar');
+    calEl.addEventListener('mouseover', e => {
+        const evBlock = e.target.closest('.fc-timegrid-event, .fc-daygrid-event');
+        if (!evBlock) { tip.style.display = 'none'; return; }
+        const descEl = evBlock.querySelector('[data-desc]');
+        if (!descEl)  { tip.style.display = 'none'; return; }
+        tip.textContent = descEl.dataset.desc;
+        tip.style.display = 'block';
+        tip.style.left = (e.clientX + 14) + 'px';
+        tip.style.top  = (e.clientY + 14) + 'px';
+    });
+    calEl.addEventListener('mousemove', e => {
+        if (tip.style.display !== 'none') {
+            tip.style.left = (e.clientX + 14) + 'px';
+            tip.style.top  = (e.clientY + 14) + 'px';
+        }
+    });
+    calEl.addEventListener('mouseleave', () => { tip.style.display = 'none'; });
+}
+
+// ── Sync dialog ───────────────────────────────────────────────────────────────
+function openSyncDialog() {
+    const dialog   = document.getElementById('sync-dialog');
+    const btn      = document.getElementById('sync-now-btn');
+    const output   = document.getElementById('sync-output');
+    const method   = document.getElementById('sync-method');
+    const closeBtn = document.getElementById('sync-dialog-close');
+    if (!dialog) return;
+
+    output.style.display = 'none';
+    output.textContent   = '';
+    btn.disabled         = false;
+    btn.textContent      = 'Sync Now';
+
+    fetch('/api/sync/info').then(r => r.json())
+        .then(d => { method.textContent = `Method: ${d.method}`; })
+        .catch(() => { method.textContent = ''; });
+
+    dialog.style.display = 'flex';
+    const close = () => { dialog.style.display = 'none'; };
+    closeBtn.onclick = close;
+    dialog.onclick   = (e) => { if (e.target === dialog) close(); };
+
+    btn.onclick = () => {
+        btn.disabled    = true;
+        btn.textContent = 'Syncing…';
+        output.style.display = 'none';
+        fetch('/api/sync', { method: 'POST' })
+            .then(r => r.json())
+            .then(data => {
+                output.textContent   = data.output || (data.success ? 'Sync complete.' : 'Sync failed.');
+                output.style.display = 'block';
+                btn.textContent      = data.success ? 'Sync Now' : 'Retry';
+                btn.disabled         = false;
+                if (data.success) loadTasks();
+            })
+            .catch(err => {
+                output.textContent   = 'Error: ' + err;
+                output.style.display = 'block';
+                btn.textContent      = 'Retry';
+                btn.disabled         = false;
+            });
     };
 }
 
-/**
- * TaskActionHandler pour calendar-planner.js
- */
-class CalendarTaskActionHandler extends TaskActionHandler {
-    performTaskAction(taskUuid, action) {
-        console.log('Action performed:', action, 'on task:', taskUuid);
-    }
-    
-    openEditModal(task) {
-        console.log('Edit modal opened for task:', task);
-    }
-    
-    confirmDelete(taskUuid) {
-        console.log('Delete confirmed for task:', taskUuid);
-    }
+// ── Notifications ─────────────────────────────────────────────────────────────
+function showCalNotification(message, type = 'info') {
+    const el  = document.getElementById('notification');
+    const txt = document.getElementById('notif-text');
+    if (!el) return;
+    if (txt) txt.textContent = message; else el.textContent = message;
+    el.className = `notification ${type} show`;
+    clearTimeout(showCalNotification._t);
+    showCalNotification._t = setTimeout(() => el.classList.remove('show'), 3000);
 }
 
-/**
- * Configuration de la sélection des tâches 
- */
-function handleTaskCardClick(cardElement) {
-    console.log('Evenement declenché !');
-    // Deselect currently selected card if it's different
-    if (selectedTaskCard && selectedTaskCard !== cardElement) {
-        selectedTaskCard.classList.remove('selected');
-    }
-
-    // Toggle selection on clicked card
-    if (selectedTaskCard === cardElement) {
-        // Clicking the same card again - deselect it
-        cardElement.classList.remove('selected');
-        selectedTaskCard = null;
-        selectedTaskData = null;
-        tempEventData = null;
-    } else {
-        // Select the new card
-        cardElement.classList.add('selected');
-        selectedTaskCard = cardElement;
-        selectedTaskData = JSON.parse(cardElement.dataset.taskData);
-        
-        console.log('Task selected:', selectedTaskData.description);
-        console.log('tempEventData updated:', tempEventData);
-    }
-}
-/**
- * Fonction pour obtenir la tâche sélectionnée 
- */
-function getSelectedTask() {
-    return selectedTaskData;
-}
-
-/**
- * Filtrer et afficher les tâches non planifiées 
- */
-function filterAndDisplayTasks() {
-    let filteredTasks = [...unplannedTasks];
-
-    // Filtrer par pool
-    if (currentFilter.pool !== 'all') {
-        filteredTasks = filteredTasks.filter(task => 
-            (task.pool || 'pro') === currentFilter.pool
-        );
-    }
-
-    // Trier
-    filteredTasks.sort((a, b) => {
-        switch (currentFilter.sort) {
-            case 'urgency':
-                return (b.urgency || 0) - (a.urgency || 0);
-            case 'due':
-                if (!a.due && !b.due) return 0;
-                if (!a.due) return 1;
-                if (!b.due) return -1;
-                return new Date(a.due) - new Date(b.due);
-            case 'duration':
-                const durationA = parseEstTime(a.estTime) || 0;
-                const durationB = parseEstTime(b.estTime) || 0;
-                return durationB - durationA;
-            default:
-                return 0;
-        }
-    });
-
-    displayUnplannedTasks(filteredTasks);
-}
-
-/**
- * Afficher les tâches non planifiées 
- */
-function displayUnplannedTasks(tasks) {
-    const container = document.getElementById('unplanned-tasks');
-    const countEl = document.getElementById('task-count');
-
-    countEl.textContent = `${tasks.length} tâche${tasks.length > 1 ? 's' : ''}`;
-
-    if (tasks.length === 0) {
-        container.innerHTML = `
-            <div class="empty-message">
-                <span class="icon">✅</span>
-                <p>Aucune tâche à planifier</p>
-            </div>
-        `;
-        return;
-    }
-
-    // Vide le conteneur
-    container.innerHTML = '';
-
-    // Crée et ajoute chaque carte de tâche
-    tasks.forEach(task => {
-        const taskCard = taskCardManager.createTaskCard(task, 'minimal');
-        container.appendChild(taskCard);
-    });
-}
-
-/**
- * Met à jour le compteur de tâches sans recharger depuis le serveur
- */
-function updateTaskCount() {
-    const container = document.getElementById('unplanned-tasks');
-    const countEl = document.getElementById('task-count');
-
-    // Compter les taskCards restantes
-    const remainingCards = container.querySelectorAll('.task-card').length;
-
-    countEl.textContent = `${remainingCards} tâche${remainingCards > 1 ? 's' : ''}`;
-
-    // Si plus aucune tâche, afficher le message "Aucune tâche à planifier"
-    if (remainingCards === 0) {
-        container.innerHTML = `
-            <div class="empty-message">
-                <span class="icon">✅</span>
-                <p>Aucune tâche à planifier</p>
-            </div>
-        `;
-    }
-}
-
-
-// La fonction createTaskCard est maintenant gérée par taskCardManager
-/**
- * Changement de vue du calendrier 
- */
-function changeView(view) {
-    calendar.changeView(view);
-    
-    // Mettre à jour les boutons actifs
-    document.querySelectorAll('.view-btn').forEach(btn => {
-        btn.classList.remove('active');
-        if (btn.dataset.view === view) {
-            btn.classList.add('active');
-        }
-    });
-
-    updateCalendarTitle();
-}
-
-/**
- * Mide à jour du titre du calendrier 
- */
-function updateCalendarTitle() {
-    const titleEl = document.getElementById('calendar-title');
-    
+// ── Backend API ───────────────────────────────────────────────────────────────
+async function modifyTaskInBackend(taskId, taskData) {
     try {
-        const dateRange = calendar.getDateRangeStart();
-        const view = calendar.getViewName();
-        
-        // Extraire la date de l'objet dateRange
-        let startDate;
-        if (dateRange && dateRange.d) {
-            // Si dateRange a une propriété 'd' (cas de Toast UI Calendar)
-            startDate = new Date(dateRange.d);
-        } else if (dateRange instanceof Date || (dateRange && dateRange.getTime)) {
-            // Si c'est déjà un objet Date
-            startDate = new Date(dateRange);
-        } else {
-            // Fallback sur la date actuelle
-            startDate = new Date();
-        }
-        
-        let title = '';
-        
-        if (view === 'month') {
-            // Pour la vue mois, on prend le 1er jour du mois de la première semaine complète
-            // pour éviter d'afficher le mois précédent
-            let firstDayOfMonth = new Date(startDate);
-            
-            // Si on n'est pas le 1er du mois, on passe au mois suivant
-            if (firstDayOfMonth.getDate() > 1) {
-                firstDayOfMonth.setMonth(firstDayOfMonth.getMonth() + 1, 1);
-            }
-            
-            title = firstDayOfMonth.toLocaleDateString('fr-FR', { 
-                month: 'long', 
-                year: 'numeric' 
-            });
-        } else if (view === 'week') {
-            let endDateObj = calendar.getDateRangeEnd();
-            let endDate = endDateObj && (endDateObj.d ? new Date(endDateObj.d) : new Date(endDateObj));
-            
-            if (!endDate || isNaN(endDate.getTime())) {
-                endDate = new Date(startDate);
-                endDate.setDate(endDate.getDate() + 6); // Ajoute 6 jours pour avoir une semaine complète
-            }
-            
-            title = `${startDate.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })} - ${endDate.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}`;
-        } else {
-            // Vue jour
-            title = startDate.toLocaleDateString('fr-FR', { 
-                weekday: 'long', 
-                day: 'numeric', 
-                month: 'long', 
-                year: 'numeric' 
-            });
-        }
-
-        titleEl.textContent = title.charAt(0).toUpperCase() + title.slice(1);
-        console.log('Titre mis à jour:', titleEl.textContent);
-    } catch (error) {
-        console.error('Erreur lors de la mise à jour du titre:', error);
+        const r = await fetch(`/api/task/${taskId}/modify`, {
+            method:  'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify(taskData)
+        });
+        const d = await r.json();
+        return { success: d.success, error: d.error || 'Unknown error' };
+    } catch (err) {
+        return { success: false, error: err.message || 'Network error' };
     }
-}
-
-/**
- * Fonctions utilitaires 
- */
-function parseEstTime(estTime) {
-    if (!estTime) return null;
-    
-    // Handle ISO 8601 duration format (PT2H30M) that TaskWarrior uses
-    if (estTime.startsWith('PT')) {
-        const match = estTime.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
-        if (match) {
-            const hours = parseInt(match[1] || 0);
-            const minutes = parseInt(match[2] || 0);
-            const seconds = parseInt(match[3] || 0);
-            
-            return hours * 60 + minutes + Math.round(seconds / 60);
-        }
-    }
-    
-    // Fallback for old format: "1h30min" ou "30min" ou "1h"
-    const match = estTime.match(/(\d+)h|(\d+)min/g);
-    if (!match) return null;
-
-    let minutes = 0;
-    match.forEach(part => {
-        if (part.includes('h')) {
-            minutes += parseInt(part) * 60;
-        } else if (part.includes('min')) {
-            minutes += parseInt(part);
-        }
-    });
-
-    return minutes;
-}
-
-/**
- * Extracts a Date object from Toast UI Calendar change objects
- * Handles the nested structure: { tzOffset: null, d: { d: Date(...) } }
- * @param {Object} changeObj - The change object from Toast UI Calendar
- * @returns {Date|null} - The extracted Date object or null if not found
- */
-function extractDateFromToastChange(changeObj) {
-    if (!changeObj) {
-        console.log('extractDateFromToastChange: null/undefined input');
-        return null;
-    }
-
-    // Log the original structure for debugging
-    console.log('Extracting date from object:', changeObj);
-
-    // Case 1: Already a Date object
-    if (changeObj instanceof Date) {
-        console.log('Direct Date object found');
-        return changeObj;
-    }
-
-    // Case 2: Toast UI nested structure { tzOffset: null, d: { d: Date(...) } }
-    if (changeObj.d && changeObj.d.d && changeObj.d.d instanceof Date) {
-        console.log('Toast UI nested Date structure found:', changeObj.d.d);
-        return changeObj.d.d;
-    }
-
-    // Case 3: Simpler nested structure { d: Date(...) }
-    if (changeObj.d && changeObj.d instanceof Date) {
-        console.log('Simple nested Date structure found:', changeObj.d);
-        return changeObj.d;
-    }
-
-    // Case 4: String format
-    if (typeof changeObj === 'string') {
-        console.log('String date found, creating Date object:', changeObj);
-        const date = new Date(changeObj);
-        return isNaN(date.getTime()) ? null : date;
-    }
-
-    // Case 5: Try to create Date from object (fallback)
-    try {
-        const date = new Date(changeObj);
-        if (!isNaN(date.getTime())) {
-            console.log('Created Date from object:', date);
-            return date;
-        }
-    } catch (e) {
-        console.error('Failed to create Date from object:', e);
-    }
-
-    console.warn('Could not extract valid Date from object:', changeObj);
-    return null;
 }
 
 async function addTaskToBackend(taskData) {
-    /**
-     * Add a new task to the backend
-     * @param {Object} taskData - Task data to add
-     * @returns {Promise<Object>} - Promise that resolves to {success: boolean, task: Object, error: string}
-     */
     try {
-        const response = await fetch('/api/task/add', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(taskData)
+        const r = await fetch('/api/task/add', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify(taskData)
         });
-
-        const data = await response.json();
-
-        if (data.success && data.task) {
-            return {
-                success: true,
-                task: data.task,
-                error: null
-            };
-        } else {
-            return {
-                success: false,
-                task: null,
-                error: data.error || 'Unknown error creating task'
-            };
-        }
-    } catch (error) {
-        console.error('Network error creating task:', error);
-        return {
-            success: false,
-            task: null,
-            error: error.message || 'Network error'
-        };
+        const d = await r.json();
+        return d.success && d.task
+            ? { success: true,  task: d.task, error: null }
+            : { success: false, task: null,   error: d.error || 'Unknown error' };
+    } catch (err) {
+        return { success: false, task: null, error: err.message || 'Network error' };
     }
 }
 
+// ── Utilities ─────────────────────────────────────────────────────────────────
 
-async function modifyTaskInBackend(taskId, taskData) {
-    try {
-        const response = await fetch(`/api/task/${taskId}/modify`, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(taskData)
-        });
-        const data = await response.json();
-
-        return {
-            success: data.success,
-            error: data.error || 'Unknown error creating task'
-        };
-       
-    } catch (error) {
-        console.error('Network error modifying task:', error);
-        return {
-            success: false,
-            error: error.message || 'Network error'
-        };
-
-    }
+// Format a JS Date as local YYYY-MM-DDTHH:MM:SS for Taskwarrior (no Z, no UTC shift)
+function toLocalISOString(date) {
+    if (!date) return null;
+    const pad = n => String(n).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}` +
+           `T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
-function calculateDurationFromEvent(event) {
-    // Calculate duration between event.start and event.end
-    // Returns ISO 8601 duration format (PT2H30M)
-    
-    if (!event || !event.start || !event.end) {
-        console.warn('Event missing start or end time, using default duration');
-        return 'PT30M'; // Default 30 minutes
+
+function escAttr(s) {
+    return (s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+}
+
+function parseEstTime(sched_duration) {
+    if (!sched_duration) return null;
+    if (sched_duration.startsWith('PT')) {
+        const m = sched_duration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+        if (m) return parseInt(m[1] || 0) * 60 + parseInt(m[2] || 0) + Math.round(parseInt(m[3] || 0) / 60);
     }
-    
-    try {
-        // Handle cases where start/end might be strings or Date objects
-        const startDate = event.start instanceof Date ? event.start : new Date(event.start);
-        const endDate = event.end instanceof Date ? event.end : new Date(event.end);
-        
-        // Check for invalid dates
-        if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
-            console.warn('Invalid date format in event, using default duration');
-            return 'PT30M';
-        }
-        
-        // Calculate duration in milliseconds
-        const durationMs = endDate - startDate;
-        
-        // Handle negative or zero duration
-        if (durationMs <= 0) {
-            console.warn('Zero or negative duration, using default duration');
-            return 'PT30M';
-        }
-        
-        // Convert to hours and minutes
-        const durationMinutes = Math.round(durationMs / (1000 * 60));
-        const hours = Math.floor(durationMinutes / 60);
-        const minutes = durationMinutes % 60;
-        
-        // Format as ISO 8601 duration (PT2H30M)
-        let durationString = 'PT';
-        if (hours > 0) {
-            durationString += `${hours}H`;
-        }
-        if (minutes > 0) {
-            durationString += `${minutes}M`;
-        }
-        
-        // Default to PT30M if duration is 0 (shouldn't happen due to above check)
-        return durationString === 'PT' ? 'PT30M' : durationString;
-        
-    } catch (error) {
-        console.error('Error calculating duration:', error);
-        return 'PT30M'; // Fallback to default
-    }
+    const m = sched_duration.match(/(\d+)h|(\d+)min/g);
+    if (!m) return null;
+    return m.reduce((sum, p) => sum + (p.includes('h') ? parseInt(p) * 60 : parseInt(p)), 0);
 }
 
 function DateFromISOtoTW(isoString) {
-    // Convert ISO string to YYYY-MM-DDTHH:MM:SS format
-    // Input format: 20251220T120000Z or 2025-12-20T12:00:00Z
-    // Output format: 2025-12-20T12:00:00
-    
     if (!isoString) return null;
-    
-    // Handle both formats: 20251220T120000Z and 2025-12-20T12:00:00Z
-    let date;
-    
-    // First try the compact format (20251220T120000Z)
-    if (/^\d{8}T\d{6}Z$/.test(isoString)) {
-        // Convert 20251220T120000Z to 2025-12-20T12:00:00
-        const formatted = isoString.replace(
-            /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/,
-            '$1-$2-$3T$4:$5:$6'
-        );
-        return formatted;
-    }
-    // Try the standard ISO format (2025-12-20T12:00:00Z)
-    else if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(isoString)) {
-        // Remove the Z at the end
+    if (/^\d{8}T\d{6}Z$/.test(isoString))
+        return isoString.replace(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/, '$1-$2-$3T$4:$5:$6');
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(isoString))
         return isoString.slice(0, -1);
-    }
-    // Try format without Z (2025-12-20T12:00:00)
-    else if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(isoString)) {
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(isoString))
         return isoString;
-    }
-    
-    // If format doesn't match, try to parse as Date and format
     try {
-        date = new Date(isoString);
-        if (!isNaN(date.getTime())) {
-            const year = date.getFullYear();
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const day = String(date.getDate()).padStart(2, '0');
-            const hours = String(date.getHours()).padStart(2, '0');
-            const minutes = String(date.getMinutes()).padStart(2, '0');
-            const seconds = String(date.getSeconds()).padStart(2, '0');
-            
-            return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
+        const d = new Date(isoString);
+        if (!isNaN(d.getTime())) {
+            const pad = (n) => String(n).padStart(2, '0');
+            return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
         }
-    } catch (e) {
-        console.error('Error parsing date:', e);
-        return null;
-    }
-    
+    } catch (_) {}
     return null;
-}
-function formatDateTimeForInput(date) {
-    // Format a Date object as 'YYYY-MM-DD HH:MM' (with space separator)
-    if (!date || !(date instanceof Date)) return '';
-    
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    
-    return `${year}-${month}-${day} ${hours}:${minutes}`;
-}
-
-function formatDuration(minutes) {
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-    
-    if (hours > 0 && mins > 0) {
-        return `${hours}h${mins}min`;
-    } else if (hours > 0) {
-        return `${hours}h`;
-    } else {
-        return `${mins}min`;
-    }
-}
-
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
-function showSuccess(message) {
-    // Simple notification (peut être amélioré avec une bibliothèque de notifications)
-    console.log('✅', message);
-    alert(message);
-}
-
-function showError(message) {
-    console.error('❌', message);
-    alert(message);
 }
