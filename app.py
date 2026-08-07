@@ -322,6 +322,67 @@ def add_task():
         'task': None
     })
 
+@app.route('/api/tasks', methods=['POST'])
+def create_task_from_external():
+    """Create a task from an external source like Outlook email"""
+    data = request.get_json()
+    
+    # Validate required fields
+    if not data or 'source' not in data or 'action' not in data or 'mail' not in data:
+        return jsonify({
+            'success': False,
+            'error': 'Invalid JSON format: missing required fields'
+        }), 400
+    
+    mail_data = data.get('mail', {})
+    if 'subject' not in mail_data:
+        return jsonify({
+            'success': False,
+            'error': 'Mail subject is required'
+        }), 400
+    
+    # Use the mail subject as the task description
+    description = mail_data['subject']
+    
+    # Add source and action as tags for tracking
+    tags = [data['source'], data['action']]
+    
+    # Prepare the task creation command
+    command_parts = [f'add "{description}"']
+    
+    # Add tags
+    for tag in tags:
+        command_parts.append(f'+{tag}')
+    
+    # Execute the command to create the task
+    command = f'task {" ".join(command_parts)}'
+    create_result = run_task_command(command)
+    
+    if create_result['success']:
+        # Export the newly created task to get full details
+        export_result = run_task_command('task +LATEST export')
+        if export_result['success'] and export_result['stdout'].strip():
+            try:
+                task = json.loads(export_result['stdout'])
+                if task:
+                    return jsonify({
+                        'success': True,
+                        'message': 'Task created successfully from external source',
+                        'task': task[0]
+                    }), 201
+            except (json.JSONDecodeError, IndexError) as e:
+                print(f"Error parsing task data: {e}")
+                return jsonify({
+                    'success': False,
+                    'error': 'Internal error processing task data'
+                }), 500
+    
+    # Handle errors
+    return jsonify({
+        'success': False,
+        'error': create_result.get('stderr', 'Failed to create task from external source')
+    }), 500
+
 if __name__ == '__main__':
     # Check if TaskWarrior is installed
     check_result = run_task_command('task version')
