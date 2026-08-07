@@ -199,7 +199,7 @@ async def get_projects():
 
 
 @app.post("/api/task/{task_id}/start")
-async def start_task(task_id: int):
+async def start_task(task_id: str):
     """Start a task"""
     result = run_task_command(f'task {task_id} start')
     return ResponseModel(
@@ -209,7 +209,7 @@ async def start_task(task_id: int):
 
 
 @app.post("/api/task/{task_id}/stop")
-async def stop_task(task_id: int):
+async def stop_task(task_id: str):
     """Stop a task"""
     result = run_task_command(f'task {task_id} stop')
     return ResponseModel(
@@ -219,7 +219,7 @@ async def stop_task(task_id: int):
 
 
 @app.post("/api/task/{task_id}/done")
-async def complete_task(task_id: int):
+async def complete_task(task_id: str):
     """Mark a task as done"""
     result = run_task_command(f'task {task_id} done')
     return ResponseModel(
@@ -229,7 +229,7 @@ async def complete_task(task_id: int):
 
 
 @app.delete("/api/task/{task_id}/delete")
-async def delete_task(task_id: int):
+async def delete_task(task_id: str):
     """Delete a task"""
     result = run_task_command(f'task rc.confirmation=off {task_id} delete')
     return ResponseModel(
@@ -239,7 +239,7 @@ async def delete_task(task_id: int):
 
 
 @app.put("/api/task/{task_id}/modify")
-async def modify_task(task_id: int, task_data: TaskModify):
+async def modify_task(task_id: str, task_data: TaskModify):
     """Modify a task"""
     modifications = []
 
