@@ -527,33 +527,200 @@
 **Priority:** Medium
 **Dependencies:** 7.4
 
-### Phase 8: Documentation and Handoff
+### Phase 8: Playwright Testing (Estimated: 3-5 days)
 
-#### 8.1 Update development documentation
+#### 8.1 Update Playwright configuration for Svelte
+- [ ] Update `playwright.config.js` baseURL to Vite dev server port (5173)
+- [ ] Update webServer command to start Vite dev server
+- [ ] Create separate production test configuration
+- [ ] Verify Playwright can start and connect to Vite server
+
+**Estimated Time:** 2 hours
+**Priority:** High
+**Dependencies:** 7.1
+
+#### 8.2 Refactor existing tests
+- [ ] Review existing `tests/task-manager.spec.js`
+- [ ] Update selectors to work with Svelte components
+- [ ] Fix any timing issues with Svelte reactivity
+- [ ] Update server startup to use Vite instead of Flask
+- [ ] Ensure existing tests still pass
+
+**Estimated Time:** 3 hours
+**Priority:** High
+**Dependencies:** 8.1
+
+#### 8.3 Create test directory structure
+- [ ] Create `tests/e2e/` directory
+- [ ] Create `tests/components/` directory
+- [ ] Create `tests/fixtures/` directory
+- [ ] Create `tests/visual/` directory (optional)
+- [ ] Create `tests/fixtures/page-objects/` directory
+
+**Estimated Time:** 1 hour
+**Priority:** High
+**Dependencies:** 8.2
+
+#### 8.4 Create Page Object models
+- [ ] Create `IndexPage` class in `tests/fixtures/page-objects/IndexPage.js`
+- [ ] Create `CalendarPage` class in `tests/fixtures/page-objects/CalendarPage.js`
+- [ ] Create `DayPlannerPage` class in `tests/fixtures/page-objects/DayPlannerPage.js`
+- [ ] Add common actions (load, addTask, filter, etc.) to each page object
+
+**Estimated Time:** 4 hours
+**Priority:** High
+**Dependencies:** 8.3
+
+#### 8.5 Create test data factories
+- [ ] Create `tests/fixtures/test-data.js`
+- [ ] Implement `createTestTask()` factory function
+- [ ] Implement `createTestTasks()` for multiple tasks
+- [ ] Add test data for different scenarios (empty, many tasks, etc.)
+- [ ] Add pool-specific test data
+
+**Estimated Time:** 2 hours
+**Priority:** High
+**Dependencies:** 8.3
+
+#### 8.6 Create test utilities
+- [ ] Create `tests/fixtures/test-utils.js`
+- [ ] Add helper functions for common test operations
+- [ ] Add wait utilities for Svelte reactivity
+- [ ] Add assertion helpers
+- [ ] Add mock data generators
+
+**Estimated Time:** 2 hours
+**Priority:** Medium
+**Dependencies:** 8.5
+
+#### 8.7 Write Index Page E2E tests
+- [ ] Test page loads successfully
+- [ ] Test tasks display in list
+- [ ] Test add task flow
+- [ ] Test edit task flow
+- [ ] Test delete task flow
+- [ ] Test start/stop task
+- [ ] Test filtering by project
+- [ ] Test filtering by tags
+- [ ] Test filtering by context
+- [ ] Test date filtering (today, planned/incomplete)
+- [ ] Test context switching
+- [ ] Test loading states
+- [ ] Test error states
+- [ ] Test empty state
+
+**Estimated Time:** 5 hours
+**Priority:** High
+**Dependencies:** 8.4
+
+#### 8.8 Write Calendar Page E2E tests
+- [ ] Test page loads successfully
+- [ ] Test calendar grid renders
+- [ ] Test tasks display in calendar
+- [ ] Test navigation (prev/next)
+- [ ] Test view switching (week/day/month)
+- [ ] Test unplanned tasks section
+- [ ] Test drag from unplanned to calendar
+- [ ] Test drag between calendar cells
+- [ ] Test task details on hover
+- [ ] Test pool filtering
+- [ ] Test sort options
+
+**Estimated Time:** 5 hours
+**Priority:** High
+**Dependencies:** 8.7
+
+#### 8.9 Write Day Planner Page E2E tests
+- [ ] Test page loads successfully
+- [ ] Test day view displays correctly
+- [ ] Test tasks display in time slots
+- [ ] Test drag-and-drop scheduling
+- [ ] Test conflict detection
+- [ ] Test time slot display
+
+**Estimated Time:** 4 hours
+**Priority:** High
+**Dependencies:** 8.8
+
+#### 8.10 Write Component tests
+- [ ] Test TaskCard renders correctly
+- [ ] Test TaskCard action buttons work
+- [ ] Test TaskEditor form validation
+- [ ] Test TaskEditor save/cancel
+- [ ] Test CalendarEvent rendering
+- [ ] Test CalendarGrid time slots
+- [ ] Test Notification display/dismiss
+- [ ] Test Loading spinner
+
+**Estimated Time:** 4 hours
+**Priority:** Medium
+**Dependencies:** 8.9
+
+#### 8.11 Add Visual Regression tests (optional)
+- [ ] Create `tests/visual/index.spec.js`
+- [ ] Add screenshot test for index page
+- [ ] Add screenshot test for calendar page
+- [ ] Add screenshot test for day planner page
+- [ ] Configure screenshot comparison thresholds
+- [ ] Generate baseline screenshots
+
+**Estimated Time:** 3 hours
+**Priority:** Low
+**Dependencies:** 8.10
+
+#### 8.12 Set up CI testing
+- [ ] Create `.github/workflows/test.yml`
+- [ ] Configure to run on push to feature branches
+- [ ] Configure to run on pull requests
+- [ ] Set up Node.js and Python in CI
+- [ ] Configure Playwright browser installation
+- [ ] Set up artifact upload for test reports
+
+**Estimated Time:** 2 hours
+**Priority:** High
+**Dependencies:** 8.11
+
+#### 8.13 Run and validate all tests
+- [ ] Run all existing tests
+- [ ] Run all new tests
+- [ ] Fix any failures
+- [ ] Update tests for any edge cases found
+- [ ] Validate test coverage
+- [ ] Document any known test limitations
+
+**Estimated Time:** 4 hours
+**Priority:** High
+**Dependencies:** 8.12
+
+### Phase 9: Documentation and Handoff
+
+#### 9.1 Update development documentation
 - [ ] Update README.md with new setup instructions
 - [ ] Document Vite development workflow
 - [ ] Document build and deploy process
 - [ ] Add Svelte resource links
+- [ ] Document Playwright testing setup
 
 **Estimated Time:** 2 hours
 **Priority:** Low
-**Dependencies:** 7.5
+**Dependencies:** 8.13
 
-#### 8.2 Create migration guide
+#### 9.2 Create migration guide
 - [ ] Document key changes from vanilla JS to Svelte
 - [ ] Note any behavioral differences
 - [ ] Document component architecture
 - [ ] Document state management approach
+- [ ] Document testing approach
 
 **Estimated Time:** 2 hours
 **Priority:** Low
-**Dependencies:** 8.1
+**Dependencies:** 9.1
 
 ## Total Estimated Time
 
-- **Minimum:** 20 days (full-time equivalent)
-- **Realistic:** 25-30 days (part-time)
-- **With testing/debugging:** 30-40 days
+- **Minimum:** 23 days (full-time equivalent)
+- **Realistic:** 28-35 days (part-time)
+- **With testing/debugging:** 35-45 days
 
 ## Success Criteria
 
@@ -568,6 +735,9 @@
 - [ ] Bundle size is reduced from current implementation
 - [ ] Code is more maintainable (subjective review)
 - [ ] Production build passes all manual tests
+- [ ] All existing Playwright tests pass
+- [ ] New Playwright tests added and passing
+- [ ] Test coverage maintained or improved
 
 ## Rollback Plan
 

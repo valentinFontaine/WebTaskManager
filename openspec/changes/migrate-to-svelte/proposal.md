@@ -38,6 +38,7 @@ Adopt Svelte as the frontend framework. Svelte offers:
 - **Build process**: Add build step to compile Svelte components to JavaScript
 - **File structure**: Reorganize frontend into component-based structure
 - **TUI Calendar**: Will be replaced with a more integrated solution (Svelte-native or custom)
+- **Testing**: Update existing Playwright tests and add comprehensive test coverage for all migrated components
 
 ## Non-Goals
 
@@ -47,6 +48,7 @@ Adopt Svelte as the frontend framework. Svelte offers:
 - Do not change existing visual design or user experience
 - Do not add new features beyond what currently exists
 - Keep the migration scope focused on technology upgrade, not feature addition
+- Maintain and enhance existing Playwright test suite throughout migration
 
 ## Success Criteria
 
@@ -56,3 +58,6 @@ Adopt Svelte as the frontend framework. Svelte offers:
 - Bundle size is reduced compared to current implementation
 - Code is more maintainable and easier to extend
 - TUI Calendar is replaced with a Svelte-compatible alternative
+- All existing Playwright tests pass
+- New Playwright tests added for migrated functionality
+- Test coverage maintained or improved

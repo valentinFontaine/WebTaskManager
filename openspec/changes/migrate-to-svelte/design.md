@@ -440,10 +440,424 @@ src/components/TaskCard/
 - [ ] Day planner view works
 - [ ] All existing UI elements are present and functional
 
-### Automated Testing (Optional, future)
-- Consider adding Playwright tests (already in project)
-- Test critical user journeys
-- Regression testing for existing functionality
+### Automated Testing with Playwright
+
+**Existing Infrastructure:**
+- Playwright is already configured in the project (`playwright.config.js`)
+- Existing test file: `tests/task-manager.spec.js` with 3 test cases
+- Current config uses Flask server (`python3 app.py` on port 5000)
+- HTML reporter configured
+
+**Testing Strategy for Svelte Migration:**
+
+#### 1. Test Environment Setup
+The existing Playwright configuration needs minor updates to work with Svelte:
+
+```javascript
+// playwright.config.js updates needed:
+module.exports = defineConfig({
+  testDir: './tests',
+  // Update baseURL to match new dev server
+  baseURL: 'http://localhost:5173', // Vite default port
+  
+  webServer: {
+    // Start Vite dev server instead of Flask
+    command: 'npm run dev',
+    url: 'http://localhost:5173',
+    reuseExistingServer: !process.env.CI,
+  },
+  
+  // Keep existing projects and settings
+  projects: [
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'] },
+    },
+  ],
+});
+```
+
+For production testing (built files with FastAPI):
+```javascript
+// Separate config or mode for production testing
+webServer: {
+  command: 'python3 app_fastapi.py', // or whatever starts FastAPI
+  url: 'http://localhost:8000',
+  reuseExistingServer: !process.env.CI,
+}
+```
+
+#### 2. Test Organization
+
+```
+tests/
+├── e2e/                      # End-to-end tests
+│   ├── index.spec.js         # Tests for main index page
+│   ├── calendar.spec.js      # Tests for calendar page
+│   └── day-planner.spec.js   # Tests for day planner page
+│
+├── components/               # Component-level tests
+│   ├── task-card.spec.js     # Tests for TaskCard component
+│   ├── task-editor.spec.js   # Tests for TaskEditor component
+│   └── calendar.spec.js       # Tests for Calendar components
+│
+├── fixtures/                 # Test fixtures and helpers
+│   ├── test-data.js          # Sample task data for tests
+│   ├── mock-api.js           # API mocking utilities
+│   └── test-utils.js         # Common test utilities
+│
+├── setup/                   # Test setup files
+│   └── global-setup.js       # Global test setup (server start, etc.)
+│
+└── task-manager.spec.js      # Existing tests (to be refactored)
+```
+
+#### 3. Test Types and Coverage
+
+| Test Type | Scope | Tools | Example Tests |
+|-----------|-------|-------|---------------|
+| **E2E Tests** | Full user journeys | Playwright | Task creation flow, filtering, calendar drag-and-drop |
+| **Page Tests** | Individual page functionality | Playwright | Index page loads tasks, calendar renders correctly |
+| **Component Tests** | Isolated component behavior | Playwright | TaskCard displays data, TaskEditor form validation |
+| **Visual Tests** | Visual regression | Playwright screenshots | Screenshot comparison for critical pages |
+| **API Integration Tests** | Frontend ↔ Backend | Playwright | Verify API calls return correct data |
+
+#### 4. Test Implementation Patterns
+
+**Page Object Pattern for Svelte:**
+```javascript
+// tests/fixtures/page-objects/IndexPage.js
+export class IndexPage {
+  constructor(page) {
+    this.page = page;
+    this.addTaskButton = page.locator('#add-task-btn');
+    this.taskCards = page.locator('.task-card');
+    this.filterInput = page.locator('#filter-project');
+    this.contextButtons = page.locator('.context-option');
+  }
+  
+  async load() {
+    await this.page.goto('/');
+    await this.page.waitForLoadState('networkidle');
+  }
+  
+  async addTask(description, project) {
+    await this.addTaskButton.click();
+    await this.page.fill('#task-description', description);
+    if (project) {
+      await this.page.fill('#task-project', project);
+    }
+    await this.page.click('button[type="submit"]');
+    await this.page.waitForTimeout(500); // Wait for save
+  }
+  
+  async getTaskCount() {
+    return await this.taskCards.count();
+  }
+}
+```
+
+**Test Example:**
+```javascript
+// tests/e2e/index.spec.js
+import { test, expect } from '@playwright/test';
+import { IndexPage } from '../fixtures/page-objects/IndexPage';
+
+test.describe('Index Page', () => {
+  test('should load and display tasks', async ({ page }) => {
+    const indexPage = new IndexPage(page);
+    await indexPage.load();
+    
+    await expect(page).toHaveTitle('TaskWarrior Web UI');
+    await expect(indexPage.taskCards).toHaveCountGreaterThan(0);
+  });
+  
+  test('should add a new task', async ({ page }) => {
+    const indexPage = new IndexPage(page);
+    await indexPage.load();
+    
+    const initialCount = await indexPage.getTaskCount();
+    await indexPage.addTask('Test task', 'TestProject');
+    
+    expect(await indexPage.getTaskCount()).toBe(initialCount + 1);
+  });
+});
+```
+
+#### 5. Component Testing Approach
+
+For testing Svelte components in isolation:
+
+**Option A: Mount components directly** (using `@playwright/experimental-ct-svelte`)
+```javascript
+import { test, expect } from '@playwright/experimental-ct-svelte';
+import TaskCard from '../../src/components/TaskCard.svelte';
+
+test('TaskCard renders correctly', async ({ mount }) => {
+  const task = { uuid: '1', description: 'Test', project: 'Proj', status: 'pending' };
+  const component = await mount(TaskCard, { props: { task } });
+  
+  await expect(component).toContainText('Test');
+  await expect(component).toContainText('Proj');
+});
+```
+
+**Option B: Test through page interaction** (more realistic)
+- Render full page in Playwright
+- Use data-testid attributes for stable selectors
+- Test component behavior as user would experience it
+
+**Recommendation: Use Option B** for now, as it:
+- Tests the actual rendered output
+- Includes CSS and styling
+- Tests integration with parent components
+- More closely matches user experience
+
+#### 6. Testing for Svelte-Specific Features
+
+**Testing Reactivity:**
+```javascript
+test('TaskCard updates when task data changes', async ({ page }) => {
+  // Load page with task
+  await page.goto('/');
+  
+  // Modify task via API or direct state change
+  await page.evaluate(() => {
+    // Trigger state change that should update UI
+    window.updateTaskStatus('task-uuid', 'completed');
+  });
+  
+  // Verify UI updated
+  await expect(page.locator('.task-card.completed')).toBeVisible();
+});
+```
+
+**Testing Stores:**
+```javascript
+test('Filters update across components', async ({ page }) => {
+  await page.goto('/');
+  
+  // Set filter in one component
+  await page.fill('#filter-project', 'MyProject');
+  
+  // Verify other components update
+  const taskCards = await page.$$('.task-card');
+  for (const card of taskCards) {
+    const project = await card.$eval('.project-badge', el => el.textContent);
+    expect(project).toContain('MyProject');
+  }
+});
+```
+
+#### 7. Test Data Management
+
+**Test Data Factory:**
+```javascript
+// tests/fixtures/test-data.js
+export function createTestTask(overrides = {}) {
+  return {
+    uuid: `test-${Date.now()}`,
+    description: `Test task ${Date.now()}`,
+    project: 'TestProject',
+    status: 'pending',
+    tags: ['test'],
+    due: null,
+    scheduled: null,
+    urgency: 10,
+    ...overrides
+  };
+}
+
+export function createTestTasks(count) {
+  return Array.from({ length: count }, (_, i) => 
+    createTestTask({ description: `Task ${i + 1}` })
+  );
+}
+```
+
+**Mock API for Testing:**
+```javascript
+// tests/fixtures/mock-api.js
+export function mockFetchTasks(tasks) {
+  return async (url) => {
+    if (url === '/api/tasks') {
+      return {
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ success: true, tasks })
+      };
+    }
+    throw new Error(`Unexpected URL: ${url}`);
+  };
+}
+```
+
+#### 8. Test Suites by Page
+
+**Index Page Tests (`tests/e2e/index.spec.js`):**
+- Page loads successfully
+- Tasks display in list
+- Task filtering works (project, tags, context, date)
+- Add task modal opens and submits
+- Edit task modal opens with correct data
+- Delete task removes from list
+- Start/stop task updates status
+- Context switching filters tasks
+- Loading states display correctly
+- Error messages display correctly
+- Empty state displays when no tasks
+
+**Calendar Page Tests (`tests/e2e/calendar.spec.js`):**
+- Page loads successfully
+- Calendar grid renders correctly
+- Tasks display in calendar at correct positions
+- Navigation (prev/next) works
+- View switching (week/day/month) works
+- Unplanned tasks section displays
+- Drag from unplanned to calendar works
+- Drag between calendar cells works
+- Task details show on hover
+- Pool filtering works
+- Sort options work
+
+**Day Planner Page Tests (`tests/e2e/day-planner.spec.js`):**
+- Page loads successfully
+- Day view displays correctly
+- Tasks display in time slots
+- Drag-and-drop scheduling works
+- Conflict detection works
+- Time slot display is correct
+
+**Component Tests:**
+- TaskCard renders all task fields
+- TaskCard action buttons work
+- TaskEditor form validation works
+- TaskEditor saves and cancels correctly
+- CalendarEvent drag-and-drop works
+- CalendarGrid renders time slots correctly
+- Notification displays and dismisses
+- Loading spinner displays and hides
+
+#### 9. Visual Regression Testing
+
+Add visual regression testing to catch unintended UI changes:
+
+```javascript
+// tests/visual/index.spec.js
+import { test, expect } from '@playwright/test';
+
+test.describe('Visual Regression', () => {
+  test('Index page visual regression', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    
+    // Take screenshot and compare to baseline
+    expect(await page.screenshot()).toMatchSnapshot('index-page.png', {
+      threshold: 0.2, // Allow 20% pixel difference
+    });
+  });
+});
+```
+
+Configure in `playwright.config.js`:
+```javascript
+module.exports = defineConfig({
+  // ...
+  use: {
+    // ...
+    screenshot: 'only-on-failure',
+    video: 'retain-on-failure',
+  },
+});
+```
+
+#### 10. CI/CD Integration
+
+**.github/workflows/test.yml:**
+```yaml
+name: Playwright Tests
+
+on:
+  push:
+    branches: [ master, feat/* ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+    
+    - name: Install Python dependencies
+      run: |
+        python -m venv venv
+        source venv/bin/activate
+        pip install -r requirements.txt
+    
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '20'
+    
+    - name: Install Node dependencies
+      run: |
+        npm ci
+        npx playwright install --with-deps
+    
+    - name: Run Playwright tests
+      run: npx playwright test
+    
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: playwright-report
+        path: playwright-report/
+```
+
+#### 11. Test Execution Strategy
+
+**During Development:**
+```bash
+# Run all tests
+npm test
+
+# Run with UI mode (great for debugging)
+npm run test:ui
+
+# Run specific test file
+npx playwright test tests/e2e/index.spec.js
+
+# Run specific test
+npx playwright test tests/e2e/index.spec.js -g "should add a new task"
+
+# Run in headed mode for debugging
+npm run test:headed
+```
+
+**Before Commit:**
+- Run all tests locally
+- Fix any failures
+- Update snapshots if visual changes are intentional
+
+**In CI:**
+- Run all tests on push to feature branches
+- Run all tests on pull requests
+- Only merge if all tests pass
+
+#### 12. Test Maintenance
+
+- **Update tests when functionality changes** - tests should be living documentation
+- **Add tests for new features** - every new component gets tests
+- **Refactor tests when code structure changes** - keep tests maintainable
+- **Review test coverage regularly** - identify and fill gaps
+- **Update snapshots when UI changes intentionally** - use `npx playwright test --update-snapshots`
 
 ## Rollback Plan
 
