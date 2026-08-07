@@ -7,83 +7,9 @@
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="task-card-styles.css">
     <link rel="stylesheet" href="task-editor-styles.css">
-    <script src="task-editor.js"></script>
-    <script src="task-card.js"></script>
-    <script src="main.js"></script>
 </head>
 <body>
-    <div class="container">
-        <header>
-            <div class="header-content">
-                <h1>TaskWarrior Web UI</h1>
-                <div class="context-selector">
-                    <span class="context-label">Context:</span>
-                    <div class="context-options">
-                        <button type="button" class="context-option" data-context="">All</button>
-                        <button type="button" class="context-option" data-context="pro">Pro</button>
-                        <button type="button" class="context-option" data-context="perso">Perso</button>
-                    </div>
-                </div>
-            </div>
-            <div class="header-actions">
-                <a href="day-planner.html" class="btn btn-secondary">
-                    <span class="icon">📅</span>
-                    Planificateur de Journée
-                </a>
-                <a href="calendar-planner.html" class="btn btn-secondary">
-                    <span class="icon">📆</span>
-                    Calendrier
-                </a>
-                <button id="add-task-btn" class="btn btn-success header-add-btn">
-                    <span class="icon">➕</span>
-                </button>
-                <button id="refresh-btn" class="btn btn-primary">
-                    <span class="icon">🔄</span>
-                    Refresh
-                </button>
-            </div>
-        </header>
-
-
-
-        <div class="filters-section">
-            <h2>Advanced Filters</h2>
-            <div class="filters-container">
-                <div class="form-group">
-                    <label for="filter-project">Filter by Project:</label>
-                    <input type="text" id="filter-project" placeholder="Enter project name" list="project-suggestions">
-                    <datalist id="project-suggestions"></datalist>
-                </div>
-                <div class="form-group">
-                    <label for="filter-tags">Filter by Tag:</label>
-                    <input type="text" id="filter-tags" placeholder="Enter tag (comma-separated)">
-                </div>
-                <div class="form-group">
-                    <button id="filter-planned-incomplete-btn" class="btn btn-toggle-filter" title="Show planned and incomplete tasks">
-                        <span class="icon">&#x21A9;&#x2705;</span>
-                    </button>
-                </div>
-                <div class="form-group">
-                    <button id="filter-today-btn" class="btn btn-toggle-filter" title="Show tasks scheduled for today">
-                        <span class="icon">&#x1F5D3;&#x1F4CD;</span>
-                    </button>
-                </div>
-                <button id="apply-filters" class="btn btn-primary">Apply Filters</button>
-                <button id="clear-filters" class="btn btn-secondary">Clear Filters</button>
-            </div>
-        </div>
-
-        <div class="tasks-section">
-            <h2>Pending Tasks</h2>
-            <div id="loading" class="loading">Loading tasks...</div>
-            <div id="error-message" class="error-message" style="display: none;"></div>
-            <div id="tasks-container"></div>
-        </div>
-    </div>
-
-    <!-- Le modal d'édition sera créé dynamiquement par TaskEditor -->
-
-    <div id="notification" class="notification"></div>
-
+    <div id="svelte-app"></div>
+    <script type="module" src="/src/pages/Index.svelte"></script>
 </body>
 </html>
