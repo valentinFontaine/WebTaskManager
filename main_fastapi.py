@@ -375,12 +375,15 @@ async def add_task(task_data: TaskCreate):
 
 
 # Catch-all route for static files (must be last)
-@app.get("/{filename:path}", response_class=FileResponse)
+@app.get("/{filename:path}")
 async def read_static_files(filename: str):
     """Serve static files (CSS, JS, etc.) - catch-all route"""
+    import os
+    if not os.path.exists(filename):
+        raise HTTPException(status_code=404, detail="File not found")
     try:
         return FileResponse(filename)
-    except FileNotFoundError:
+    except (FileNotFoundError, RuntimeError):
         raise HTTPException(status_code=404, detail="File not found")
 
 

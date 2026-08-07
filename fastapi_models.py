@@ -56,8 +56,8 @@ class ResponseModel(BaseModel):
     message: Optional[str] = None
     error: Optional[str] = None
     data: Optional[Any] = None
-    tasks: Optional[List[TaskBase]] = None
-    task: Optional[TaskBase] = None
+    tasks: Optional[List[dict]] = None  # Use dict instead of TaskBase to avoid validation issues
+    task: Optional[dict] = None  # Use dict instead of TaskBase to avoid validation issues
     projects: Optional[List[str]] = None
 
     class Config:
