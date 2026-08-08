@@ -9,9 +9,7 @@ export default defineConfig({
         // Generate separate bundles for each page
         rollupOptions: {
             input: {
-                index: './index.html',
-                calendar: './calendar-planner.html',
-                dayPlanner: './day-planner.html'
+                hello: './test-hello.html'
             },
             output: {
                 // Keep file names matching original for compatibility

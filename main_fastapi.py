@@ -102,19 +102,56 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount static files
+# Mount static files - serve from dist directory (built production files)
 app.mount("/static", StaticFiles(directory=".", html=True), name="static")
+app.mount("/assets", StaticFiles(directory="dist/assets", html=True), name="assets")
 
 
 # API Endpoints
 
 @app.get("/", response_class=HTMLResponse)
 async def read_root():
-    """Serve the main HTML page"""
+    """Serve the main HTML page from dist directory"""
     try:
-        return FileResponse("index.html")
+        return FileResponse("dist/index.html")
     except FileNotFoundError:
         return HTMLResponse(content="<h1>TaskWarrior Web UI</h1><p>Welcome to the TaskWarrior Web Interface</p>", status_code=200)
+
+
+@app.get("/test-hello.html", response_class=HTMLResponse)
+async def read_test_hello():
+    """Serve the test hello page from dist directory"""
+    try:
+        return FileResponse("dist/test-hello.html")
+    except FileNotFoundError:
+        return HTMLResponse(content="<h1>Svelte 5 Test</h1><p>Test page not found</p>", status_code=200)
+
+
+@app.get("/simple-hello.html", response_class=HTMLResponse)
+async def read_simple_hello():
+    """Serve a simple HTML test page"""
+    try:
+        return FileResponse("dist/simple-hello.html")
+    except FileNotFoundError:
+        return HTMLResponse(content="<h1>Simple Test</h1><p>Simple test page not found</p>", status_code=200)
+
+
+@app.get("/calendar-planner.html", response_class=HTMLResponse)
+async def read_calendar_planner():
+    """Serve the calendar planner HTML page from dist directory"""
+    try:
+        return FileResponse("dist/calendar-planner.html")
+    except FileNotFoundError:
+        return HTMLResponse(content="<h1>Calendar Planner</h1><p>Calendar planner not found</p>", status_code=200)
+
+
+@app.get("/day-planner.html", response_class=HTMLResponse)
+async def read_day_planner():
+    """Serve the day planner HTML page from dist directory"""
+    try:
+        return FileResponse("dist/day-planner.html")
+    except FileNotFoundError:
+        return HTMLResponse(content="<h1>Day Planner</h1><p>Day planner not found</p>", status_code=200)
 
 
 @app.get("/api/tasks/planned")
