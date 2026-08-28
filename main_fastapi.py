@@ -105,6 +105,10 @@ app.add_middleware(
 # Mount static files
 app.mount("/static", StaticFiles(directory=".", html=True), name="static")
 
+# Also serve from dist/ directory for production builds
+import os
+DIST_DIR = "./dist"
+
 
 # API Endpoints
 
@@ -379,12 +383,17 @@ async def add_task(task_data: TaskCreate):
 async def read_static_files(filename: str):
     """Serve static files (CSS, JS, etc.) - catch-all route"""
     import os
-    if not os.path.exists(filename):
-        raise HTTPException(status_code=404, detail="File not found")
-    try:
+    
+    # Check dist/ directory first for production builds
+    dist_path = os.path.join(DIST_DIR, filename)
+    if os.path.exists(dist_path) and os.path.isfile(dist_path):
+        return FileResponse(dist_path)
+    
+    # Fall back to current directory
+    if os.path.exists(filename) and os.path.isfile(filename):
         return FileResponse(filename)
-    except (FileNotFoundError, RuntimeError):
-        raise HTTPException(status_code=404, detail="File not found")
+    
+    raise HTTPException(status_code=404, detail="File not found")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,263 @@
+/* ===================================
+   Task Card Styles - Commun
+   =================================== */
+
+/* Base task-card styles (from styles.css with calendar-planner enhancements) */
+.task-card {
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 6px;
+    margin-bottom: 5px;
+    background: #fafafa;
+    transition: all 0.3s ease;
+    position: relative;
+    cursor: pointer;
+}
+
+.task-card:hover {
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    transform: translateY(-1px);
+}
+
+/* Enhanced states from calendar-planner.css */
+.task-card.selected {
+    border-color: #4a90e2;
+    background-color: rgba(74, 144, 226, 0.05);
+    box-shadow: 0 0 0 2px #4a90e2;
+    transform: translateY(-1px);
+}
+
+.task-card.selected .task-priority {
+    color: #4a90e2;
+    font-weight: 600;
+}
+
+.task-card.dragging {
+    opacity: 0.5;
+    cursor: grabbing;
+}
+
+/* Task card header (from calendar-planner.css) */
+.task-card-header {
+    display: flex;
+    justify-content: flex-start;
+    align-items: flex-start;
+    margin-bottom: 3px;
+    flex-wrap: nowrap; /* Empêcher le wrap du header */
+    gap: 5px;
+}
+
+.task-description {
+    font-size: 1rem;
+    font-weight: 500;
+    color: #212529;
+    margin-bottom: 3px;
+    line-height: 1.4;
+    flex: 1 1 auto; /* Permettre à la description de grandir/rétrécir */
+    min-width: 150px; /* Empêcher l'effondrement complet */
+    overflow: hidden; /* Gérer le débordement */
+    text-overflow: ellipsis; /* Ajouter des points de suspension si nécessaire */
+    word-break: break-word; /* Permettre le wrap des mots longs */
+}
+
+.task-urgency {
+    padding: 4px 8px;
+    border: 1px solid black;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 500;
+    color: white;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 30px;
+    height: 20px;
+    margin-right: 8px;
+    background-color: white;
+    flex: 0 0 auto; /* Largeur fixe, pas de croissance/rétrécissement */
+}
+
+.dropdown-container {
+    flex: 0 0 auto; /* Largeur fixe, pas de croissance/rétrécissement */
+    position: relative;
+}
+
+.dropdown-btn {
+    padding: 4px 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background-color: white;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 24px;
+    min-width: 24px;
+    flex: 0 0 auto; /* Largeur fixe, pas de croissance/rétrécissement */
+}
+
+.dropdown-btn .icon {
+    font-size: 12px;
+    color: #6c757d;
+}
+
+.task-priority {
+    padding: 0.2rem 0.6rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.task-urgency {
+    padding: 4px 8px;
+    border: 1px solid black;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 500;
+    color: white;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 30px;
+    height: 20px;
+    margin-right: 8px;
+    background-color: white;
+    /*background-color: white;*/
+}
+
+.task-priority.high {
+    background-color: #ffe0e0;
+    color: #dc3545;
+}
+
+.task-priority.medium {
+    background-color: #fff4e0;
+    color: #ffc107;
+}
+
+.task-priority.low {
+    background-color: #e0f4ff;
+    color: #4a90e2;
+}
+
+/* Conteneur pour les éléments de métadonnées (tags, meta, actions) */
+.task-footer {
+    display: none; /* Caché par défaut */
+    flex-wrap: wrap;
+    gap: 3px;
+    align-items: flex-start;
+    margin-bottom: 3px;
+}
+
+.task-footer.visible {
+    display: flex; /* Affiché quand la classe visible est ajoutée */
+}
+
+.task-meta {
+    display: flex;
+    flex-wrap: nowrap; /* Empêcher le wrap interne */
+    gap: 5px;
+    font-size: 0.85rem;
+    color: #6c757d;
+    margin-bottom: 0; /* Retiré la marge car gérée par le conteneur */
+    flex: 1 0 auto; /* Ne pas grandir, mais pouvoir rétrécir */
+    min-width: fit-content; /* Largeur basée sur le contenu */
+}
+
+.task-meta-item {
+    flex-wrap: nowrap; /* Empêcher le wrap interne */
+    align-items: center;
+    gap: 0.25rem;
+    white-space: nowrap; /* Empêcher le wrap du texte */
+}
+
+.task-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-bottom: 0; /* Retiré la marge car gérée par le conteneur */
+    flex: 1 1 12rem;
+    min-width: 150px;
+}
+
+.task-tag {
+    padding: 0.2rem 0.6rem;
+    background-color: #f8f9fa;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    color: #6c757d;
+}
+
+.task-actions {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 6px;
+    margin-top: 0; /* Retiré la marge car gérée par le conteneur */
+    overflow-x: auto;
+    margin-left: auto; /* Pousse les actions à droite si espace disponible */
+    flex: 0 0 auto
+}
+
+/* Style spécifique pour le bouton edit en mode minimal */
+.task-card-minimal .task-edit {
+    width: auto;
+    min-width: 0;
+    flex: 0 0 auto;
+}
+
+/* Button styles for task actions */
+.btn {
+    padding: 4px 8px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+}
+
+.btn-primary {
+    background: #4a90e2;
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #357abd;
+}
+
+.btn-success {
+    background: #28a745;
+    color: white;
+}
+
+.btn-success:hover {
+    background: #218838;
+}
+
+.btn-warning {
+    background: #ffc107;
+    color: #212529;
+}
+
+.btn-warning:hover {
+    background: #e0a800;
+}
+
+.btn-danger {
+    background: #dc3545;
+    color: white;
+}
+
+.btn-danger:hover {
+    background: #c82333;
+}
+
+.btn-small {
+    padding: 3px 6px;
+    font-size: 10px;
+}
