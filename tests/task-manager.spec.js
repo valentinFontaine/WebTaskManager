@@ -29,7 +29,7 @@ test.describe('Task Manager', () => {
     page.on('pageerror', error => console.error('PAGE ERROR:', error));
     
     // Aller à la page d'accueil
-    await page.goto('http://localhost:5000');
+    await page.goto('/'); // baseURL depuis playwright.config.js
     
     // Attendre que la page soit chargée
     await page.waitForLoadState('networkidle');
