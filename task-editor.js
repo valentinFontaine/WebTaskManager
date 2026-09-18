@@ -1,6 +1,6 @@
 /**
  * Composant réutilisable pour l'édition de tâches
- * Unifie les formulaires entre index.html et day-planner.html
+ * Unifie les formulaires entre index.html et calendar-planner.html
  */
 
 class TaskEditor {
