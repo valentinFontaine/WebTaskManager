@@ -15,7 +15,7 @@ from unittest.mock import patch, MagicMock
 sys.path.insert(0, os.path.dirname(__file__))
 
 from fastapi.testclient import TestClient
-from main_fastapi import app, run_task_command
+from main_fastapi import app, run_task_command, text_field_gaps
 from fastapi_models import TaskBase, TaskCreate, TaskModify, ResponseModel, CommandResult
 
 
@@ -361,6 +361,46 @@ class TestTaskAdd:
         assert data["success"] is True
         assert data["message"] == "Task created successfully"
     
+    @patch('main_fastapi.run_task_command')
+    def test_add_task_repairs_corrupted_description(self, mock_command):
+        """Une description corrompue par task.exe est reecrite via task import.
+
+        Reproduit le defaut Windows : l'export qui suit la creation ne rend pas la
+        description demandee. Voir openspec/changes/fix-nonascii-argv-windows.
+        """
+        mock_command.side_effect = [
+            CommandResult(success=True, stdout="Task created", stderr="", returncode=0),
+            # Export : description mutilee par le passage en argv
+            CommandResult(success=True, stdout='[{"id": 1, "uuid": "abc-123", "description": "T\\u00e2\\u00a3\\u00a8e accentuee"}]', stderr="", returncode=0),
+            CommandResult(success=True, stdout="Imported 1 tasks.", stderr="", returncode=0),
+            # Reexport apres reparation
+            CommandResult(success=True, stdout='[{"id": 1, "uuid": "abc-123", "description": "T\\u00e2che accentuee"}]', stderr="", returncode=0),
+        ]
+
+        response = client.post("/api/task/add", json=TaskCreate(description="Tâche accentuee").model_dump())
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert data["task"]["description"] == "Tâche accentuee"
+        # add + export + import + reexport
+        assert mock_command.call_count == 4
+        assert 'import' in mock_command.call_args_list[2][0][0]
+
+    @patch('main_fastapi.run_task_command')
+    def test_add_task_skips_repair_when_stored_value_matches(self, mock_command):
+        """Sous Linux argv preserve l'UTF-8 : aucune commande supplementaire ne doit partir."""
+        mock_command.side_effect = [
+            CommandResult(success=True, stdout="Task created", stderr="", returncode=0),
+            CommandResult(success=True, stdout='[{"id": 1, "uuid": "abc-123", "description": "T\\u00e2che accentuee"}]', stderr="", returncode=0),
+        ]
+
+        response = client.post("/api/task/add", json=TaskCreate(description="Tâche accentuee").model_dump())
+
+        assert response.status_code == 200
+        assert response.json()["success"] is True
+        assert mock_command.call_count == 2
+
     def test_add_task_no_description(self):
         """Test adding a task without description (should fail)"""
         task_data = TaskCreate(description="")  # Empty description
@@ -546,6 +586,36 @@ class TestIntegration:
         response = client.delete("/api/task/1/delete")
         assert response.status_code == 200
         assert response.json()["success"] is True
+
+
+class TestTextFieldGaps:
+    """Detection des champs texte que TaskWarrior n'a pas stockes tels que demandes"""
+
+    def test_no_gap_when_values_match(self):
+        stored = {"description": "Tâche", "project": "Essai", "tags": ["a", "b"]}
+        wanted = {"description": "Tâche", "project": "Essai", "tags": ["a", "b"]}
+        assert text_field_gaps(stored, wanted) == {}
+
+    def test_detects_corrupted_description(self):
+        stored = {"description": "Tâ£¨e"}
+        assert text_field_gaps(stored, {"description": "Tâche"}) == {"description": "Tâche"}
+
+    def test_ignores_fields_not_requested(self):
+        """Un champ absent de la demande (None) ne doit jamais declencher de reparation."""
+        stored = {"description": "Tâche", "project": "Essai"}
+        assert text_field_gaps(stored, {"description": None, "project": None}) == {}
+
+    def test_tags_compared_regardless_of_order(self):
+        stored = {"tags": ["b", "a"]}
+        assert text_field_gaps(stored, {"tags": ["a", "b"]}) == {}
+
+    def test_detects_missing_tag(self):
+        stored = {"tags": ["a"]}
+        assert text_field_gaps(stored, {"tags": ["a", "b"]}) == {"tags": ["a", "b"]}
+
+    def test_absent_field_matches_empty_request(self):
+        """Demander un projet vide sur une tache sans projet n'est pas un ecart."""
+        assert text_field_gaps({"description": "x"}, {"project": ""}) == {}
 
 
 # Run tests if executed directly
