@@ -1,6 +1,38 @@
 // @ts-check
 const { defineConfig, devices } = require('@playwright/test');
 
+/*
+ * Cible des tests.
+ *
+ * Par defaut : backend FastAPI local sur le port 8000 (cf. main_fastapi.py).
+ * Surchargeable par variables d'environnement, pour couvrir les 3 etages de test :
+ *
+ *   dev-pc    (defaut)                      -> demarre main_fastapi.py sur 8000
+ *   staging   PW_BASE_URL=http://localhost:8000 PW_NO_SERVER=1
+ *   telephone PW_BASE_URL=http://localhost:1875 PW_NO_SERVER=1   (via adb forward)
+ *
+ * PW_NO_SERVER=1 empeche Playwright de lancer un backend local quand on cible
+ * un serveur deja demarre (telephone, staging).
+ */
+const PORT = process.env.PW_PORT || '8000';
+const BASE_URL = process.env.PW_BASE_URL || `http://localhost:${PORT}`;
+const START_SERVER = !process.env.PW_NO_SERVER;
+
+/*
+ * Garde-fou : les tests executent de vraies commandes Taskwarrior des lors que
+ * DEVELOPER_MODE est desactive. Sans TASKRC explicite, Taskwarrior ecrirait dans
+ * la base de PRODUCTION (~/.task, synchronisee par Syncthing).
+ * Retire ce bloc si tu preferes gerer l'isolation autrement.
+ */
+if (START_SERVER && !process.env.TASKRC && !process.env.TASKDATA) {
+  throw new Error(
+    "TASKRC (ou TASKDATA) n'est pas defini : refus de lancer les tests pour ne pas " +
+    "ecrire dans la base Taskwarrior de production.\n" +
+    "  PC      : $env:TASKRC='C:/Users/irpaui/taskwarrior-dev/taskrc'\n" +
+    "  Termux  : export TASKRC=~/taskwarrior-staging/taskrc"
+  );
+}
+
 module.exports = defineConfig({
   testDir: './tests',
   /* Maximum time one test can run for. */
@@ -21,7 +53,7 @@ module.exports = defineConfig({
   /* Shared settings for all the projects below. */
   use: {
     /* Base URL to use in actions like `await page.goto('/')`. */
-    baseURL: 'http://localhost:5000',
+    baseURL: BASE_URL,
 
     /* Collect trace when retrying the failed test. */
     trace: 'on-first-retry',
@@ -39,10 +71,16 @@ module.exports = defineConfig({
     },
   ],
 
-  /* Run your local dev server before starting the tests */
-  webServer: {
-    command: 'python3 app.py',
-    url: 'http://localhost:5000',
-    reuseExistingServer: !process.env.CI,
-  },
+  /* Run your local dev server before starting the tests.
+   * `python` et non `python3` : portable Windows + Termux. */
+  ...(START_SERVER
+    ? {
+        webServer: {
+          command: process.env.PW_SERVER_CMD || 'python main_fastapi.py',
+          url: BASE_URL,
+          reuseExistingServer: !process.env.CI,
+          timeout: 60 * 1000,
+        },
+      }
+    : {}),
 });
