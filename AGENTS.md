@@ -143,9 +143,18 @@ Sans ces UDA, les requêtes de `twplanner.py` échouent ou renvoient des résult
 - Le filtre composé de `twplanner.py` se comporte identiquement sous Windows, parenthèses
   échappées (`\(`) ou non.
 - **`estTime` n'accepte pas `1h30`** (rejeté, code retour 2). Formats valides : `90min`,
-  `1.5h`, `PT1H30M`. `POST /api/task/add` transmet la valeur brute sans validation, et
-  `run_task_command` ne remonte pas d'erreur exploitable au frontend : une saisie invalide
-  **échoue silencieusement**. Défaut connu, non corrigé.
+  `1.5h`, `PT1H30M`. `POST /api/task/add` transmet la valeur brute sans validation. L'API
+  renvoie bien `success: false` avec le message d'erreur de Taskwarrior, et
+  `calendar-planner.js` le propage — mais son affichage à l'écran n'a pas été vérifié.
+  Validation d'entrée toujours absente : défaut connu, non corrigé.
+- **Non-ASCII sous Windows : deux défauts corrigés le 2026-09-18.** `task.exe` corrompt les
+  accents passés dans ses **arguments** (vérifié : identique avec `shell=True`, `shell=False`,
+  PowerShell natif et `chcp 65001` ; seul `task import` depuis un fichier UTF-8 y survit) ;
+  et `run_task_command` décodait la sortie avec l'encodage local (`cp1252`) au lieu d'UTF-8.
+  Corrigés respectivement par `repair_text_fields()` et par `encoding='utf-8'`.
+  Ne concerne que **dev-pc** : sous Linux `argv` gère l'UTF-8, et les correctifs y sont
+  inertes. **Non validé sur staging** (Taskwarrior 3.3.0) — obligatoire avant prod, cf. §4.
+  Détail : `openspec/changes/fix-nonascii-argv-windows/`.
 
 ---
 
@@ -153,8 +162,9 @@ Sans ces UDA, les requêtes de `twplanner.py` échouent ou renvoient des résult
 
 - Python : PEP 8, pas de linter configuré.
 - JS : ES6+, vanilla, aucune étape de build. Ne pas introduire de bundler sans discussion.
-- Frontend découpé par écran : `main.js` / `day-planner.js` / `calendar-planner.js`, plus les
-  composants `task-card.js` et `task-editor.js` avec leurs CSS et templates HTML dédiés.
+- Frontend découpé par écran : `main.js` / `calendar-planner.js`, plus les composants
+  `task-card.js` et `task-editor.js` avec leurs CSS et templates HTML dédiés.
+  L'écran `day-planner` a été supprimé le 2026-09-18, remplacé par `calendar-planner`.
 - `openspec/changes/` documente les changements structurants ; consulter `archive/` pour
   l'historique des migrations avant de proposer une refonte.
 
@@ -187,11 +197,16 @@ scoop install wilt00/taskwarrior
 ```
 
 Validé sur base isolée : UDA, urgency avec coefficients personnalisés, `export`, `_projects`,
-`+LATEST`, `add` via `shell=True` avec accents/apostrophes/parenthèses, et le filtre composé de
+`+LATEST`, `add` via `shell=True` avec apostrophes/parenthèses, et le filtre composé de
 `twplanner.py`. La réécriture d'un backend Windows est donc **abandonnée** : son vrai coût
 n'était pas les ~10 commandes appelées, mais le DSL de filtre, le calcul d'urgency, les
 dépendances, la récurrence et les contextes — avec un risque de divergence silencieuse sur des
 données réelles synchronisées.
+
+**Correction du 2026-09-18** : cette validation ne comportait en réalité **aucun caractère
+accentué**, et la mention « avec accents » ci-dessus était fausse. Deux défauts distincts et
+cumulés ont été trouvés depuis, puis corrigés — voir
+`openspec/changes/fix-nonascii-argv-windows/` et §5.
 
 ### 2026-09-18 — Passage au modèle deux clones + git
 

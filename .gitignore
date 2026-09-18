@@ -43,6 +43,10 @@ coverage/
 # Fichiers Playwright
 playwright-report/
 test-results/
+# Captures regenerees a chaque execution des tests (task-manager.spec.js)
+homepage.png
+before-submit.png
+after-add.png
 
 # Fichiers temporaires
 *~

@@ -7,6 +7,7 @@ A modern FastAPI server to interface with TaskWarrior commands
 import subprocess
 import json
 import os
+import tempfile
 from datetime import datetime
 from typing import List, Optional
 from contextlib import asynccontextmanager
@@ -47,7 +48,13 @@ def run_task_command(command):
             )
         
         # Normal execution when not in developer mode
-        result = subprocess.run(command, shell=True, capture_output=True, text=True)
+        # L'encodage est impose : TaskWarrior ecrit de l'UTF-8, alors que `text=True`
+        # seul decoderait avec l'encodage local (cp1252 sous Windows) et rendrait les
+        # accents en mojibake -- "Tache" accentuee ressortait en "TA^che".
+        result = subprocess.run(
+            command, shell=True, capture_output=True,
+            encoding='utf-8', errors='replace'
+        )
         return CommandResult(
             success=result.returncode == 0,
             stdout=result.stdout,
@@ -61,6 +68,77 @@ def run_task_command(command):
             stderr=str(e),
             returncode=-1
         )
+
+
+def text_field_gaps(task, expected):
+    """Compare les champs texte stockes a ceux demandes, et renvoie les ecarts."""
+    gaps = {}
+    for field, wanted in expected.items():
+        if wanted is None:
+            continue
+        if field == 'tags':
+            if set(task.get('tags') or []) != set(wanted):
+                gaps['tags'] = list(wanted)
+        elif task.get(field, '') != wanted:
+            gaps[field] = wanted
+    return gaps
+
+
+def repair_text_fields(task, expected):
+    """Reecrit les champs texte que TaskWarrior n'a pas stockes tels qu'ils ont ete demandes.
+
+    Sous Windows, task.exe corrompt le non-ASCII passe dans ses arguments : une
+    description "Tache" accentuee ressort mutilee. Son moteur gere pourtant tres bien
+    l'UTF-8 -- `task import` depuis un fichier UTF-8 restitue la valeur intacte. On
+    repare donc apres coup, par ce canal.
+    Voir openspec/changes/fix-nonascii-argv-windows/proposal.md
+
+    Sous Linux les arguments preservent l'UTF-8 : aucun ecart n'est constate et cette
+    fonction ne lance aucune commande.
+
+    Renvoie la tache reexportee si une reparation a eu lieu, sinon None.
+    """
+    gaps = text_field_gaps(task, expected)
+    task_uuid = task.get('uuid')
+    if not gaps or not task_uuid:
+        return None
+
+    # 'id' et 'urgency' sont calcules par TaskWarrior : on ne les reinjecte pas.
+    payload = {k: v for k, v in task.items() if k not in ('id', 'urgency')}
+    payload.update(gaps)
+
+    path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode='w', suffix='.json', encoding='utf-8', delete=False
+        ) as handle:
+            json.dump([payload], handle, ensure_ascii=False)
+            path = handle.name
+
+        if not run_task_command(f'task import "{path}"').success:
+            return None
+
+        export_result = run_task_command(f'task {task_uuid} export')
+        if export_result.success and export_result.stdout.strip():
+            repaired = json.loads(export_result.stdout)
+            if repaired:
+                return repaired[0]
+    except (OSError, ValueError) as e:
+        print(f"Echec de la reparation des champs texte: {e}")
+    finally:
+        if path:
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
+    return None
+
+
+def cleaned_tags(tags):
+    """Normalise une liste de tags comme le font les commandes d'ecriture."""
+    if tags is None:
+        return None
+    return [tag.strip() for tag in tags if tag and tag.strip()]
 
 
 # Create FastAPI app with lifespan management
@@ -293,10 +371,21 @@ async def modify_task(task_id: str, task_data: TaskModify):
                 try:
                     task = json.loads(export_result.stdout)
                     if task:  # Check that the task list is not empty
+                        modified = task[0]
+                        applied_description = (
+                            task_data.description
+                            if task_data.description and task_data.description.strip()
+                            else None
+                        )
+                        repaired = repair_text_fields(modified, {
+                            'description': applied_description,
+                            'project': task_data.project,
+                            'tags': cleaned_tags(task_data.tags),
+                        })
                         return ResponseModel(
                             success=True,
                             message=result.stdout,
-                            task=task[0]  # Take the first task
+                            task=repaired or modified
                         )
                 except (json.JSONDecodeError, IndexError) as e:
                     print(f"Error parsing task data: {e}")
@@ -358,10 +447,16 @@ async def add_task(task_data: TaskCreate):
             try:
                 task = json.loads(export_result.stdout)
                 if task:  # Check that the task list is not empty
+                    created = task[0]
+                    repaired = repair_text_fields(created, {
+                        'description': task_data.description,
+                        'project': task_data.project,
+                        'tags': cleaned_tags(task_data.tags) or None,
+                    })
                     return ResponseModel(
                         success=True,
                         message='Task created successfully',
-                        task=task[0]  # Take the first task created
+                        task=repaired or created
                     )
             except (json.JSONDecodeError, IndexError) as e:
                 print(f"Error parsing task data: {e}")
