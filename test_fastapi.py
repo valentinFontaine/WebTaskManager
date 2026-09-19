@@ -16,6 +16,7 @@ from unittest.mock import patch, MagicMock
 sys.path.insert(0, os.path.dirname(__file__))
 
 from fastapi.testclient import TestClient
+import main_fastapi
 from main_fastapi import app, run_task_command, text_field_gaps
 from config import TASK_TIMEOUT
 from fastapi_models import TaskBase, TaskCreate, TaskModify, ResponseModel, CommandResult
@@ -739,3 +740,87 @@ class TestKanban:
         assert response.status_code == 200
         commande_modify = mock_command.call_args_list[0][0][0]
         assert 'state:' not in commande_modify
+
+
+class TestContextesEtConfig:
+    """Endpoints de lecture requis par nav.js."""
+
+    SHOW = (
+        "context.pro.read=+pro\n"
+        "context.pro.write=+pro\n"
+        "context.perso.read=+perso\n"
+        "context.perso.write=+perso\n"
+        "context.pro:perso.read=+pro or +perso\n"
+        "uda.estTime.type=duration\n"
+    )
+
+    def setup_method(self):
+        # Le cache des contextes est un global du module : sans remise a zero,
+        # un test contaminerait les suivants selon l'ordre d'execution.
+        main_fastapi._ctx_cache = {}
+        main_fastapi._ctx_cache_ts = 0.0
+
+    @patch('main_fastapi.run_task_command')
+    def test_contextes_lus_depuis_task_show(self, mock_command):
+        mock_command.side_effect = [
+            CommandResult(success=True, stdout=self.SHOW, stderr="", returncode=0),
+            CommandResult(success=True, stdout="pro\n", stderr="", returncode=0),
+        ]
+
+        data = client.get("/api/contexts").json()
+
+        assert data["success"] is True
+        assert data["contexts"] == ["pro", "perso"]
+        assert data["filters"]["pro"] == "+pro"
+        assert data["active"] == "pro"
+
+    @patch('main_fastapi.run_task_command')
+    def test_contextes_composites_masques(self, mock_command):
+        """`pro:perso` est de la plomberie TaskWarrior, pas un contexte utilisateur."""
+        mock_command.side_effect = [
+            CommandResult(success=True, stdout=self.SHOW, stderr="", returncode=0),
+            CommandResult(success=True, stdout="", stderr="", returncode=0),
+        ]
+
+        data = client.get("/api/contexts").json()
+
+        assert "pro:perso" not in data["contexts"]
+        # ... mais il reste expose dans les filtres, comme dans la PR d'origine.
+        assert "pro:perso" in data["filters"]
+
+    @patch('main_fastapi.run_task_command')
+    def test_le_cache_evite_un_second_task_show(self, mock_command):
+        """`task _show` dumpe toute la configuration : on ne le rejoue pas a chaque appel."""
+        mock_command.side_effect = [
+            CommandResult(success=True, stdout=self.SHOW, stderr="", returncode=0),
+            CommandResult(success=True, stdout="", stderr="", returncode=0),
+            CommandResult(success=True, stdout="", stderr="", returncode=0),
+        ]
+
+        client.get("/api/contexts")
+        client.get("/api/contexts")
+
+        appels_show = [c for c in mock_command.call_args_list if '_show' in c[0][0]]
+        assert len(appels_show) == 1
+
+    @patch('main_fastapi.run_task_command')
+    def test_aucun_contexte_defini(self, mock_command):
+        """Un taskrc sans contexte ne doit pas faire echouer l'endpoint."""
+        mock_command.side_effect = [
+            CommandResult(success=True, stdout="uda.estTime.type=duration\n",
+                          stderr="", returncode=0),
+            CommandResult(success=True, stdout="", stderr="", returncode=0),
+        ]
+
+        data = client.get("/api/contexts").json()
+
+        assert data["success"] is True
+        assert data["contexts"] == []
+        assert data["active"] == ""
+
+    def test_config_expose_le_delai_de_notification(self):
+        """nav.js lit `notification_timeout` a la racine, sans regarder `success`."""
+        from config import NOTIFICATION_TIMEOUT
+        data = client.get("/api/config").json()
+
+        assert data["notification_timeout"] == NOTIFICATION_TIMEOUT

@@ -7,7 +7,9 @@ A modern FastAPI server to interface with TaskWarrior commands
 import subprocess
 import json
 import os
+import re
 import tempfile
+import time
 from datetime import datetime
 from typing import List, Optional
 from contextlib import asynccontextmanager
@@ -17,7 +19,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse
 
-from config import DEVELOPER_MODE, DEBUG_FILE, TASK_TIMEOUT, KANBAN_COLUMNS
+from config import (
+    DEVELOPER_MODE, DEBUG_FILE, TASK_TIMEOUT, KANBAN_COLUMNS,
+    NOTIFICATION_TIMEOUT, CONTEXT_CACHE_TTL,
+)
 from fastapi_models import TaskBase, TaskCreate, TaskModify, ResponseModel, CommandResult
 
 
@@ -291,6 +296,55 @@ async def get_projects():
             success=False,
             error=result.stderr
         )
+
+
+# Cache de la liste des contextes. `task _show` dumpe toute la configuration,
+# ce qui est cher pour une donnee qui ne change qu'a la main dans le taskrc.
+_ctx_cache = {}
+_ctx_cache_ts = 0.0
+
+
+def get_context_filters():
+    """Renvoie {nom: filtre de lecture} pour chaque contexte defini."""
+    global _ctx_cache, _ctx_cache_ts
+    if _ctx_cache_ts and (time.time() - _ctx_cache_ts) < CONTEXT_CACHE_TTL:
+        return _ctx_cache
+    result = run_task_command('task _show')
+    filters = {}
+    if result.success:
+        for line in result.stdout.splitlines():
+            m = re.match(r'^context\.(.+?)\.read=(.+)$', line)
+            if m:
+                filters[m.group(1)] = m.group(2)
+    _ctx_cache, _ctx_cache_ts = filters, time.time()
+    return filters
+
+
+@app.get("/api/contexts")
+async def get_contexts():
+    """Contextes definis, leurs filtres, et celui qui est actif."""
+    filters = get_context_filters()
+    # Les contextes composites (nom contenant ':') sont de la plomberie interne
+    # de TaskWarrior : ils n'ont pas a apparaitre dans l'interface.
+    contexts = [nom for nom in filters if ':' not in nom]
+
+    actif = run_task_command('task _get rc.context')
+    return ResponseModel(
+        success=True,
+        contexts=contexts,
+        filters=filters,
+        active=actif.stdout.strip() if actif.success else '',
+    )
+
+
+@app.get("/api/config")
+async def get_client_config():
+    """Reglages lus par le frontend.
+
+    Reponse a plat plutot qu'un ResponseModel : nav.js lit directement
+    `notification_timeout` a la racine, sans regarder `success`.
+    """
+    return {"notification_timeout": NOTIFICATION_TIMEOUT}
 
 
 @app.get("/api/kanban/columns")

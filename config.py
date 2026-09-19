@@ -27,3 +27,11 @@ TASK_TIMEOUT = 15
 #   uda.state.type=string
 #   uda.state.label=State
 KANBAN_COLUMNS = ['backlog', 'todo', 'doing', 'review', 'done']
+
+# Duree d'affichage des notifications du frontend, en millisecondes.
+# 0 desactive la disparition automatique : la notification porte alors une croix.
+NOTIFICATION_TIMEOUT = 3000
+
+# Duree de vie du cache de la liste des contextes, en secondes.
+# `task _show` est couteux et la liste des contextes ne bouge quasiment jamais.
+CONTEXT_CACHE_TTL = 30
