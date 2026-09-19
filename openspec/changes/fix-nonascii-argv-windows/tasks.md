@@ -26,10 +26,47 @@
 - [x] Les tests unitaires préexistants passent sans modification (37 au total)
 - [x] Bout en bout Playwright avec descriptions accentuées : 3/3
 
+## Validé sur staging — 2026-09-19
+
+Termux, Taskwarrior **3.5.0** (et non 3.3.0 : AGENTS.md était périmé sur ce point).
+
+- [x] 37 tests unitaires verts sur le téléphone
+- [x] `test_add_task_skips_repair_when_stored_value_matches` vert : le chemin de réparation
+      **ne se déclenche pas** sous Linux. Le correctif Windows ne change rien à la prod.
+- [x] Création et modification accentuées vérifiées directement dans la base
+- [x] Playwright 3/3 depuis le PC contre le backend du téléphone
+      (`adb forward tcp:1875 tcp:8000`, puis `PW_NO_SERVER=1 PW_BASE_URL=http://localhost:1875`)
+- [x] Couverture de `PUT /modify` de bout en bout
+
+Rapport détaillé : `rapport-staging.md`.
+
+## Défaut découvert pendant la validation : filtrage des tags accentués
+
+**Hors périmètre de ce changement, et sans rapport avec lui** : un tag accentué s'affiche
+correctement mais reste introuvable par son propre filtre.
+
+| Commande | Sortie |
+|---|---|
+| `task export` | `"tags":["été","noël"]` — correct |
+| `task _unique tags \| cat -A` | `\u00e9t\u00e9,no\u00ebl$` — échappé |
+| `task +été count` | `0` — introuvable |
+
+Hypothèse cohérente avec les trois : la clé du tag est stockée échappée, déséchappée à
+l'export, mais pas échappée lors de la construction du filtre. Le backend passe `+été`
+exactement comme la ligne de commande : aucun `ensure_ascii` par défaut n'existe dans le
+dépôt (seul `json.dump` de `main_fastapi.py:115` sérialise, en `ensure_ascii=False`).
+
+- [ ] Confirmer par un test sans backend :
+      `task rc.confirmation=off add "x" +café ; task +café count`
+- [ ] Si confirmé, remonter en amont et décider si `add`/`modify` doivent passer les tags
+      par `import` plutôt que par `+tag`
+
 ## Reste à faire
 
-- [ ] **Valider sur staging** (Termux, Taskwarrior 3.3.0) — non facultatif, cf. AGENTS.md §4
 - [ ] Remonter le défaut `argv` en amont, au fork wilt00
-- [ ] Couvrir `PUT /modify` en bout en bout : seul `add` l'est aujourd'hui
+- [ ] Ajouter un tag accentué au scénario Playwright : il utilise `test, automatique`,
+      du pur ASCII, et n'aurait pas vu le défaut ci-dessus
 - [ ] `twplanner.py` passe des noms de `pool` en argv (`twplanner.py:145`) : non audité,
       un pool accentué serait probablement affecté par le même défaut
+- [ ] Documenter dans AGENTS.md que Termux exige `ANDROID_API_LEVEL=24` pour compiler
+      `pydantic-core`
