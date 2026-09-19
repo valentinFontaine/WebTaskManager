@@ -29,24 +29,29 @@ de serveur, accessible depuis le PC de travail par un port-forward adb.
 | Env | Machine | Taskwarrior | Données | Rôle |
 |---|---|---|---|---|
 | **dev-pc** | PC Windows | 3.5.0.6 (fork wilt00, *nightly*) | `C:\Users\irpaui\taskwarrior-dev` | itération et tests réels |
-| **dev-tel** | Termux | 3.4.2 | base de dev dédiée | dev ponctuel depuis le téléphone |
-| **staging** | Termux | 3.4.2 | `~/.task-staging` | validation avant prod |
-| **prod** | Termux | 3.4.2 | `~/.task` (Syncthing) | usage quotidien réel |
+| **dev-tel** | Termux | 3.5.0 | base de dev dédiée | dev ponctuel depuis le téléphone |
+| **staging** | Termux | 3.5.0 | `~/.task-staging` | validation avant prod |
+| **prod** | Termux | 3.5.0 | `~/.task` (Syncthing) | usage quotidien réel |
 
 Le code circule par **git**. Les données circulent par **Syncthing**, sur un canal séparé —
 elles ne passent jamais par le dépôt.
 
 ### Pièges de cette topologie
 
-- **Écart de version 3.5.0.6 (PC) / 3.4.2 (téléphone).** Un test vert sur le PC ne prouve rien
-  sur le comportement en prod. C'est la raison d'être de l'étage staging.
-  La parité exacte est **hors d'atteinte**, et ce n'est pas un provisoire : le PC ne peut tourner
-  que sur le fork wilt00, qui a sa propre numérotation à quatre chiffres et se déclare
-  *nightly build* ; le dépôt Termux plafonne à `3.4.2-2`. L'objectif réaliste est d'aligner les
-  trois machines Termux entre elles ; l'écart résiduel avec le PC est couvert par staging.
-  Vérifié le 2026-09-19.
-- **Un binaire 3.5 peut migrer le schéma SQLite** d'une base 3.3 au premier écrit, et la rendre
-  illisible par le téléphone. Ne jamais pointer le `task.exe` du PC vers un `.task` synchronisé.
+- **Trois machines partagent la base de prod par Syncthing** : le téléphone (Termux), le PC
+  perso (Arch Linux) et, à terme seulement, le PC de travail. Le PC Windows **ne détient
+  aujourd'hui aucune donnée de prod** : il ne sert que de base de dev isolée. Tant que c'est
+  le cas, son écart de build est sans conséquence sur les vraies données. Faire entrer le PC
+  Windows dans le cercle Syncthing est un changement à instruire, pas à improviser.
+- **Ne jamais mettre à jour un seul pair Syncthing.** Un binaire plus récent migre le schéma
+  SQLite au premier écrit et rend la base illisible par les pairs restés en arrière ; Syncthing
+  réplique le fichier migré sans comprendre son contenu, et il n'y a pas de retour arrière
+  automatique. L'ordre est : pause de Syncthing, sauvegarde (`task export` **et** copie du
+  répertoire), mise à jour de toutes les machines, puis reprise.
+- **Le PC tourne sur le fork wilt00, qui se déclare *nightly build*** et numérote à quatre
+  chiffres (`3.5.0.6`). Même aligné sur l'amont `3.5.0`, ce n'est pas le même binaire : un test
+  vert sur le PC ne prouve rien sur le comportement en prod. C'est la raison d'être de l'étage
+  staging. Vérifié le 2026-09-19.
 - **Le PC n'a ni `node_modules` ni `venv`** dans certaines copies (exclus des transferts).
   Vérifier avant de supposer qu'une commande npm/pytest est exécutable.
 - `pull.ps1` (transfert de fichiers depuis le téléphone) exclut `.git` : une copie obtenue
