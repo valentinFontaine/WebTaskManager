@@ -7,6 +7,7 @@ Comprehensive test suite to verify the FastAPI implementation works correctly
 import pytest
 import json
 import os
+import subprocess
 import sys
 from datetime import datetime
 from unittest.mock import patch, MagicMock
@@ -16,6 +17,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from fastapi.testclient import TestClient
 from main_fastapi import app, run_task_command, text_field_gaps
+from config import TASK_TIMEOUT
 from fastapi_models import TaskBase, TaskCreate, TaskModify, ResponseModel, CommandResult
 
 
@@ -621,3 +623,58 @@ class TestTextFieldGaps:
 # Run tests if executed directly
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--tb=short"])
+
+
+class TestCommandTimeout:
+    """Le lanceur doit rendre la main meme si `task` ne repond jamais.
+
+    Sous pytest, DEVELOPER_MODE vaut True et court-circuite l'execution : ces
+    tests le desactivent pour atteindre reellement `subprocess.run`.
+    """
+
+    def _faux_subprocess(self, **kwargs):
+        return patch('main_fastapi.subprocess.run', **kwargs)
+
+    def test_timeout_renvoie_une_erreur_explicite(self):
+        """Un depassement ne doit ni lever ni bloquer, mais expliquer quoi faire."""
+        depassement = subprocess.TimeoutExpired(cmd='task export', timeout=TASK_TIMEOUT)
+        with patch('main_fastapi.DEVELOPER_MODE', False), \
+             patch('main_fastapi.log_command'), \
+             self._faux_subprocess(side_effect=depassement):
+            result = run_task_command('task export')
+
+        assert result.success is False
+        assert result.returncode == -1
+        # Le message doit orienter vers la cause la plus probable.
+        assert 'hook' in result.stderr.lower()
+        assert str(TASK_TIMEOUT) in result.stderr
+
+    def test_le_timeout_est_bien_transmis(self):
+        """Sans cet argument, une commande suspendue bloquerait la requete."""
+        with patch('main_fastapi.DEVELOPER_MODE', False), \
+             patch('main_fastapi.log_command'), \
+             self._faux_subprocess() as faux:
+            faux.return_value = MagicMock(returncode=0, stdout='', stderr='')
+            run_task_command('task export')
+
+        assert faux.call_args.kwargs['timeout'] == TASK_TIMEOUT
+
+    def test_tw_web_est_expose_aux_hooks(self):
+        """Les hooks doivent pouvoir detecter l'absence de terminal."""
+        with patch('main_fastapi.DEVELOPER_MODE', False), \
+             patch('main_fastapi.log_command'), \
+             self._faux_subprocess() as faux:
+            faux.return_value = MagicMock(returncode=0, stdout='', stderr='')
+            run_task_command('task export')
+
+        assert faux.call_args.kwargs['env']['TW_WEB'] == '1'
+
+    def test_l_encodage_utf8_reste_impose(self):
+        """Non-regression : sans lui, les accents ressortent en mojibake sous Windows."""
+        with patch('main_fastapi.DEVELOPER_MODE', False), \
+             patch('main_fastapi.log_command'), \
+             self._faux_subprocess() as faux:
+            faux.return_value = MagicMock(returncode=0, stdout='', stderr='')
+            run_task_command('task export')
+
+        assert faux.call_args.kwargs['encoding'] == 'utf-8'

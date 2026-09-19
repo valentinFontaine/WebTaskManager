@@ -17,8 +17,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse
 
-from config import DEVELOPER_MODE, DEBUG_FILE
+from config import DEVELOPER_MODE, DEBUG_FILE, TASK_TIMEOUT
 from fastapi_models import TaskBase, TaskCreate, TaskModify, ResponseModel, CommandResult
+
+
+# TW_WEB=1 signale aux hooks TaskWarrior qu'ils tournent dans un contexte web,
+# donc sans terminal : un hook bien ecrit s'abstient alors de demander une saisie.
+_TW_ENV = {**os.environ, 'TW_WEB': '1'}
 
 
 def log_command(command):
@@ -53,13 +58,25 @@ def run_task_command(command):
         # accents en mojibake -- "Tache" accentuee ressortait en "TA^che".
         result = subprocess.run(
             command, shell=True, capture_output=True,
-            encoding='utf-8', errors='replace'
+            encoding='utf-8', errors='replace',
+            env=_TW_ENV, timeout=TASK_TIMEOUT
         )
         return CommandResult(
             success=result.returncode == 0,
             stdout=result.stdout,
             stderr=result.stderr,
             returncode=result.returncode
+        )
+    except subprocess.TimeoutExpired:
+        return CommandResult(
+            success=False,
+            stdout='',
+            stderr=(
+                f"Commande interrompue apres {TASK_TIMEOUT} s. "
+                "Un hook attend peut-etre une saisie au terminal : "
+                "relancez cette commande dans un terminal pour voir ce qu'elle demande."
+            ),
+            returncode=-1
         )
     except Exception as e:
         return CommandResult(
