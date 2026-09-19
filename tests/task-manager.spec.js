@@ -123,42 +123,77 @@ test.describe('Task Manager', () => {
 
   // ── Course entre le chargement des templates et le premier rendu ───────────
   //
-  // Les templates de cartes arrivent par fetch. Si une page rend sa liste avant
-  // leur arrivee, `createTaskCard` renvoie null et `appendChild(null)` leve.
+  // En service normal, le serveur injecte le template directement dans la page
+  // et il n'y a plus de course. Mais le chemin de repli existe toujours : une
+  // page sans le marqueur d'injection recupere le template par fetch, et un
+  // rendu declenche avant son arrivee faisait lever `appendChild(null)`.
   //
-  // Ces tests ne parient pas sur le hasard : ils retardent explicitement le
-  // chargement du template, ce qui fait perdre la course a coup sur. Sans
-  // attente cote code, ils echouent ; avec, ils passent.
+  // Ces tests exercent ce chemin de repli, et ne parient pas sur le hasard :
+  // ils retirent le template injecte de la reponse HTML, puis retardent son
+  // chargement par fetch. La course est alors perdue a coup sur. Sans attente
+  // cote code, ils echouent ; avec, ils passent.
   //
-  // Ils ouvrent leur propre contexte : ils doivent partir d'un cache vide, et
-  // ne pas perturber la page partagee par les tests precedents.
+  // Ils ouvrent leur propre contexte : cache vide, et aucune interference avec
+  // la page partagee par les tests precedents.
 
   const RETARD_TEMPLATE = 1200; // ms
 
   async function pageAvecTemplateLent(browser) {
     const context = await browser.newContext();
     const page = await context.newPage();
+    // Compteurs : ils rendent le test auto-verifiant. Si la suppression du
+    // template injecte cessait de fonctionner, le fetch n'aurait pas lieu et le
+    // test passerait sans rien exercer -- exactement le piege qu'on evite ici.
+    const compteurs = { templatesRetires: 0, fetchsRetardes: 0 };
+
+    // Retirer le template injecte pour forcer le repli sur le fetch.
+    // Filtrer sur le type de ressource et non sur l'extension : la page liste
+    // est servie a `/`, que le motif `**/*.html` ne matche pas.
+    await page.route('**/*', async route => {
+      if (route.request().resourceType() !== 'document') {
+        return route.continue();
+      }
+      const reponse = await route.fetch();
+      const original = await reponse.text();
+      const html = original
+        .replace(/<template\s+id="task-card-full"[\s\S]*?<\/template>/, '');
+      if (html !== original) compteurs.templatesRetires++;
+      await route.fulfill({ response: reponse, body: html });
+    });
+
+    // Puis retarder ce fetch, pour que le premier rendu arrive avant lui.
     await page.route('**/task-card-templates.html', async route => {
+      compteurs.fetchsRetardes++;
       await new Promise(r => setTimeout(r, RETARD_TEMPLATE));
       await route.continue();
     });
-    return { context, page };
+
+    return { context, page, compteurs };
+  }
+
+  // A appeler en fin de test : sans ca, un test vert ne prouverait rien.
+  function verifierQueLeRepliAEteExerce(compteurs) {
+    expect(compteurs.templatesRetires,
+      'le template injecte aurait du etre retire de la page').toBeGreaterThan(0);
+    expect(compteurs.fetchsRetardes,
+      'le chargement de repli par fetch aurait du avoir lieu').toBeGreaterThan(0);
   }
 
   test('la liste supporte un template qui arrive en retard', async ({ browser }) => {
-    const { context, page: p } = await pageAvecTemplateLent(browser);
+    const { context, page: p, compteurs } = await pageAvecTemplateLent(browser);
     try {
       await p.goto('/');
       // Le bandeau d'erreur de la page liste ne doit jamais apparaitre.
       await expect(p.locator('#error-message')).toBeHidden();
       await expect(p.locator('.task-card').first()).toBeVisible({ timeout: 15000 });
+      verifierQueLeRepliAEteExerce(compteurs);
     } finally {
       await context.close();
     }
   });
 
   test('le calendrier supporte un template qui arrive en retard', async ({ browser }) => {
-    const { context, page: p } = await pageAvecTemplateLent(browser);
+    const { context, page: p, compteurs } = await pageAvecTemplateLent(browser);
     // calendar-planner.js signale ses erreurs par alert(), pas par un bandeau.
     const alertes = [];
     p.on('dialog', async d => { alertes.push(d.message); await d.dismiss(); });
@@ -167,6 +202,7 @@ test.describe('Task Manager', () => {
       await expect(p.locator('#unplanned-tasks .task-card').first())
         .toBeVisible({ timeout: 15000 });
       expect(alertes).toEqual([]);
+      verifierQueLeRepliAEteExerce(compteurs);
     } finally {
       await context.close();
     }

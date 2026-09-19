@@ -208,11 +208,56 @@ app.mount("/static", StaticFiles(directory=".", html=True), name="static")
 
 # API Endpoints
 
+# Le template de carte vit dans task-card-templates.html. Sans injection, chaque
+# page devait l'aller chercher par fetch, ce qui ouvrait une course avec son
+# premier rendu. Une page qui porte le marqueur ci-dessous recoit le template
+# directement dans son HTML : plus de requete, donc plus de course possible.
+#
+# Le marqueur est explicite et greppable : c'est la page qui demande, le serveur
+# ne decide pas a sa place.
+TEMPLATE_MARKER = '<!-- task-card-templates -->'
+TEMPLATE_SOURCE = 'task-card-templates.html'
+
+_tpl_cache = None
+_tpl_cache_mtime = None
+
+
+def carte_template_html():
+    """Renvoie le bloc <template id="task-card-full"> du fichier source."""
+    global _tpl_cache, _tpl_cache_mtime
+    try:
+        mtime = os.path.getmtime(TEMPLATE_SOURCE)
+    except OSError:
+        print(f"Avertissement : {TEMPLATE_SOURCE} introuvable, injection ignoree")
+        return ''
+    if _tpl_cache is not None and mtime == _tpl_cache_mtime:
+        return _tpl_cache
+
+    with open(TEMPLATE_SOURCE, encoding='utf-8') as handle:
+        contenu = handle.read()
+    trouve = re.search(r'<template\s+id="task-card-full".*?</template>', contenu, re.S)
+    if not trouve:
+        print(f"Avertissement : aucun <template id=\"task-card-full\"> dans {TEMPLATE_SOURCE}")
+    _tpl_cache = trouve.group(0) if trouve else ''
+    _tpl_cache_mtime = mtime
+    return _tpl_cache
+
+
+def page_html(chemin):
+    """Sert une page HTML, en y injectant le template si elle le demande."""
+    with open(chemin, encoding='utf-8') as handle:
+        html = handle.read()
+    if TEMPLATE_MARKER in html:
+        html = html.replace(TEMPLATE_MARKER, carte_template_html(), 1)
+    # Meme politique de cache que les autres fichiers : revalidation imposee.
+    return HTMLResponse(content=html, headers={"Cache-Control": "no-cache"})
+
+
 @app.get("/", response_class=HTMLResponse)
 async def read_root():
     """Serve the main HTML page"""
     try:
-        return FileResponse("index.html")
+        return page_html("index.html")
     except FileNotFoundError:
         return HTMLResponse(content="<h1>TaskWarrior Web UI</h1><p>Welcome to the TaskWarrior Web Interface</p>", status_code=200)
 
@@ -633,6 +678,8 @@ async def read_static_files(filename: str):
     if not os.path.exists(filename):
         raise HTTPException(status_code=404, detail="File not found")
     try:
+        if filename.endswith('.html'):
+            return page_html(filename)
         # `no-cache` n'interdit pas le cache : il impose la revalidation. Avec
         # l'ETag deja emis par FileResponse, un fichier inchange coute un 304.
         # Sans cet en-tete, le navigateur applique un cache heuristique et peut
