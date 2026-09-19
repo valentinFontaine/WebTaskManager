@@ -45,6 +45,8 @@ class TaskModify(BaseModel):
     priority: Optional[str] = None
     project: Optional[str] = None
     estTime: Optional[str] = None
+    # UDA `state` : colonne du tableau Kanban. Une chaine vide efface l'etat.
+    state: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -59,6 +61,7 @@ class ResponseModel(BaseModel):
     tasks: Optional[List[dict]] = None  # Use dict instead of TaskBase to avoid validation issues
     task: Optional[dict] = None  # Use dict instead of TaskBase to avoid validation issues
     projects: Optional[List[str]] = None
+    columns: Optional[List[str]] = None
 
     class Config:
         from_attributes = True

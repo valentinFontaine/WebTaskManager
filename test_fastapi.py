@@ -678,3 +678,64 @@ class TestCommandTimeout:
             run_task_command('task export')
 
         assert faux.call_args.kwargs['encoding'] == 'utf-8'
+
+
+class TestKanban:
+    """Tableau Kanban : colonnes configurees et deplacement d'une tache."""
+
+    def test_colonnes_exposees(self):
+        """La page lit `columns` a la racine de la reponse."""
+        from config import KANBAN_COLUMNS
+        response = client.get("/api/kanban/columns")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert data["columns"] == KANBAN_COLUMNS
+
+    @patch('main_fastapi.run_task_command')
+    def test_deplacer_une_tache_ecrit_l_uda_state(self, mock_command):
+        """Glisser une carte doit produire `state:doing`, pas autre chose."""
+        mock_command.side_effect = [
+            CommandResult(success=True, stdout="Task modified", stderr="", returncode=0),
+            CommandResult(success=True, stdout='[{"id": 1, "description": "T", "state": "doing"}]',
+                          stderr="", returncode=0),
+        ]
+
+        response = client.put("/api/task/1/modify", json={"state": "doing"})
+
+        assert response.status_code == 200
+        assert response.json()["success"] is True
+        commande_modify = mock_command.call_args_list[0][0][0]
+        assert 'state:doing' in commande_modify
+
+    @patch('main_fastapi.run_task_command')
+    def test_etat_vide_efface_l_uda(self, mock_command):
+        """Remettre une carte dans "Sans etat" doit effacer l'UDA, pas l'ignorer."""
+        mock_command.side_effect = [
+            CommandResult(success=True, stdout="Task modified", stderr="", returncode=0),
+            CommandResult(success=True, stdout='[{"id": 1, "description": "T"}]',
+                          stderr="", returncode=0),
+        ]
+
+        response = client.put("/api/task/1/modify", json={"state": ""})
+
+        assert response.status_code == 200
+        commande_modify = mock_command.call_args_list[0][0][0]
+        assert 'state:' in commande_modify
+        assert 'state:doing' not in commande_modify
+
+    @patch('main_fastapi.run_task_command')
+    def test_state_absent_ne_touche_pas_l_uda(self, mock_command):
+        """Non-regression : une modification sans `state` ne doit rien ecrire dessus."""
+        mock_command.side_effect = [
+            CommandResult(success=True, stdout="Task modified", stderr="", returncode=0),
+            CommandResult(success=True, stdout='[{"id": 1, "description": "Nouvelle"}]',
+                          stderr="", returncode=0),
+        ]
+
+        response = client.put("/api/task/1/modify", json={"description": "Nouvelle"})
+
+        assert response.status_code == 200
+        commande_modify = mock_command.call_args_list[0][0][0]
+        assert 'state:' not in commande_modify

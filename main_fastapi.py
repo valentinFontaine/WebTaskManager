@@ -17,7 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse
 
-from config import DEVELOPER_MODE, DEBUG_FILE, TASK_TIMEOUT
+from config import DEVELOPER_MODE, DEBUG_FILE, TASK_TIMEOUT, KANBAN_COLUMNS
 from fastapi_models import TaskBase, TaskCreate, TaskModify, ResponseModel, CommandResult
 
 
@@ -293,6 +293,12 @@ async def get_projects():
         )
 
 
+@app.get("/api/kanban/columns")
+async def get_kanban_columns():
+    """Colonnes du tableau Kanban, telles que configurees dans config.py."""
+    return ResponseModel(success=True, columns=KANBAN_COLUMNS)
+
+
 @app.post("/api/task/{task_id}/start")
 async def start_task(task_id: str):
     """Start a task"""
@@ -376,6 +382,10 @@ async def modify_task(task_id: str, task_data: TaskModify):
             
     if task_data.estTime is not None and task_data.estTime:
         modifications.append(f'estTime:{task_data.estTime}')
+
+    if task_data.state is not None:
+        # Une chaine vide efface l'UDA, comme pour project et priority.
+        modifications.append(f'state:{task_data.state}' if task_data.state else 'state:')
 
     if modifications:
         mod_string = ' '.join(modifications)
