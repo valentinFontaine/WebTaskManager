@@ -54,6 +54,22 @@ class TaskWarriorUI {
             button.addEventListener('click', (e) => this.setContext(e.target.getAttribute('data-context')));
         });
 
+        // nav.js : statuts et contextes filtrent cote serveur, on recharge.
+        document.addEventListener('tw-filter-change', () => this.loadTasks());
+
+        // nav.js : le bouton + de la barre ouvre l'editeur.
+        document.addEventListener('tw-open-add', () => {
+            if (typeof taskEditor !== 'undefined') taskEditor.show();
+        });
+
+        // nav.js : bandeau de notification.
+        document.addEventListener('tw-show-notification', (e) => {
+            const { message, type } = e.detail || {};
+            if (message && typeof this.showNotification === 'function') {
+                this.showNotification(message, type || 'success');
+            }
+        });
+
         // Add event listener for the toggle filter buttons
         const toggleFilterBtn = document.getElementById('filter-planned-incomplete-btn');
         const todayFilterBtn = document.getElementById('filter-today-btn');
@@ -111,7 +127,7 @@ class TaskWarriorUI {
 
             // Load tasks and projects in parallel
             const [tasksResponse, projectsResponse] = await Promise.all([
-                fetch('/api/tasks'),
+                fetch('/api/tasks?' + (window.twNav ? window.twNav.stateToParams() : 'status=pending')),
                 fetch('/api/projects')
             ]);
 

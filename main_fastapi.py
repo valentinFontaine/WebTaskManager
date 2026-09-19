@@ -633,7 +633,12 @@ async def read_static_files(filename: str):
     if not os.path.exists(filename):
         raise HTTPException(status_code=404, detail="File not found")
     try:
-        return FileResponse(filename)
+        # `no-cache` n'interdit pas le cache : il impose la revalidation. Avec
+        # l'ETag deja emis par FileResponse, un fichier inchange coute un 304.
+        # Sans cet en-tete, le navigateur applique un cache heuristique et peut
+        # servir un JS perime pendant des heures -- apres un `git pull` sur le
+        # telephone, l'interface resterait sur l'ancienne version.
+        return FileResponse(filename, headers={"Cache-Control": "no-cache"})
     except (FileNotFoundError, RuntimeError):
         raise HTTPException(status_code=404, detail="File not found")
 

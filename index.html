@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="task-card-styles.css">
     <link rel="stylesheet" href="task-editor-styles.css">
+    <script src="nav.js"></script>
     <script src="task-editor.js"></script>
     <script src="task-card.js"></script>
     <script src="main.js"></script>
@@ -16,24 +17,8 @@
         <header>
             <div class="header-content">
                 <h1>TaskWarrior Web UI</h1>
-                <div class="context-selector">
-                    <span class="context-label">Context:</span>
-                    <div class="context-options">
-                        <button type="button" class="context-option" data-context="">All</button>
-                        <button type="button" class="context-option" data-context="pro">Pro</button>
-                        <button type="button" class="context-option" data-context="perso">Perso</button>
-                    </div>
-                </div>
             </div>
             <div class="header-actions">
-                <a href="calendar-planner.html" class="btn btn-secondary">
-                    <span class="icon">📆</span>
-                    Calendrier
-                </a>
-                <a href="kanban.html" class="btn btn-secondary">
-                    <span class="icon">🗂️</span>
-                    Kanban
-                </a>
                 <button id="add-task-btn" class="btn btn-success header-add-btn">
                     <span class="icon">➕</span>
                 </button>
