@@ -258,6 +258,12 @@ test.describe('Task Manager', () => {
       expect((await creation.json()).success).toBe(true);
 
       await p.goto('/calendar-planner.html');
+
+      // La bascule « Pretes seulement » masque les taches sans duree estimee,
+      // et c'est precisement le cas teste ici : il faut la decocher, comme le
+      // ferait l'utilisateur voulant planifier une tache non estimee.
+      await p.locator('#filter-ready-only').uncheck();
+
       const carte = p.locator('#unplanned-tasks .task-card', { hasText: description });
       await expect(carte).toBeVisible({ timeout: 15000 });
       await carte.click();
@@ -269,6 +275,57 @@ test.describe('Task Manager', () => {
       await expect(titre).toHaveValue(description);
 
       expect(alertes).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  });
+
+  // ── Bascule « pretes a planifier seulement » ───────────────────────────────
+  //
+  // Une tache n'est planifiable confortablement que si sa duree est connue.
+  // La bascule, active par defaut, masque celles qui n'ont pas d'estTime --
+  // sans les rendre inaccessibles : la decocher les fait revenir.
+
+  test('la bascule masque les taches sans duree estimee', async ({ browser }) => {
+    const context = await browser.newContext();
+    const p = await context.newPage();
+
+    try {
+      const marqueur = Date.now();
+      const avecDuree = `Avec duree ${marqueur}`;
+      const sansDuree = `Sans duree ${marqueur}`;
+
+      for (const [description, estTime] of [[avecDuree, '1h'], [sansDuree, null]]) {
+        const data = estTime ? { description, estTime } : { description };
+        const r = await p.request.post('/api/task/add', { data });
+        expect((await r.json()).success).toBe(true);
+      }
+
+      await p.goto('/calendar-planner.html');
+
+      const bascule = p.locator('#filter-ready-only');
+      await expect(bascule).toBeVisible({ timeout: 15000 });
+      await expect(bascule).toBeChecked();
+
+      const carteAvec = p.locator('#unplanned-tasks .task-card', { hasText: avecDuree });
+      const carteSans = p.locator('#unplanned-tasks .task-card', { hasText: sansDuree });
+
+      // Bascule active : seule la tache estimee est proposee.
+      await expect(carteAvec).toBeVisible({ timeout: 15000 });
+      await expect(carteSans).toHaveCount(0);
+
+      // Decochee : les deux reviennent. Cette seconde moitie rend le test
+      // auto-verifiant -- sans elle, un test ou AUCUNE carte ne s'affiche
+      // passerait au vert.
+      await bascule.uncheck();
+      await expect(carteSans).toBeVisible({ timeout: 10000 });
+      await expect(carteAvec).toBeVisible();
+
+      // Le choix survit a un rechargement.
+      await p.reload();
+      await expect(p.locator('#filter-ready-only')).not.toBeChecked();
+      await expect(p.locator('#unplanned-tasks .task-card', { hasText: sansDuree }))
+        .toBeVisible({ timeout: 15000 });
     } finally {
       await context.close();
     }

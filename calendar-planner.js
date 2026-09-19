@@ -9,9 +9,24 @@
 let calendar;
 let unplannedTasks = [];
 let allTasks = [];
+// `readyOnly` : ne proposer que les taches dont la duree estimee est connue.
+// Actif par defaut -- c'est la vue de travail attendue -- mais reversible d'un
+// clic, et le choix est retenu d'une visite a l'autre.
+const READY_ONLY_KEY = 'tw-calendar-ready-only';
+
+function lireReadyOnly() {
+    try {
+        const stocke = localStorage.getItem(READY_ONLY_KEY);
+        return stocke === null ? true : stocke === 'true';
+    } catch {
+        return true;
+    }
+}
+
 let currentFilter = {
     pool: 'all',
-    sort: 'urgency'
+    sort: 'urgency',
+    readyOnly: lireReadyOnly()
 };
 let selectedTaskCard = null;
 let selectedTaskData = null;
@@ -175,6 +190,16 @@ function setupEventListeners() {
         currentFilter.pool = e.target.value;
         filterAndDisplayTasks();
     });
+
+    const basculePretes = document.getElementById('filter-ready-only');
+    if (basculePretes) {
+        basculePretes.checked = currentFilter.readyOnly;
+        basculePretes.addEventListener('change', (e) => {
+            currentFilter.readyOnly = e.target.checked;
+            try { localStorage.setItem(READY_ONLY_KEY, String(e.target.checked)); } catch {}
+            filterAndDisplayTasks();
+        });
+    }
 
     document.getElementById('sort-tasks').addEventListener('change', (e) => {
         currentFilter.sort = e.target.value;
@@ -672,6 +697,16 @@ function filterAndDisplayTasks() {
         );
     }
 
+    // Ne garder que les taches pretes a etre planifiees, c'est-a-dire dont la
+    // duree est exploitable. `parseEstTime` fait autorite : une valeur presente
+    // mais illisible ne rend pas la tache prete pour autant.
+    let masquees = 0;
+    if (currentFilter.readyOnly) {
+        const avant = filteredTasks.length;
+        filteredTasks = filteredTasks.filter(task => parseEstTime(task.estTime));
+        masquees = avant - filteredTasks.length;
+    }
+
     // Trier
     filteredTasks.sort((a, b) => {
         switch (currentFilter.sort) {
@@ -691,23 +726,30 @@ function filterAndDisplayTasks() {
         }
     });
 
-    displayUnplannedTasks(filteredTasks);
+    displayUnplannedTasks(filteredTasks, masquees);
 }
 
 /**
  * Afficher les tâches non planifiées 
  */
-function displayUnplannedTasks(tasks) {
+function displayUnplannedTasks(tasks, masquees = 0) {
     const container = document.getElementById('unplanned-tasks');
     const countEl = document.getElementById('task-count');
 
-    countEl.textContent = `${tasks.length} tâche${tasks.length > 1 ? 's' : ''}`;
+    // Annoncer ce qui est masque : une tache qui disparait sans explication
+    // est une tache qu'on oublie d'estimer.
+    const suffixe = masquees > 0 ? ` (+${masquees} sans durée)` : '';
+    countEl.textContent = `${tasks.length} tâche${tasks.length > 1 ? 's' : ''}${suffixe}`;
 
     if (tasks.length === 0) {
+        const explication = masquees > 0
+            ? `<p>${masquees} tâche${masquees > 1 ? 's' : ''} en attente d'une durée estimée.<br>
+                  Décochez « Prêtes seulement » pour les afficher.</p>`
+            : '<p>Aucune tâche à planifier</p>';
         container.innerHTML = `
             <div class="empty-message">
                 <span class="icon">✅</span>
-                <p>Aucune tâche à planifier</p>
+                ${explication}
             </div>
         `;
         return;

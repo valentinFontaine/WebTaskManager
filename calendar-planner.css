@@ -886,3 +886,19 @@ body {
 .calendar-container::-webkit-scrollbar-thumb:hover {
     background: var(--secondary-color);
 }
+
+/* Bascule « Prêtes seulement » — alignée avec les deux sélecteurs voisins. */
+.filter-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.85em;
+    color: #555;
+    cursor: pointer;
+    white-space: nowrap;
+    user-select: none;
+}
+.filter-toggle input {
+    cursor: pointer;
+    margin: 0;
+}
