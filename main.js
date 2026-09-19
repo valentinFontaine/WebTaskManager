@@ -21,11 +21,18 @@ class TaskWarriorUI {
             onCancel: () => this.handleTaskCancel()
         });
        
-        // Attendre que les composants soient initialisés avant de charger les tâches
+        // Le court delai attend l'instanciation de taskCardManager, faite juste
+        // apres celle-ci. Les templates de cartes, eux, arrivent par fetch : il
+        // faut attendre leur disponibilite reelle. Parier sur 100 ms marchait
+        // tant que rien d'autre ne sollicitait le reseau au demarrage.
         setTimeout(() => {
             this.initializeEventListeners();
-            this.loadTasks();
             this.updateProjectSuggestions();
+            const templatesPrets =
+                (typeof taskCardManager !== 'undefined' && taskCardManager.templatesReady)
+                    ? taskCardManager.templatesReady
+                    : Promise.resolve();
+            templatesPrets.then(() => this.loadTasks());
         }, 100);
     }
 
@@ -149,7 +156,11 @@ class TaskWarriorUI {
                 }
             }
         } catch (error) {
-            this.showError('Network error: ' + error.message);
+            // Toute exception etait etiquetee « Network error », ce qui a fait
+            // passer une erreur de rendu pour une panne reseau. La trace est
+            // desormais conservee en console.
+            console.error('loadTasks a échoué :', error);
+            this.showError('Erreur au chargement des tâches : ' + error.message);
         } finally {
             this.showLoading(false);
         }
@@ -382,10 +393,20 @@ class TaskWarriorUI {
         container.innerHTML = '';
         
         // Crée et ajoute chaque carte de tâche
+        // createTaskCard renvoie null si le template manque : appendChild(null)
+        // ferait echouer tout le rendu, et l'erreur remonterait deguisee.
+        let nonAffichees = 0;
         filteredTasks.forEach(task => {
             const taskCard = taskCardManager.createTaskCard(task, 'full');
+            if (!taskCard) {
+                nonAffichees++;
+                return;
+            }
             container.appendChild(taskCard);
         });
+        if (nonAffichees > 0) {
+            this.showError(`${nonAffichees} tâche(s) non affichées : template de carte indisponible.`);
+        }
     }
 
 

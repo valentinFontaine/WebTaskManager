@@ -44,6 +44,21 @@ test.describe('Task Manager', () => {
     console.log('Page d\'accueil vérifiée avec succès');
   });
 
+  test('ne devrait afficher aucune erreur au chargement', async () => {
+    // Ce test existe parce que les autres ne l'auraient pas vu : `loadTasks`
+    // attrape ses exceptions et les affiche dans un bandeau, sans jamais rien
+    // ecrire dans la console. Une page entierement cassee passait donc pour
+    // saine. Cas reel : les cartes n'etaient pas encore chargees au premier
+    // rendu, et `appendChild(null)` levait.
+    const bandeau = page.locator('#error-message');
+    await expect(bandeau).toBeHidden();
+
+    // Et la liste doit etre reellement peuplee : un bandeau masque ne prouve
+    // rien si rien ne s'affiche.
+    await expect(page.locator('.task-card').first()).toBeVisible({ timeout: 10000 });
+    console.log('Chargement sans erreur, cartes presentes');
+  });
+
   test('devrait pouvoir ajouter une nouvelle tâche', async () => {
     console.log('Test: Ajout d\'une nouvelle tâche');
 

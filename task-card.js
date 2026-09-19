@@ -102,7 +102,10 @@ class TaskCardManager {
         this.templates = {};
         this.actionHandler = actionHandler || new TaskActionHandler();
         this.eventListenerAdded = false;
-        this.loadTemplates();
+        // Promesse resolue quand les templates sont utilisables. Sans elle,
+        // l'appelant n'a aucun moyen de savoir quand `createTaskCard` peut
+        // reussir, et doit parier sur un delai.
+        this.templatesReady = this.loadTemplates();
     }
 
     /**
@@ -116,16 +119,17 @@ class TaskCardManager {
     /**
      * Charge les templates depuis le DOM
      */
-    loadTemplates() {
+    async loadTemplates() {
         // Vérifier si le template full est déjà dans le DOM
         const fullTemplate = document.getElementById('task-card-full');
 
         if (fullTemplate) {
             this.templates.full = fullTemplate;
-        } else {
-            // Si le template n'est pas dans le DOM, le charger dynamiquement
-            this.loadTemplatesFromFile();
+            return;
         }
+        // Sinon le charger depuis le fichier -- et attendre, sans quoi le
+        // premier rendu peut tomber avant l'arrivee du template.
+        await this.loadTemplatesFromFile();
     }
 
     /**
