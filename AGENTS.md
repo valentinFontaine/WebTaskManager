@@ -119,6 +119,27 @@ PW_NO_SERVER=1 PW_BASE_URL=http://localhost:1875 npm test
 
 Prod ne reçoit qu'un `git pull` + redémarrage, jamais de test.
 
+### Règle : tout bug corrigé laisse un test derrière lui
+
+**Aucune correction de bug n'est complète sans un test qui échoue avant elle et passe
+après.** Écrire le test *d'abord* : un test qui n'a jamais rougi ne prouve rien.
+
+Trois exigences, apprises en se faisant avoir sur chacune :
+
+1. **Le test doit être déterministe.** Pour un bug de concurrence, ne pas espérer perdre
+   la course : la faire perdre. `page.route()` avec un délai explicite, plutôt qu'un
+   `setTimeout` qui marche une fois sur deux.
+2. **Le test doit prouver qu'il exerce bien le chemin visé.** Un test qui, après
+   refactorisation, ne déclenche plus le code qu'il surveille passe au vert en silence.
+   Compter les interceptions et l'assener : `expect(compteur).toBeGreaterThan(0)`.
+3. **Vérifier ce que voit l'utilisateur, pas seulement la console.** Le frontend attrape
+   ses exceptions et les affiche dans un bandeau ou une `alert()` : une page entièrement
+   cassée laisse la console vide. Asserter l'absence de bandeau **et** la présence du
+   contenu attendu.
+
+Les tests Playwright tournent sous Chromium uniquement. Plusieurs bugs remontés l'ont été
+depuis Firefox, dont les messages d'erreur diffèrent : un vert ici ne couvre pas tout.
+
 ---
 
 ## 5. Surface Taskwarrior utilisée

@@ -207,4 +207,70 @@ test.describe('Task Manager', () => {
       await context.close();
     }
   });
+
+  // ── Planification depuis le calendrier ─────────────────────────────────────
+  //
+  // Selectionner une carte puis glisser sur la grille horaire doit ouvrir le
+  // formulaire avec la description deja remplie.
+  //
+  // Bug trouve le 2026-09-19 : tout le bloc qui remplit le titre etait enferme
+  // dans `if (duration)`, or `parseEstTime` renvoie null sans estTime -- le cas
+  // de 13 taches sur 17 en base. Consequence en cascade : `tempEventData` restait
+  // null, `handleBeforeCreateEvent` prenait la branche par defaut, et creait une
+  // NOUVELLE tache au titre vide au lieu de planifier celle qui etait selectionnee.
+
+  async function glisserSurLaGrille(p) {
+    // Viser le panneau horaire, et pas n'importe quelle `.toastui-calendar-column` :
+    // le panneau « journee entiere » en contient aussi, et un glisser dedans
+    // n'ouvre pas le formulaire de creation.
+    const panneau = p.locator('.toastui-calendar-panel.toastui-calendar-time');
+    await expect(panneau).toBeVisible({ timeout: 15000 });
+    const pb = await panneau.boundingBox();
+    const colonne = panneau.locator('.toastui-calendar-column').nth(1);
+    const cb = await colonne.boundingBox();
+    const fenetre = p.viewportSize();
+
+    // Les colonnes vivent dans une zone qui defile : leur boite deborde le
+    // panneau et depasse la fenetre. Se reperer dessus seule fait viser hors
+    // ecran -- c'est ce qui rendait ce test faussement rouge.
+    const milieu = (Math.max(pb.y, 0) + Math.min(pb.y + pb.height, fenetre.height)) / 2;
+    const x = cb.x + cb.width / 2;
+
+    // TOAST UI n'ouvre son formulaire que sur un vrai glisser : il lui faut des
+    // mouvements intermediaires, pas un simple aller-retour.
+    await p.mouse.move(x, milieu - 25);
+    await p.mouse.down();
+    await p.mouse.move(x, milieu + 25, { steps: 15 });
+    await p.mouse.up();
+  }
+
+
+  test('planifier une tache sans duree estimee renseigne sa description', async ({ browser }) => {
+    const context = await browser.newContext();
+    const p = await context.newPage();
+    const alertes = [];
+    p.on('dialog', async d => { alertes.push(d.message); await d.dismiss(); });
+
+    try {
+      // Une tache sans estTime : c'est le cas majoritaire dans la base reelle.
+      const description = `Sans duree ${Date.now()}`;
+      const creation = await p.request.post('/api/task/add', { data: { description } });
+      expect((await creation.json()).success).toBe(true);
+
+      await p.goto('/calendar-planner.html');
+      const carte = p.locator('#unplanned-tasks .task-card', { hasText: description });
+      await expect(carte).toBeVisible({ timeout: 15000 });
+      await carte.click();
+
+      await glisserSurLaGrille(p);
+
+      const titre = p.locator('input.toastui-calendar-content[name="title"]');
+      await expect(titre).toBeVisible({ timeout: 5000 });
+      await expect(titre).toHaveValue(description);
+
+      expect(alertes).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  });
 });

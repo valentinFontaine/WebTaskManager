@@ -194,46 +194,53 @@ function setupEventListeners() {
 }
 
 function handleSelectDateTimeEvent(eventInfo) {
-    // If a task is selected, adjust the end date based on task duration
-    if (selectedTaskData) {
-        // Parse the task duration
-        const duration = parseEstTime(selectedTaskData.estTime);
-        
-        if (duration) {
-            // Calculate new end date based on task duration
-            const newEndDate = new Date(eventInfo.start.getTime() + duration * 60000);
-            
-             // Update the form fields in the popup
-            setTimeout(() => {
-                // Find the input fields by class and name attribute
-                const endInput = document.querySelector('input.toastui-calendar-content[name="end"]');
-                const titleInput = document.querySelector('input.toastui-calendar-content[name="title"]');
-                
-                if (endInput) {
-                    // Format the new end date as 'YYYY-MM-DD HH:MM'
-                    const formattedEndDate = formatDateTimeForInput(newEndDate);
-                    endInput.value = formattedEndDate;
-                } else {
-                    console.warn('End date input field not found');
-                }
-                
-                if (titleInput) {
-                    titleInput.value = selectedTaskData.description;
-                } else {
-                    console.warn('Title input field not found');
-                }
-            }, 100);   
+    if (!selectedTaskData) return;
 
-            // Store the modified event data for use in beforeCreateEvent
-            tempEventData = {
-                id: selectedTaskData.uuid,
-                start: eventInfo.start,
-                end: newEndDate,
-                title: selectedTaskData.description,
-                isAllday: eventInfo.isAllday
-            };
+    const duration = parseEstTime(selectedTaskData.estTime);
+
+    // La duree ne sert qu'a ajuster la fin du creneau. Tout le reste -- report
+    // de la description, et surtout `tempEventData` -- doit avoir lieu dans
+    // tous les cas. Ce bloc etait entierement enferme dans `if (duration)`,
+    // alors que `parseEstTime` renvoie null des que estTime est absent : la
+    // majorite des taches ne pouvaient donc pas etre planifiees. Pire,
+    // `tempEventData` restant null, `handleBeforeCreateEvent` retombait sur sa
+    // branche par defaut et creait une NOUVELLE tache au titre vide au lieu de
+    // planifier celle qui etait selectionnee.
+    const newEndDate = duration
+        ? new Date(eventInfo.start.getTime() + duration * 60000)
+        : eventInfo.end;
+
+    // Le formulaire de TOAST UI n'est pas encore monte quand l'evenement est
+    // emis, d'ou ce report.
+    setTimeout(() => {
+        const endInput = document.querySelector('input.toastui-calendar-content[name="end"]');
+        const titleInput = document.querySelector('input.toastui-calendar-content[name="title"]');
+
+        // Sans duree estimee, on laisse la fin proposee par le calendrier.
+        if (duration) {
+            if (endInput) {
+                endInput.value = formatDateTimeForInput(newEndDate);
+            } else {
+                console.warn('End date input field not found');
+            }
         }
-    }
+
+        if (titleInput) {
+            titleInput.value = selectedTaskData.description;
+        } else {
+            console.warn('Title input field not found');
+        }
+    }, 100);
+
+    // Consomme par handleBeforeCreateEvent : c'est ce qui distingue
+    // « planifier la tache selectionnee » de « creer une tache ».
+    tempEventData = {
+        id: selectedTaskData.uuid,
+        start: eventInfo.start,
+        end: newEndDate,
+        title: selectedTaskData.description,
+        isAllday: eventInfo.isAllday
+    };
 }
 
 /**
