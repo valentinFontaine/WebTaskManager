@@ -25,7 +25,9 @@ document.addEventListener('DOMContentLoaded', () => {
     taskCardManager = new TaskCardManager(new CalendarTaskActionHandler());
     initializeCalendar();
     setupEventListeners();
-    loadTasks();
+    // Les templates de cartes arrivent par fetch : sans cette attente, le premier
+    // rendu tombe avant eux. Meme contrat que dans main.js.
+    taskCardManager.templatesReady.then(() => loadTasks());
     console.log('SetupTasksSelection');
     console.log('Setup Task Selection Done');
     
@@ -707,11 +709,20 @@ function displayUnplannedTasks(tasks) {
     // Vide le conteneur
     container.innerHTML = '';
 
-    // Crée et ajoute chaque carte de tâche
+    // Crée et ajoute chaque carte de tâche.
+    // Une carte qui echoue ne doit pas interrompre le rendu des autres.
+    let nonAffichees = 0;
     tasks.forEach(task => {
-        const taskCard = taskCardManager.createTaskCard(task, 'full');
-        container.appendChild(taskCard);
+        try {
+            container.appendChild(taskCardManager.createTaskCard(task, 'full'));
+        } catch (e) {
+            if (nonAffichees === 0) console.error(e);
+            nonAffichees++;
+        }
     });
+    if (nonAffichees > 0) {
+        showError(`${nonAffichees} tâche(s) non affichées : template de carte indisponible.`);
+    }
 }
 
 /**

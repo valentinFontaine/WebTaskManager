@@ -167,13 +167,21 @@ class TaskCardManager {
      * @returns {HTMLElement} - L'élément TaskCard
      */
     createTaskCard(task, mode = 'full') {
-        if (!this.templates.full) {
-            console.error(`Template full non disponible`);
-            return null;
+        const template = this.templates[mode];
+        if (!template) {
+            // Echec bruyant plutot qu'un null silencieux. Renvoyer null menait a
+            // `appendChild(null)`, dont le message -- « parameter 1 is not of
+            // type Node » -- ne dit rien de la vraie cause et remontait deguise
+            // en erreur reseau.
+            // Note : l'ancienne version testait `this.templates.full` puis
+            // utilisait `this.templates[mode]`, donc ne voyait pas un mode absent.
+            throw new Error(
+                `Template « ${mode} » indisponible. Attendre ` +
+                `taskCardManager.templatesReady avant tout rendu, ou verifier la ` +
+                `presence de #task-card-full dans la page.`
+            );
         }
 
-        // Cloner le template
-        const template = this.templates[mode];
         const card = template.content.cloneNode(true).querySelector('.task-card');
 
         // Remplir les slots avec les données de la tâche

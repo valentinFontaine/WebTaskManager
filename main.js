@@ -393,16 +393,15 @@ class TaskWarriorUI {
         container.innerHTML = '';
         
         // Crée et ajoute chaque carte de tâche
-        // createTaskCard renvoie null si le template manque : appendChild(null)
-        // ferait echouer tout le rendu, et l'erreur remonterait deguisee.
+        // Une carte qui echoue ne doit pas interrompre le rendu des autres.
         let nonAffichees = 0;
         filteredTasks.forEach(task => {
-            const taskCard = taskCardManager.createTaskCard(task, 'full');
-            if (!taskCard) {
+            try {
+                container.appendChild(taskCardManager.createTaskCard(task, 'full'));
+            } catch (e) {
+                if (nonAffichees === 0) console.error(e);
                 nonAffichees++;
-                return;
             }
-            container.appendChild(taskCard);
         });
         if (nonAffichees > 0) {
             this.showError(`${nonAffichees} tâche(s) non affichées : template de carte indisponible.`);

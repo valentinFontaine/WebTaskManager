@@ -120,4 +120,55 @@ test.describe('Task Manager', () => {
     await expect(carte).toHaveCount(0, { timeout: 10000 });
     console.log('Tâche marquée comme terminée avec succès');
   });
+
+  // ── Course entre le chargement des templates et le premier rendu ───────────
+  //
+  // Les templates de cartes arrivent par fetch. Si une page rend sa liste avant
+  // leur arrivee, `createTaskCard` renvoie null et `appendChild(null)` leve.
+  //
+  // Ces tests ne parient pas sur le hasard : ils retardent explicitement le
+  // chargement du template, ce qui fait perdre la course a coup sur. Sans
+  // attente cote code, ils echouent ; avec, ils passent.
+  //
+  // Ils ouvrent leur propre contexte : ils doivent partir d'un cache vide, et
+  // ne pas perturber la page partagee par les tests precedents.
+
+  const RETARD_TEMPLATE = 1200; // ms
+
+  async function pageAvecTemplateLent(browser) {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    await page.route('**/task-card-templates.html', async route => {
+      await new Promise(r => setTimeout(r, RETARD_TEMPLATE));
+      await route.continue();
+    });
+    return { context, page };
+  }
+
+  test('la liste supporte un template qui arrive en retard', async ({ browser }) => {
+    const { context, page: p } = await pageAvecTemplateLent(browser);
+    try {
+      await p.goto('/');
+      // Le bandeau d'erreur de la page liste ne doit jamais apparaitre.
+      await expect(p.locator('#error-message')).toBeHidden();
+      await expect(p.locator('.task-card').first()).toBeVisible({ timeout: 15000 });
+    } finally {
+      await context.close();
+    }
+  });
+
+  test('le calendrier supporte un template qui arrive en retard', async ({ browser }) => {
+    const { context, page: p } = await pageAvecTemplateLent(browser);
+    // calendar-planner.js signale ses erreurs par alert(), pas par un bandeau.
+    const alertes = [];
+    p.on('dialog', async d => { alertes.push(d.message); await d.dismiss(); });
+    try {
+      await p.goto('/calendar-planner.html');
+      await expect(p.locator('#unplanned-tasks .task-card').first())
+        .toBeVisible({ timeout: 15000 });
+      expect(alertes).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  });
 });
