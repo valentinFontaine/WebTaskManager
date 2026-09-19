@@ -14,7 +14,7 @@ from datetime import datetime
 from typing import List, Optional
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse
@@ -244,10 +244,85 @@ async def get_planned_tasks():
         )
 
 
+# Statuts exposes par la barre de boutons, traduits en filtres TaskWarrior.
+STATUS_FILTERS = {
+    'pending': 'status:pending',
+    'waiting': 'status:waiting',
+    'completed': 'status:completed',
+    'deleted': 'status:deleted',
+}
+
+_recur_filter = None
+
+
+def get_recurrence_filter():
+    """Filtre correspondant au statut 'recurring'.
+
+    Le hook « recurrence-overhaul » range la recurrence dans un champ
+    personnalise, annonce par `recurrence.field` ; sinon c'est le +RECURRING
+    standard. Resolu paresseusement et mis en cache : la PR d'origine le
+    calculait a l'import du module, par un subprocess direct qui contournait
+    DEVELOPER_MODE -- donc une vraie commande `task` executee sous pytest.
+    """
+    global _recur_filter
+    if _recur_filter is not None:
+        return _recur_filter
+    valeur = '+RECURRING'
+    result = run_task_command('task _show')
+    if result.success:
+        for line in result.stdout.splitlines():
+            if line.startswith('recurrence.field='):
+                champ = line.split('=', 1)[1].strip()
+                if champ and champ != 'recur':
+                    valeur = champ + '.any:'
+                break
+    _recur_filter = valeur
+    return valeur
+
+
+def build_task_filter(statuses, filter_text='', context_expr=''):
+    """Assemble le filtre TaskWarrior, chaque terme en un seul argument quote.
+
+    Le quoting n'est pas cosmetique : `run_task_command` passe par un shell, et
+    des parentheses nues sont une erreur de syntaxe pour /bin/sh sous Termux.
+    """
+    parts = []
+    for statut in statuses:
+        if statut == 'recurring':
+            parts.append(get_recurrence_filter())
+        elif statut in STATUS_FILTERS:
+            parts.append(STATUS_FILTERS[statut])
+    if not parts:
+        parts = ['status:pending']
+
+    expression = parts[0] if len(parts) == 1 else '(' + ' or '.join(parts) + ')'
+
+    morceaux = []
+    if context_expr:
+        # Filtre en ligne plutot que `rc.context=` : l'etat de TaskWarrior
+        # n'est jamais modifie par une consultation web.
+        morceaux.append('"(%s)"' % context_expr)
+    morceaux.append('"%s"' % expression)
+    if filter_text:
+        morceaux.append('"description.contains:%s"' % filter_text)
+    return ' '.join(morceaux)
+
+
 @app.get("/api/tasks")
-async def get_tasks():
-    """Get all pending tasks in JSON format"""
-    result = run_task_command('task status:pending export')
+async def get_tasks(
+    status: str = "pending",
+    context: str = "",
+    filter_text: str = Query("", alias="filter"),
+):
+    """Taches au format JSON, filtrees par statut, contexte et texte."""
+    statuses = [s.strip() for s in status.split(",") if s.strip()]
+    # Le texte libre est reduit a un jeu de caracteres sur : il finit dans
+    # une commande shell, et un guillemet suffirait a en sortir.
+    filter_text = re.sub(r"[^\w\s\-\.]", "", filter_text.strip())[:80]
+    context_expr = get_context_filters().get(context.strip(), "") if context.strip() else ""
+
+    filtre = build_task_filter(statuses, filter_text, context_expr)
+    result = run_task_command(f'task {filtre} export')
     
     if result.success:
         try:

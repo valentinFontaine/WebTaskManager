@@ -824,3 +824,129 @@ class TestContextesEtConfig:
         data = client.get("/api/config").json()
 
         assert data["notification_timeout"] == NOTIFICATION_TIMEOUT
+
+
+class TestFiltrageDesTaches:
+    """Parametres status / context / filter sur /api/tasks, requis par nav.js."""
+
+    def setup_method(self):
+        main_fastapi._ctx_cache = {}
+        main_fastapi._ctx_cache_ts = 0.0
+        main_fastapi._recur_filter = None
+
+    @staticmethod
+    def _export_vide():
+        return CommandResult(success=True, stdout="[]", stderr="", returncode=0)
+
+    @patch('main_fastapi.run_task_command')
+    def test_par_defaut_les_taches_en_cours(self, mock_command):
+        """Non-regression : sans parametre, le comportement d'avant est conserve."""
+        mock_command.return_value = self._export_vide()
+
+        client.get("/api/tasks")
+
+        commande = mock_command.call_args_list[0][0][0]
+        assert 'status:pending' in commande
+        assert ' or ' not in commande
+
+    @patch('main_fastapi.run_task_command')
+    def test_plusieurs_statuts_sont_combines_en_ou(self, mock_command):
+        mock_command.return_value = self._export_vide()
+
+        client.get("/api/tasks?status=pending,completed")
+
+        commande = mock_command.call_args_list[0][0][0]
+        assert '"(status:pending or status:completed)"' in commande
+
+    @patch('main_fastapi.run_task_command')
+    def test_l_expression_est_quotee(self, mock_command):
+        """Sous /bin/sh (Termux), des parentheses nues sont une erreur de syntaxe."""
+        mock_command.return_value = self._export_vide()
+
+        client.get("/api/tasks?status=pending,waiting")
+
+        commande = mock_command.call_args_list[0][0][0]
+        assert 'task "(' in commande
+        assert 'task (' not in commande
+
+    @patch('main_fastapi.run_task_command')
+    def test_un_statut_inconnu_retombe_sur_pending(self, mock_command):
+        """Un parametre fantaisiste ne doit pas produire un filtre vide."""
+        mock_command.return_value = self._export_vide()
+
+        client.get("/api/tasks?status=nimportequoi")
+
+        commande = mock_command.call_args_list[0][0][0]
+        assert 'status:pending' in commande
+
+    @patch('main_fastapi.run_task_command')
+    def test_le_contexte_est_applique_en_filtre_en_ligne(self, mock_command):
+        """`rc.context=` modifierait l'etat de TaskWarrior : on ne l'utilise pas."""
+        mock_command.side_effect = [
+            CommandResult(success=True, stdout="context.pro.read=+pro\n",
+                          stderr="", returncode=0),
+            self._export_vide(),
+        ]
+
+        client.get("/api/tasks?context=pro")
+
+        commande = mock_command.call_args_list[-1][0][0]
+        assert '"(+pro)"' in commande
+        assert 'rc.context' not in commande
+
+    @patch('main_fastapi.run_task_command')
+    def test_un_contexte_inconnu_est_ignore(self, mock_command):
+        mock_command.side_effect = [
+            CommandResult(success=True, stdout="context.pro.read=+pro\n",
+                          stderr="", returncode=0),
+            self._export_vide(),
+        ]
+
+        client.get("/api/tasks?context=inexistant")
+
+        commande = mock_command.call_args_list[-1][0][0]
+        assert '()' not in commande
+
+    @patch('main_fastapi.run_task_command')
+    def test_le_texte_de_filtre_est_assaini(self, mock_command):
+        """Le texte finit dans une commande shell : un guillemet en sortirait."""
+        mock_command.return_value = self._export_vide()
+
+        client.get('/api/tasks?filter=" %26%26 rm -rf ; echo')
+
+        commande = mock_command.call_args_list[0][0][0]
+        # Le terme recherche est le contenu entre guillemets qui suit le prefixe.
+        terme = commande.split('description.contains:')[1].split('"')[0]
+        for interdit in ('"', '&', ';', '|', '$', '`'):
+            assert interdit not in terme
+        # Le texte restant est inoffensif : c'est une chaine de recherche, pas
+        # une commande. Seuls les metacaracteres du shell devaient disparaitre.
+        assert 'rm' in terme
+
+    @patch('main_fastapi.run_task_command')
+    def test_recurring_utilise_le_champ_standard(self, mock_command):
+        """Sans `recurrence.field` dans la config, c'est +RECURRING."""
+        mock_command.side_effect = [
+            CommandResult(success=True, stdout="uda.estTime.type=duration\n",
+                          stderr="", returncode=0),
+            self._export_vide(),
+        ]
+
+        client.get("/api/tasks?status=recurring")
+
+        commande = mock_command.call_args_list[-1][0][0]
+        assert '+RECURRING' in commande
+
+    @patch('main_fastapi.run_task_command')
+    def test_recurring_suit_le_champ_personnalise(self, mock_command):
+        """Le hook recurrence-overhaul deplace la recurrence dans un autre champ."""
+        mock_command.side_effect = [
+            CommandResult(success=True, stdout="recurrence.field=r\n",
+                          stderr="", returncode=0),
+            self._export_vide(),
+        ]
+
+        client.get("/api/tasks?status=recurring")
+
+        commande = mock_command.call_args_list[-1][0][0]
+        assert 'r.any:' in commande
