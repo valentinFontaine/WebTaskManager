@@ -28,18 +28,23 @@ de serveur, accessible depuis le PC de travail par un port-forward adb.
 
 | Env | Machine | Taskwarrior | Données | Rôle |
 |---|---|---|---|---|
-| **dev-pc** | PC Windows | 3.5.0 (fork wilt00) | `C:\Users\irpaui\taskwarrior-dev` | itération et tests réels |
-| **dev-tel** | Termux | 3.3.0 | base de dev dédiée | dev ponctuel depuis le téléphone |
-| **staging** | Termux | 3.3.0 | `~/.task-staging` | validation avant prod |
-| **prod** | Termux | 3.3.0 | `~/.task` (Syncthing) | usage quotidien réel |
+| **dev-pc** | PC Windows | 3.5.0.6 (fork wilt00, *nightly*) | `C:\Users\irpaui\taskwarrior-dev` | itération et tests réels |
+| **dev-tel** | Termux | 3.4.2 | base de dev dédiée | dev ponctuel depuis le téléphone |
+| **staging** | Termux | 3.4.2 | `~/.task-staging` | validation avant prod |
+| **prod** | Termux | 3.4.2 | `~/.task` (Syncthing) | usage quotidien réel |
 
 Le code circule par **git**. Les données circulent par **Syncthing**, sur un canal séparé —
 elles ne passent jamais par le dépôt.
 
 ### Pièges de cette topologie
 
-- **Écart de version 3.5.0 (PC) / 3.3.0 (téléphone).** Un test vert sur le PC ne prouve rien
+- **Écart de version 3.5.0.6 (PC) / 3.4.2 (téléphone).** Un test vert sur le PC ne prouve rien
   sur le comportement en prod. C'est la raison d'être de l'étage staging.
+  La parité exacte est **hors d'atteinte**, et ce n'est pas un provisoire : le PC ne peut tourner
+  que sur le fork wilt00, qui a sa propre numérotation à quatre chiffres et se déclare
+  *nightly build* ; le dépôt Termux plafonne à `3.4.2-2`. L'objectif réaliste est d'aligner les
+  trois machines Termux entre elles ; l'écart résiduel avec le PC est couvert par staging.
+  Vérifié le 2026-09-19.
 - **Un binaire 3.5 peut migrer le schéma SQLite** d'une base 3.3 au premier écrit, et la rendre
   illisible par le téléphone. Ne jamais pointer le `task.exe` du PC vers un `.task` synchronisé.
 - **Le PC n'a ni `node_modules` ni `venv`** dans certaines copies (exclus des transferts).
