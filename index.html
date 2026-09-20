@@ -31,31 +31,17 @@
 
 
 
-        <div class="filters-section">
-            <h2>Advanced Filters</h2>
-            <div class="filters-container">
-                <div class="form-group">
-                    <label for="filter-project">Filter by Project:</label>
-                    <input type="text" id="filter-project" placeholder="Enter project name" list="project-suggestions">
-                    <datalist id="project-suggestions"></datalist>
-                </div>
-                <div class="form-group">
-                    <label for="filter-tags">Filter by Tag:</label>
-                    <input type="text" id="filter-tags" placeholder="Enter tag (comma-separated)">
-                </div>
-                <div class="form-group">
-                    <button id="filter-planned-incomplete-btn" class="btn btn-toggle-filter" title="Show planned and incomplete tasks">
-                        <span class="icon">&#x21A9;&#x2705;</span>
-                    </button>
-                </div>
-                <div class="form-group">
-                    <button id="filter-today-btn" class="btn btn-toggle-filter" title="Show tasks scheduled for today">
-                        <span class="icon">&#x1F5D3;&#x1F4CD;</span>
-                    </button>
-                </div>
-                <button id="apply-filters" class="btn btn-primary">Apply Filters</button>
-                <button id="clear-filters" class="btn btn-secondary">Clear Filters</button>
-            </div>
+        <!-- Projet, tags, contexte et statut vivent dans la barre nav, partages
+             par les trois pages. Ne restent ici que les deux vues sur
+             `scheduled`, qui n'ont de sens que sur cette liste : le calendrier
+             *est* deja la vue sur `scheduled`. -->
+        <div class="view-toggles">
+            <button id="filter-planned-incomplete-btn" class="btn btn-toggle-filter" title="Planifiees dans le passe et non realisees">
+                <span class="icon">&#x21A9;&#x2705;</span>
+            </button>
+            <button id="filter-today-btn" class="btn btn-toggle-filter" title="Prevues aujourd'hui">
+                <span class="icon">&#x1F5D3;&#x1F4CD;</span>
+            </button>
         </div>
 
         <div class="tasks-section">

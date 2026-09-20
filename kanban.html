@@ -168,6 +168,23 @@ async function loadTasks() {
     tasks = d.tasks || [];
 }
 
+// Projet et tags viennent de la barre nav et filtrent cote client, comme sur
+// la page liste. Le projet est un prefixe sur la hierarchie pointee, a la
+// maniere de TaskWarrior : `project:Maison` retient `Maison.Cuisine`.
+function filtrerTaches(liste) {
+    const etat = window.twNav ? window.twNav.getState() : {};
+    const projet = (etat.project || '').trim();
+    const tags = window.twNav ? window.twNav.getTags(etat) : [];
+    return liste.filter(t => {
+        if (projet) {
+            const porte = t.project || '';
+            if (porte !== projet && !porte.startsWith(projet + '.')) return false;
+        }
+        if (tags.length && !tags.every(tag => (t.tags || []).includes(tag))) return false;
+        return true;
+    });
+}
+
 // ── rendering ─────────────────────────────────────────────────────────────────
 
 function formatDue(due) {
@@ -225,10 +242,13 @@ function renderBoard() {
     const board = document.getElementById('board');
     board.innerHTML = '';
 
+    const visibles = filtrerTaches(tasks);
+    if (window.twNav) window.twNav.setCount(visibles.length, tasks.length);
+
     const assignedStates = new Set(columns);
 
     // Unassigned column — leftmost, tasks with no state or unknown state
-    const unassigned = tasks.filter(t => !assignedStates.has(t.state || ''));
+    const unassigned = visibles.filter(t => !assignedStates.has(t.state || ''));
     if (unassigned.length > 0) {
         const div = document.createElement('div');
         div.className = 'kanban-column';
@@ -247,7 +267,7 @@ function renderBoard() {
 
     // Configured columns — left to right workflow
     columns.forEach((col, i) => {
-        const colTasks = tasks.filter(t => (t.state || '') === col);
+        const colTasks = visibles.filter(t => (t.state || '') === col);
         const color    = COLUMN_COLORS[i % COLUMN_COLORS.length];
 
         const div = document.createElement('div');
@@ -314,7 +334,12 @@ async function init() {
 }
 
 document.getElementById('refresh-btn').addEventListener('click', init);
-document.addEventListener('tw-filter-change', init);
+// Projet et tags filtrent cote client : re-rendre suffit, et recharger a
+// chaque frappe relancerait un sous-processus TaskWarrior pour rien.
+document.addEventListener('tw-filter-change', e => {
+    if (e.detail && e.detail.clientOnly) renderBoard();
+    else init();
+});
 init();
 </script>
 </body>

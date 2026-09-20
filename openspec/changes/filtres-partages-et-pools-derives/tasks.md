@@ -25,21 +25,33 @@ serait devenu bloquant au lot 1, ou le contexte filtre cote serveur.
 
 ## Lot 1 — `nav.js` devient la source unique des filtres
 
-- [ ] Test : saisir un projet dans la barre nav réduit la liste de l'accueil **et** met
-      le compteur à jour sous la forme `filtré/total`
-- [ ] Test : avec 6 contextes simulés (`page.route` sur `/api/contexts`), la barre rend
-      un `<select>` et non des boutons ; avec 3, des boutons
-- [ ] Test : un filtre projet restauré depuis `localStorage` au chargement est annoncé
-      par la barre de résumé, et « tout effacer » le retire
-- [ ] Restaurer les champs `project` et `tags` dans `nav.js` (les clés existent déjà
-      dans `defaultState()`)
-- [ ] Contextes : boutons jusqu'à 5, `<select>` au-delà
-- [ ] Barre de résumé des filtres + bouton « tout effacer »
-- [ ] `main.js` : consommer `tw-filter-change` pour `project`/`tags` au lieu de ses
-      propres champs
-- [ ] `index.html` : supprimer la section « Advanced Filters », conserver les boutons
-      « prévues aujourd'hui » et « en retard non faites » dans une barre fine
-- [ ] Commit
+- [x] Test : saisir un projet dans la barre nav reduit la liste de l'accueil **et** met
+      le compteur a jour sous la forme `filtre/total`
+- [x] Test : le champ tags filtre en conjonction (`perso, sport` → les deux)
+- [x] Test : avec 6 contextes simules, la barre rend un `<select>` ; avec 3, des boutons
+- [x] Test : un filtre projet restaure depuis `localStorage` au chargement est annonce
+      par la barre de resume, et « tout effacer » le retire
+- [x] Test : la section « Advanced Filters » a disparu, les deux vues sont restees
+- [x] Test : le kanban applique le filtre projet **sans** relancer `/api/tasks`
+- [x] Champs `project` et `tags` restaures dans `nav.js`, avec anti-rebond
+- [x] Contextes : boutons jusqu'a 5, `<select>` au-dela
+- [x] Barre de resume des filtres + bouton « tout effacer »
+- [x] `main.js` consomme `tw-filter-change` ; `clientOnly` → re-rendu, sinon rechargement
+- [x] `index.html` : section supprimee, les deux vues conservees dans une barre fine
+- [x] `kanban.html` : meme contrat client (sinon il rechargeait a chaque frappe **en
+      ignorant** le filtre — regression introduite par le drapeau `clientOnly`)
+- [x] Commit
+
+### Deux choses apprises en chemin
+
+- **`test.describe.configure({ mode: 'serial' })` etait declare au niveau du fichier.**
+  En mode serial, le premier echec fait *sauter* tous les tests suivants : quatre des
+  cinq tests de ce lot n'apparaissaient ni en vert ni en rouge. Les tests independants
+  vivent desormais dans un describe `Pages et filtres` explicitement parallele.
+- **Le filtre client etait mis en cache sur evenement.** L'etat de nav est restaure du
+  `localStorage` *avant* le premier `tw-filter-change`, si bien qu'un filtre pose la
+  veille etait ignore au chargement : la liste s'affichait entiere pendant que le resume
+  annoncait un filtre. Il est desormais relu a chaque rendu.
 
 ## Lot 2 — le calendrier consomme les filtres partagés
 

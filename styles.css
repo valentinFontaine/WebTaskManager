@@ -178,8 +178,7 @@ h2 {
 }
 
 /* Forms */
-.add-task-section,
-.filters-section {
+.add-task-section {
     background: white;
     padding: 20px;
     border-radius: 8px;
@@ -187,31 +186,13 @@ h2 {
     margin-bottom: 20px;
 }
 
-.filters-container {
+/* Les deux vues sur `scheduled`, seuls filtres restes sur cette page. Les
+   regles `.filters-section` / `.filters-container` ont disparu avec la section
+   « Advanced Filters », dont projet et tags sont remontes dans la barre nav. */
+.view-toggles {
     display: flex;
-    flex-wrap: wrap;
-    gap: 15px;
-    align-items: flex-end;
-}
-
-.filters-container .form-group {
-    flex: 1;
-    min-width: 200px;
-}
-
-.filters-container label {
-    display: block;
-    margin-bottom: 5px;
-    font-weight: 500;
-    color: #34495e;
-}
-
-.filters-container input[type="text"] {
-    width: 100%;
-    padding: 10px;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    font-size: 14px;
+    gap: 10px;
+    margin-bottom: 15px;
 }
 
 #apply-filters,

@@ -4,17 +4,10 @@ class TaskWarriorUI {
     constructor() {
         this.tasks = [];
         this.currentEditingTask = null;
-        this.currentContext = ''; // 'pro', 'perso', or '' for all
         this.currentFilters = {
             project: null,
             tags: []
         };
-        // Projets deduits des taches affichees. Insuffisant a lui seul :
-        // une tache masquee par le filtre courant emporte son projet avec elle.
-        this.projects = new Set();
-        // Projets connus du backend (`task _projects`), taches terminees
-        // comprises. C'est la liste qui fait autorite.
-        this.backendProjects = [];
         
         // Initialiser le composant TaskEditor
         this.taskEditor = new TaskEditor({
@@ -32,7 +25,6 @@ class TaskWarriorUI {
         // tant que rien d'autre ne sollicitait le reseau au demarrage.
         setTimeout(() => {
             this.initializeEventListeners();
-            this.updateProjectSuggestions();
             const templatesPrets =
                 (typeof taskCardManager !== 'undefined' && taskCardManager.templatesReady)
                     ? taskCardManager.templatesReady
@@ -61,13 +53,13 @@ class TaskWarriorUI {
             });
         }
         
-        // Add context selection event listeners
-        document.querySelectorAll('.context-option').forEach(button => {
-            button.addEventListener('click', (e) => this.setContext(e.target.getAttribute('data-context')));
+        // nav.js : contexte et statut filtrent cote serveur, donc on recharge.
+        // Projet et tags filtrent cote client : un simple re-rendu suffit, et
+        // c'est ce que dit `clientOnly`.
+        document.addEventListener('tw-filter-change', (e) => {
+            if (e.detail && e.detail.clientOnly) this.applyFilters();
+            else this.loadTasks();
         });
-
-        // nav.js : statuts et contextes filtrent cote serveur, on recharge.
-        document.addEventListener('tw-filter-change', () => this.loadTasks());
 
         // nav.js : le bouton + de la barre ouvre l'editeur.
         document.addEventListener('tw-open-add', () => {
@@ -106,28 +98,8 @@ class TaskWarriorUI {
             });
         }
 
-        // Add advanced filters event listeners
-        document.getElementById('apply-filters').addEventListener('click', () => this.applyFilters());
-        document.getElementById('clear-filters').addEventListener('click', () => this.clearFilters());
-        
-        // Apply filters on Enter key in filter inputs
-        const projectInput = document.getElementById('filter-project');
-        const tagsInput = document.getElementById('filter-tags');
-        
-        // Update project suggestions as user types
-        projectInput.addEventListener('input', (e) => {
-            this.updateProjectSuggestions(e.target.value);
-        });
-        
-        // Apply filters on Enter
-        [projectInput, tagsInput].forEach(input => {
-            input.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    this.applyFilters();
-                }
-            });
-        });
+        // Les deux vues sur `scheduled` sont les seuls filtres restes sur la
+        // page : projet, tags, contexte et statut vivent dans la barre nav.
     }
 
 
@@ -137,14 +109,9 @@ class TaskWarriorUI {
             this.showLoading(true);
             this.hideError();
 
-            // Load tasks and projects in parallel
-            const [tasksResponse, projectsResponse] = await Promise.all([
-                fetch('/api/tasks?' + (window.twNav ? window.twNav.stateToParams() : 'status=pending')),
-                fetch('/api/projects')
-            ]);
-
-            const tasksData = await tasksResponse.json();
-            const projectsData = await projectsResponse.json();
+            const reponse = await fetch(
+                '/api/tasks?' + (window.twNav ? window.twNav.stateToParams() : 'status=pending'));
+            const tasksData = await reponse.json();
 
             if (tasksData.success) {
                 this.tasks = tasksData.tasks;
@@ -153,12 +120,13 @@ class TaskWarriorUI {
                 this.showError(tasksData.error || 'Failed to load tasks');
             }
 
-            if (projectsData.success) {
-                this.setBackendProjects(projectsData.projects);
-                // Mettre à jour aussi les suggestions du TaskCreator
-                if (this.taskCreator) {
-                    this.taskCreator.updateProjectSuggestions(projectsData.projects);
-                }
+            // La liste des projets est demandee une seule fois par page, par la
+            // barre nav, qui en a besoin pour sa propre saisie semi-automatique.
+            // L'editeur de tache s'y branche plutot que de relancer
+            // `task _projects` a chaque rechargement de la liste.
+            if (this.taskCreator && window.twNav && window.twNav.projectsReady) {
+                window.twNav.projectsReady.then(
+                    noms => this.taskCreator.updateProjectSuggestions(noms));
             }
         } catch (error) {
             // Toute exception etait etiquetee « Network error », ce qui a fait
@@ -171,17 +139,6 @@ class TaskWarriorUI {
         }
     }
     
-    // Enregistre la liste faisant autorite et rafraichit les suggestions.
-    //
-    // Remplace `updateProjectDatalist()`, qui alimentait `project-options` --
-    // un identifiant absent de toutes les pages. Sa garde `if (!datalist)
-    // return;` rendait l'echec invisible : la reponse de /api/projects etait
-    // recuperee a chaque chargement, puis jetee.
-    setBackendProjects(projects) {
-        this.backendProjects = (projects || []).filter(Boolean);
-        this.updateProjectsList();
-    }
-
 
     // Gestionnaire unifié pour la sauvegarde des tâches (ajout et modification)
     handleTaskSaveSuccess(task, isEdit) {
@@ -206,19 +163,18 @@ class TaskWarriorUI {
     
 
 
-    // Filter tasks based on current context and advanced filters
+    // Filtrage client : projet, tags et les deux vues sur `scheduled`. Le
+    // contexte et le statut, eux, ont deja ete appliques par le backend.
     getFilteredTasks() {
         return this.tasks.filter(task => {
-            // Filter by context (pro/perso)
-            if (this.currentContext) {
-                if (!task.tags || !task.tags.includes(this.currentContext)) {
+            // Projet : prefixe sur la hierarchie pointee, comme TaskWarrior.
+            // `project:Maison` doit retenir `Maison.Cuisine`.
+            const vise = this.currentFilters.project;
+            if (vise) {
+                const porte = task.project || '';
+                if (porte !== vise && !porte.startsWith(vise + '.')) {
                     return false;
                 }
-            }
-            
-            // Filter by project
-            if (this.currentFilters.project && task.project !== this.currentFilters.project) {
-                return false;
             }
             
             // Filter by tags
@@ -274,119 +230,64 @@ class TaskWarriorUI {
         });
     }
     
-    // Apply advanced filters
-    applyFilters() {
-        const project = document.getElementById('filter-project').value.trim();
-        const tags = document.getElementById('filter-tags').value
-            .split(',')
-            .map(tag => tag.trim())
-            .filter(tag => tag.length > 0);
-        const toggleFilterBtn = document.getElementById('filter-planned-incomplete-btn');
-        const showPlannedIncomplete = toggleFilterBtn ? toggleFilterBtn.classList.contains('active') : false;
-        const todayFilterBtn = document.getElementById('filter-today-btn');
-        const showTodayOnly = todayFilterBtn ? todayFilterBtn.classList.contains('active') : false;
-            
+    // Recompose le filtre client a partir de deux sources : l'etat partage de
+    // la barre nav (projet, tags) et les deux vues propres a cette page.
+    //
+    // Relu a chaque rendu plutot que mis en cache sur evenement : l'etat de nav
+    // est restaure du localStorage *avant* le premier `tw-filter-change`, si
+    // bien qu'un filtre pose la veille etait ignore au chargement -- la liste
+    // s'affichait entiere alors que le resume annoncait un filtre.
+    lireFiltres() {
+        const etat = window.twNav ? window.twNav.getState() : {};
+        const tags = window.twNav ? window.twNav.getTags(etat) : [];
+        const actif = id => {
+            const bouton = document.getElementById(id);
+            return bouton ? bouton.classList.contains('active') : false;
+        };
+
         this.currentFilters = {
-            project: project || null,
+            project: (etat.project || '').trim() || null,
             tags: tags,
-            showPlannedIncomplete: showPlannedIncomplete,
-            showTodayOnly: showTodayOnly
+            showPlannedIncomplete: actif('filter-planned-incomplete-btn'),
+            showTodayOnly: actif('filter-today-btn')
         };
-        
-        this.renderTasks();
     }
-    
-    // Clear all filters
-    clearFilters() {
-        document.getElementById('filter-project').value = '';
-        document.getElementById('filter-tags').value = '';
-        const toggleFilterBtn = document.getElementById('filter-planned-incomplete-btn');
-        if (toggleFilterBtn) {
-            toggleFilterBtn.classList.remove('active');
-        }
-        const todayFilterBtn = document.getElementById('filter-today-btn');
-        if (todayFilterBtn) {
-            todayFilterBtn.classList.remove('active');
-        }
-        
-        this.currentFilters = {
-            project: null,
-            tags: [],
-            showPlannedIncomplete: false,
-            showTodayOnly: false
-        };
-        
+
+    applyFilters() {
         this.renderTasks();
     }
 
-    // Set the current context and update the UI
-    setContext(context) {
-        this.currentContext = context;
-        
-        // Update active state of context buttons
-        document.querySelectorAll('.context-option').forEach(button => {
-            if (button.getAttribute('data-context') === context) {
-                button.classList.add('active');
-            } else {
-                button.classList.remove('active');
-            }
+    // Ne remet a zero que ce qui appartient a la page. Projet, tags et
+    // contexte sont effaces par « Tout effacer » de la barre nav.
+    clearViewToggles() {
+        ['filter-planned-incomplete-btn', 'filter-today-btn'].forEach(id => {
+            const bouton = document.getElementById(id);
+            if (bouton) bouton.classList.remove('active');
         });
-        
-        // Re-render tasks with the new filter
-        this.updateProjectsList();
-        this.renderTasks();
+        this.applyFilters();
     }
-
-    updateProjectsList() {
-        this.projects.clear();
-        // La liste du backend d'abord : elle seule contient les projets dont
-        // toutes les taches sont terminees ou exclues par le filtre en cours.
-        this.backendProjects.forEach(projet => this.projects.add(projet));
-        // Puis celle des taches affichees : un projet tout juste cree n'est pas
-        // encore dans la reponse du backend.
-        this.tasks.forEach(task => {
-            if (task.project) {
-                this.projects.add(task.project);
-            }
-        });
-        this.updateProjectSuggestions();
-    }
-    
-    updateProjectSuggestions(filter = '') {
-        const datalist = document.getElementById('project-suggestions');
-        if (!datalist) return;
-        
-        // Clear existing options
-        datalist.innerHTML = '';
-        
-        // Filter and sort projects
-        const filteredProjects = Array.from(this.projects)
-            .filter(project => 
-                project.toLowerCase().includes(filter.toLowerCase())
-            )
-            .sort();
-        
-        // Add filtered projects to datalist
-        filteredProjects.forEach(project => {
-            const option = document.createElement('option');
-            option.value = project;
-            datalist.appendChild(option);
-        });
-    }
-
+    // `setContext()` a disparu avec le champ qu'il posait : le contexte est
+    // desormais un filtre TaskWarrior applique cote serveur par /api/tasks.
+    // Le refiltrer ici sur les seuls tags donnait un resultat different de
+    // celui du backend des qu'un contexte n'etait pas qu'une liste de tags.
+    // `updateProjectsList()` et `updateProjectSuggestions()` ont disparu : la
+    // saisie semi-automatique des projets appartient desormais a la barre nav,
+    // qui la sert aux trois pages depuis un seul appel a /api/projects.
     renderTasks() {
         const container = document.getElementById('tasks-container');
         if (!container) return;
-        
-        // Update projects list whenever tasks are rendered
-        this.updateProjectsList();
+
+        this.lireFiltres();
         
         const filteredTasks = this.getFilteredTasks();
-        
+
+        // Le compteur de la barre nav : `filtre/total` des que le filtrage
+        // client retire quelque chose, `total` sinon.
+        if (window.twNav) window.twNav.setCount(filteredTasks.length, this.tasks.length);
+
         if (filteredTasks.length === 0) {
-            container.innerHTML = '<div class="no-tasks">No tasks found' + 
-                (this.currentContext ? ` in context "${this.currentContext}"` : '') + 
-                (this.currentFilters.project ? ` for project "${this.currentFilters.project}"` : '') + 
+            container.innerHTML = '<div class="no-tasks">No tasks found' +
+                (this.currentFilters.project ? ` for project "${this.currentFilters.project}"` : '') +
                 (this.currentFilters.tags.length > 0 ? ` with tags: ${this.currentFilters.tags.join(', ')}` : '') + 
                 '</div>';
             return;

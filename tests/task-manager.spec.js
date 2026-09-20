@@ -1,9 +1,12 @@
 const { test, expect } = require('@playwright/test');
 
-// Désactiver le parallélisme pour éviter les interférences entre les tests
-test.describe.configure({ mode: 'serial' });
-
+// Le mode serial est declare dans le describe qui en a besoin, et non au
+// niveau du fichier : sinon il s'applique aussi aux blocs suivants, et
+// Playwright refuse alors tout describe parallele.
 test.describe('Task Manager', () => {
+  // Ces tests partagent une meme page, dans cet ordre.
+  test.describe.configure({ mode: 'serial' });
+
   let page;
   let browser;
 
@@ -120,6 +123,16 @@ test.describe('Task Manager', () => {
     await expect(carte).toHaveCount(0, { timeout: 10000 });
     console.log('Tâche marquée comme terminée avec succès');
   });
+});
+
+// ---------------------------------------------------------------------------
+// Tests independants : chacun ouvre son propre contexte et ne partage aucun
+// etat. Ils vivent hors du describe « Task Manager », qui est serial a cause
+// de sa page partagee -- et en mode serial, le premier echec fait **sauter**
+// tous les suivants, qui n'apparaissent alors ni en vert ni en rouge.
+// Constate en ecrivant le lot 1 : quatre tests n'avaient pas tourne du tout.
+test.describe('Pages et filtres', () => {
+  test.describe.configure({ mode: 'parallel' });
 
   // ── Course entre le chargement des templates et le premier rendu ───────────
   //
@@ -424,7 +437,8 @@ test.describe('Task Manager', () => {
       await expect(p.locator('#error-message')).toBeHidden();
 
       // Le champ doit pointer vers une datalist qui existe reellement.
-      const champ = p.locator('#filter-project');
+      // Depuis le lot 1 il vit dans la barre nav, partagee par les trois pages.
+      const champ = p.locator('#tw-project');
       const idListe = await champ.getAttribute('list');
       expect(idListe, 'le champ projet doit referencer une datalist').toBeTruthy();
       await expect(p.locator(`datalist#${idListe}`)).toHaveCount(1);
@@ -439,6 +453,216 @@ test.describe('Task Manager', () => {
 
       // Auto-verification : sans interception, le test ne prouverait rien.
       expect(stubs, '/api/projects aurait du etre intercepte').toBeGreaterThan(0);
+    } finally {
+      await context.close();
+    }
+  });
+
+
+  // ---------------------------------------------------------------------------
+  // La barre nav comme source unique des filtres (lot 1)
+  //
+  // Le contexte et le statut filtrent cote serveur ; le projet et les tags
+  // filtrent cote client, a la frappe. Ces tests stubbent les trois endpoints :
+  // dependre du contenu de la base de dev rendrait les assertions fragiles et,
+  // pire, ferait passer un test au vert sur une base vide.
+
+  const TACHES_STUB = [
+    { id: 1, uuid: 'aaaaaaaa-0000-0000-0000-000000000001', description: 'Poser le carrelage',
+      status: 'pending', project: 'Maison.Cuisine', tags: ['perso', 'bricolage'],
+      urgency: 9, entry: '20260101T080000Z' },
+    { id: 2, uuid: 'aaaaaaaa-0000-0000-0000-000000000002', description: 'Relire la spec',
+      status: 'pending', project: 'WebTaskManager', tags: ['pro'],
+      urgency: 7, entry: '20260101T080000Z' },
+    { id: 3, uuid: 'aaaaaaaa-0000-0000-0000-000000000003', description: 'Courir 10 km',
+      status: 'pending', tags: ['perso', 'sport'],
+      urgency: 5, entry: '20260101T080000Z' },
+  ];
+
+  const PROJETS_STUB = ['Maison.Cuisine', 'WebTaskManager', 'ProjetTermine'];
+
+  async function pageAvecDonnees(browser, options = {}) {
+    const contextes = options.contextes || ['pro', 'perso'];
+    const etatInitial = options.etatInitial || null;
+    const context = await browser.newContext();
+
+    if (etatInitial) {
+      await context.addInitScript(etat => {
+        try { localStorage.setItem('tw-nav-state', JSON.stringify(etat)); } catch (e) {}
+      }, etatInitial);
+    }
+
+    const p = await context.newPage();
+    const vus = { taches: 0, contextes: 0, projets: 0 };
+
+    await p.route('**/api/tasks?**', async route => {
+      vus.taches++;
+      await route.fulfill({
+        status: 200, contentType: 'application/json',
+        body: JSON.stringify({ success: true, tasks: TACHES_STUB }),
+      });
+    });
+    await p.route('**/api/contexts', async route => {
+      vus.contextes++;
+      const filtres = {};
+      contextes.forEach(c => { filtres[c] = '+' + c; });
+      await route.fulfill({
+        status: 200, contentType: 'application/json',
+        body: JSON.stringify({ success: true, contexts: contextes, filters: filtres, active: '' }),
+      });
+    });
+    await p.route('**/api/projects', async route => {
+      vus.projets++;
+      await route.fulfill({
+        status: 200, contentType: 'application/json',
+        body: JSON.stringify({ success: true, projects: PROJETS_STUB }),
+      });
+    });
+
+    return { context, page: p, vus };
+  }
+
+  test('le champ projet de la barre nav filtre la liste et met le compteur a jour', async ({ browser }) => {
+    const { context, page: p, vus } = await pageAvecDonnees(browser);
+    try {
+      await p.goto('/');
+      await expect(p.locator('#error-message')).toBeHidden();
+      await expect(p.locator('.task-card')).toHaveCount(3, { timeout: 10000 });
+
+      const champ = p.locator('#tw-project');
+      await expect(champ).toBeVisible();
+      await champ.fill('Maison.Cuisine');
+
+      // Filtrage cote client : une seule carte, et le compteur le dit.
+      await expect(p.locator('.task-card')).toHaveCount(1, { timeout: 5000 });
+      await expect(p.locator('#tw-count')).toHaveText('1/3');
+
+      // Et aucun aller-retour supplementaire : le filtre projet est client.
+      const requetesApresFiltre = vus.taches;
+      await p.waitForTimeout(500);
+      expect(vus.taches,
+        'filtrer par projet ne doit pas relancer /api/tasks').toBe(requetesApresFiltre);
+
+      // Vider le champ restaure tout.
+      await champ.fill('');
+      await expect(p.locator('.task-card')).toHaveCount(3, { timeout: 5000 });
+      await expect(p.locator('#tw-count')).toHaveText('3');
+
+      expect(vus.contextes, '/api/contexts aurait du etre appele').toBeGreaterThan(0);
+    } finally {
+      await context.close();
+    }
+  });
+
+  test('le champ tags de la barre nav filtre la liste', async ({ browser }) => {
+    const { context, page: p } = await pageAvecDonnees(browser);
+    try {
+      await p.goto('/');
+      await expect(p.locator('.task-card')).toHaveCount(3, { timeout: 10000 });
+
+      await p.locator('#tw-tags').fill('perso');
+      await expect(p.locator('.task-card')).toHaveCount(2, { timeout: 5000 });
+
+      // Plusieurs tags : conjonction, pas disjonction.
+      await p.locator('#tw-tags').fill('perso, sport');
+      await expect(p.locator('.task-card')).toHaveCount(1, { timeout: 5000 });
+      await expect(p.locator('#tw-count')).toHaveText('1/3');
+    } finally {
+      await context.close();
+    }
+  });
+
+  test('les contextes passent en liste deroulante au-dela de cinq', async ({ browser }) => {
+    // Trois contextes : des boutons.
+    const peu = await pageAvecDonnees(browser, { contextes: ['pro', 'perso', 'asso'] });
+    try {
+      await peu.page.goto('/');
+      await expect(peu.page.locator('#tw-ctx-btns .tw-ctx-btn')).toHaveCount(4, { timeout: 10000 });
+      await expect(peu.page.locator('#tw-ctx-select')).toHaveCount(0);
+    } finally {
+      await peu.context.close();
+    }
+
+    // Six : une liste deroulante, et plus aucun bouton de contexte.
+    const beaucoup = await pageAvecDonnees(browser, {
+      contextes: ['pro', 'perso', 'asso', 'sport', 'maison', 'lecture'],
+    });
+    try {
+      await beaucoup.page.goto('/');
+      const liste = beaucoup.page.locator('#tw-ctx-select');
+      await expect(liste).toBeVisible({ timeout: 10000 });
+      await expect(beaucoup.page.locator('#tw-ctx-btns .tw-ctx-btn')).toHaveCount(0);
+      // « All » plus les six contextes.
+      await expect(liste.locator('option')).toHaveCount(7);
+    } finally {
+      await beaucoup.context.close();
+    }
+  });
+
+  test('un filtre restaure du localStorage est annonce, et effacable', async ({ browser }) => {
+    // Le piege que ce test couvre : l'etat de nav survit a la fermeture de
+    // l'onglet. Un filtre pose la veille tronquerait la liste le lendemain sans
+    // la moindre trace visible.
+    const { context, page: p } = await pageAvecDonnees(browser, {
+      etatInitial: { statuses: ['pending'], context: '', filter: '',
+                     priority: '', project: 'WebTaskManager', tags: '' },
+    });
+    try {
+      await p.goto('/');
+      await expect(p.locator('.task-card')).toHaveCount(1, { timeout: 10000 });
+
+      // Le champ est repeuple, et le resume dit pourquoi la liste est courte.
+      await expect(p.locator('#tw-project')).toHaveValue('WebTaskManager');
+      const resume = p.locator('#tw-filter-summary');
+      await expect(resume).toBeVisible();
+      await expect(resume).toContainText('WebTaskManager');
+
+      // « Tout effacer » remet tout a zero.
+      await p.locator('#tw-clear-filters').click();
+      await expect(p.locator('#tw-project')).toHaveValue('');
+      await expect(p.locator('.task-card')).toHaveCount(3, { timeout: 5000 });
+      await expect(resume).toBeHidden();
+    } finally {
+      await context.close();
+    }
+  });
+
+  test('la section « Advanced Filters » a laisse place aux deux vues', async ({ browser }) => {
+    const { context, page: p } = await pageAvecDonnees(browser);
+    try {
+      await p.goto('/');
+      await expect(p.locator('.task-card').first()).toBeVisible({ timeout: 10000 });
+
+      // Les champs dupliques ont disparu...
+      await expect(p.locator('#filter-project')).toHaveCount(0);
+      await expect(p.locator('#filter-tags')).toHaveCount(0);
+      await expect(p.locator('#apply-filters')).toHaveCount(0);
+
+      // ...mais les deux vues sur `scheduled` sont restees.
+      await expect(p.locator('#filter-planned-incomplete-btn')).toBeVisible();
+      await expect(p.locator('#filter-today-btn')).toBeVisible();
+    } finally {
+      await context.close();
+    }
+  });
+
+  test('le kanban applique lui aussi le filtre projet de la barre nav', async ({ browser }) => {
+    // Le kanban rechargeait sur chaque `tw-filter-change`. Sans ce test, poser
+    // le drapeau `clientOnly` sur la saisie l'aurait fait relancer une commande
+    // TaskWarrior a chaque touche, tout en ignorant le filtre.
+    const { context, page: p, vus } = await pageAvecDonnees(browser);
+    try {
+      await p.goto('/kanban.html');
+      await expect(p.locator('.kanban-card')).toHaveCount(3, { timeout: 10000 });
+
+      const avant = vus.taches;
+      await p.locator('#tw-project').fill('WebTaskManager');
+      await expect(p.locator('.kanban-card')).toHaveCount(1, { timeout: 5000 });
+      await expect(p.locator('#tw-count')).toHaveText('1/3');
+
+      await p.waitForTimeout(500);
+      expect(vus.taches,
+        'filtrer par projet ne doit pas relancer /api/tasks').toBe(avant);
     } finally {
       await context.close();
     }
