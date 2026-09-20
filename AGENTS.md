@@ -90,7 +90,7 @@ Préférer toujours l'isolation par `TASKRC` au `DEVELOPER_MODE`.
 
 ```bash
 python main_fastapi.py          # backend FastAPI sur :8000 (docs sur /docs)
-pytest test_fastapi.py          # tests unitaires, mockés, aucune dépendance à Taskwarrior
+pytest                          # toute la suite unitaire (voir ci-dessous)
 npm test                        # Playwright, nécessite TASKRC (cf. §3)
 ```
 
@@ -111,7 +111,14 @@ PW_NO_SERVER=1 PW_BASE_URL=http://localhost:1875 npm test
 
 ### Pipeline en trois étages
 
-1. **dev-pc, unitaire** — `pytest test_fastapi.py`. Instantané, mocké, tourne partout.
+1. **dev-pc, unitaire** — `pytest`. Instantané, tourne partout. Deux fichiers :
+   - `test_fastapi.py` — l'API, entièrement mockée, aucune dépendance à Taskwarrior ;
+   - `test_integrite_source.py` — la **forme** des fichiers du dépôt : aucun marqueur de
+     conflit laissé en place, aucun commentaire CSS dépareillé. Un `*/` orphelin fait
+     jeter au parseur les règles qui suivent **sans rien signaler** ; c'est ainsi que le
+     bloc `:root` de `calendar-planner.css` est resté mort six mois.
+
+   Lancer `pytest` sans argument : viser un seul fichier laisserait l'autre de côté.
 2. **dev-pc, intégration réelle** — `TASKRC` sur `taskwarrior-dev`, `DEVELOPER_MODE` désactivé,
    vraies commandes `task`, plus Playwright. Sans risque grâce à l'isolation de la base.
 3. **staging sur téléphone** — mêmes tests sur `~/.task-staging`. **Non facultatif** : c'est le
