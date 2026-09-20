@@ -8,13 +8,10 @@ test.describe('Task Manager', () => {
   test.describe.configure({ mode: 'serial' });
 
   let page;
-  let browser;
 
   test.beforeAll(async ({ browser: testBrowser }) => {
     // Le backend est demarre par playwright.config.js (webServer), pas ici.
-    // Créer une nouvelle instance de navigateur
-    browser = testBrowser;
-    const context = await browser.newContext();
+    const context = await testBrowser.newContext();
     page = await context.newPage();
 
     // Activer les logs pour le débogage
@@ -31,9 +28,12 @@ test.describe('Task Manager', () => {
   });
 
   test.afterAll(async () => {
-    // Fermer le navigateur
-    if (browser) {
-      await browser.close();
+    // Fermer le **contexte**, pas le navigateur. Le navigateur est une fixture
+    // de worker, partagee avec les tests paralleles du meme worker : le fermer
+    // ici les faisait echouer par intermittence sur « Target page, context or
+    // browser has been closed ». Playwright gere lui-meme sa duree de vie.
+    if (page) {
+      await page.context().close();
     }
   });
 
@@ -126,13 +126,18 @@ test.describe('Task Manager', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Tests independants : chacun ouvre son propre contexte et ne partage aucun
-// etat. Ils vivent hors du describe « Task Manager », qui est serial a cause
-// de sa page partagee -- et en mode serial, le premier echec fait **sauter**
-// tous les suivants, qui n'apparaissent alors ni en vert ni en rouge.
-// Constate en ecrivant le lot 1 : quatre tests n'avaient pas tourne du tout.
-test.describe('Pages et filtres', () => {
-  test.describe.configure({ mode: 'parallel' });
+// Parcours qui touchent la vraie base de dev.
+//
+// Serial, et ce n'est pas un detail : ces tests creent de vraies taches via
+// l'API, et le backend serialise ses sous-processus TaskWarrior. Les faire
+// tourner en parallele les met en concurrence sur une seule base, et le plus
+// lourd d'entre eux depassait alors son delai une fois sur trois.
+//
+// `fullyParallel` est desactive dans playwright.config.js pour que ce bloc et
+// « Task Manager » -- l'autre ecrivain -- ne tombent pas non plus en meme
+// temps dans deux workers differents.
+test.describe('Parcours sur la base de dev', () => {
+  test.describe.configure({ mode: 'serial' });
 
   // ── Course entre le chargement des templates et le premier rendu ───────────
   //
@@ -457,6 +462,15 @@ test.describe('Pages et filtres', () => {
       await context.close();
     }
   });
+
+});
+
+
+// ---------------------------------------------------------------------------
+// Tests entierement stubbes : aucun appel ne sort vers TaskWarrior, donc
+// aucune contention. Ils peuvent tourner en parallele sans rien se disputer.
+test.describe('Filtres partages', () => {
+  test.describe.configure({ mode: 'parallel' });
 
 
   // ---------------------------------------------------------------------------

@@ -40,8 +40,17 @@ module.exports = defineConfig({
   expect: {
     timeout: 5000
   },
-  /* Run tests in files in parallel */
-  fullyParallel: true,
+  /*
+   * Volontairement a false : les describes d'un meme fichier tournent alors
+   * dans un seul worker, sauf ceux qui declarent `mode: 'parallel'`.
+   *
+   * Deux blocs creent de vraies taches via l'API, et le backend serialise ses
+   * sous-processus TaskWarrior. A true, ils tombaient dans deux workers
+   * differents et se disputaient une seule base : le plus lourd depassait son
+   * delai environ une fois sur trois. Seul le bloc entierement stubbe reclame
+   * le parallelisme, et lui n'a rien a se disputer.
+   */
+  fullyParallel: false,
   /* Fail the build on CI if you accidentally left test.only in the source code. */
   forbidOnly: !!process.env.CI,
   /* Retry on CI only */

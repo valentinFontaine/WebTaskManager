@@ -131,7 +131,7 @@ Prod ne reçoit qu'un `git pull` + redémarrage, jamais de test.
 **Aucune correction de bug n'est complète sans un test qui échoue avant elle et passe
 après.** Écrire le test *d'abord* : un test qui n'a jamais rougi ne prouve rien.
 
-Quatre exigences, apprises en se faisant avoir sur chacune :
+Cinq exigences, apprises en se faisant avoir sur chacune :
 
 1. **Le test doit être déterministe.** Pour un bug de concurrence, ne pas espérer perdre
    la course : la faire perdre. `page.route()` avec un délai explicite, plutôt qu'un
@@ -147,8 +147,12 @@ Quatre exigences, apprises en se faisant avoir sur chacune :
    échec fait *sauter* tous les tests suivants du bloc : ils n'apparaissent alors ni en
    vert ni en rouge, et un `10 passed` masquait quatre tests qui n'avaient jamais tourné.
    Le mode `serial` se déclare dans le `describe` qui en a besoin — jamais au niveau du
-   fichier, où il contamine tout ce qui suit. Un test indépendant ouvre son propre
-   contexte et vit dans un bloc parallèle.
+   fichier, où il contamine tout ce qui suit.
+5. **Ce qui écrit dans la vraie base ne se parallélise pas.** Le backend sérialise ses
+   sous-processus Taskwarrior, et la base de dev est unique : deux tests qui créent des
+   tâches en même temps se disputent les deux. Le plus lourd dépassait son délai une fois
+   sur trois. D'où `fullyParallel: false` et un seul bloc `mode: 'parallel'`, réservé aux
+   tests entièrement stubbés — ceux-là n'ont rien à se disputer.
 
 Les tests Playwright tournent sous Chromium uniquement. Plusieurs bugs remontés l'ont été
 depuis Firefox, dont les messages d'erreur diffèrent : un vert ici ne couvre pas tout.
