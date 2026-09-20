@@ -382,10 +382,14 @@
         // Projet et tags : filtrage local, donc `clientOnly` -- la page
         // re-rend sans relancer /api/tasks. Anti-rebond pour ne pas re-rendre
         // a chaque touche.
-        let minuterie = null;
+        //
+        // Un minuteur **par champ**, et non un seul partage : avec un minuteur
+        // unique, ecrire dans « tags » juste apres « projet » annulait la
+        // saisie du premier, qui n'atteignait jamais l'etat.
+        const minuteries = {};
         function saisie(cle, valeur) {
-            clearTimeout(minuterie);
-            minuterie = setTimeout(
+            clearTimeout(minuteries[cle]);
+            minuteries[cle] = setTimeout(
                 () => setState({ [cle]: valeur }, { clientOnly: true }), SAISIE_DELAI);
         }
         document.getElementById('tw-project')
@@ -396,7 +400,7 @@
         // « Tout effacer » ne touche qu'a l'etat de nav. Les vues propres a une
         // page -- « prevues aujourd'hui », « en retard » -- restent les siennes.
         document.getElementById('tw-clear-filters').addEventListener('click', () => {
-            clearTimeout(minuterie);
+            Object.values(minuteries).forEach(clearTimeout);
             setState({ context: '', project: '', tags: '', statuses: ['pending'] });
         });
 

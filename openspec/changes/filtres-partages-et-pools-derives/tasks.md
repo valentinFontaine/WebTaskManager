@@ -53,15 +53,22 @@ serait devenu bloquant au lot 1, ou le contexte filtre cote serveur.
   veille etait ignore au chargement : la liste s'affichait entiere pendant que le resume
   annoncait un filtre. Il est desormais relu a chaque rendu.
 
-## Lot 2 — le calendrier consomme les filtres partagés
+## Lot 2 — le calendrier consomme les filtres partages
 
-- [ ] Test : filtrer par tag depuis la barre nav réduit la colonne « Tâches à planifier »
-- [ ] Test `pytest` (intégrité source) : plus aucune occurrence de `filter-pool`
-- [ ] `calendar-planner.js` : écouter `tw-filter-change`, appliquer contexte (serveur)
-      puis projet et tags (client)
-- [ ] Retirer le `<select id="filter-pool">` de `calendar-planner.html` et le
-      `currentFilter.pool` associé
-- [ ] Commit
+- [x] Test : filtrer par tag depuis la barre nav reduit la colonne « Taches a planifier »,
+      **sans** relancer `/api/tasks` ; changer de contexte, lui, recharge
+- [x] Test : le `<select id="filter-pool">` a disparu de la page
+- [x] `calendar-planner.js` ecoute `tw-filter-change` et respecte `clientOnly`
+- [x] `loadTasks()` passe enfin `stateToParams()` : la page appelait `/api/tasks` **sans
+      aucun parametre**, donc ignorait contexte et statut depuis toujours
+- [x] `currentFilter.pool` et son menu supprimes
+- [x] Commit
+
+### Defaut trouve par le test
+
+Le minuteur anti-rebond de `nav.js` etait **unique et partage** par les deux champs :
+ecrire dans « tags » juste apres « projet » annulait la saisie du premier, qui
+n'atteignait jamais l'etat. Un minuteur par champ desormais.
 
 ## Lot 3 — deux sources, et les blocs hors filtre
 

@@ -23,8 +23,9 @@ function lireReadyOnly() {
     }
 }
 
+// Le tri et la bascule sont propres a cette page. Projet, tags, contexte et
+// statut viennent de la barre nav, partagee avec la liste et le kanban.
 let currentFilter = {
-    pool: 'all',
     sort: 'urgency',
     readyOnly: lireReadyOnly()
 };
@@ -185,10 +186,12 @@ function setupEventListeners() {
         loadTasks();
     });
 
-    // Filtres
-    document.getElementById('filter-pool').addEventListener('change', (e) => {
-        currentFilter.pool = e.target.value;
-        filterAndDisplayTasks();
+    // Filtres partages : le contexte et le statut filtrent cote serveur, donc
+    // on recharge ; le projet et les tags filtrent cote client, un re-rendu
+    // suffit. Recharger a chaque frappe relancerait TaskWarrior pour rien.
+    document.addEventListener('tw-filter-change', (e) => {
+        if (e.detail && e.detail.clientOnly) filterAndDisplayTasks();
+        else loadTasks();
     });
 
     const basculePretes = document.getElementById('filter-ready-only');
@@ -473,8 +476,10 @@ async function handleBeforeDeleteEvent(event) {
  */
 function loadTasks() {
     console.log('Chargement des tâches...');
-    // Charger les tâches non planifiées
-    fetch('/api/tasks')
+    // Les taches a planifier suivent le contexte et le statut de la barre nav,
+    // appliques par TaskWarrior lui-meme. La page les ignorait entierement.
+    const params = window.twNav ? window.twNav.stateToParams() : 'status=pending';
+    fetch('/api/tasks?' + params)
         .then(response => response.json())
         .then(data => {
             console.log('Tâches non planifiées reçues:', data);
@@ -690,11 +695,24 @@ function getSelectedTask() {
 function filterAndDisplayTasks() {
     let filteredTasks = [...unplannedTasks];
 
-    // Filtrer par pool
-    if (currentFilter.pool !== 'all') {
-        filteredTasks = filteredTasks.filter(task => 
-            (task.pool || 'pro') === currentFilter.pool
-        );
+    // Projet et tags, depuis la barre nav. Le projet est un prefixe sur la
+    // hierarchie pointee, comme TaskWarrior : `Maison` retient `Maison.Cuisine`.
+    //
+    // Remplace le menu des pools, qui recopiait a la main sur chaque tache une
+    // information deja portee par ses tags -- et qui mentait : `task.pool ||
+    // 'pro'` declarait « pro » toute tache sans pool.
+    const etatNav = window.twNav ? window.twNav.getState() : {};
+    const projet = (etatNav.project || '').trim();
+    const tags = window.twNav ? window.twNav.getTags(etatNav) : [];
+    if (projet) {
+        filteredTasks = filteredTasks.filter(task => {
+            const porte = task.project || '';
+            return porte === projet || porte.startsWith(projet + '.');
+        });
+    }
+    if (tags.length) {
+        filteredTasks = filteredTasks.filter(
+            task => tags.every(tag => (task.tags || []).includes(tag)));
     }
 
     // Ne garder que les taches pretes a etre planifiees, c'est-a-dire dont la

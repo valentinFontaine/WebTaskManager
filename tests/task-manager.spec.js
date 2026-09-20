@@ -470,13 +470,13 @@ test.describe('Pages et filtres', () => {
   const TACHES_STUB = [
     { id: 1, uuid: 'aaaaaaaa-0000-0000-0000-000000000001', description: 'Poser le carrelage',
       status: 'pending', project: 'Maison.Cuisine', tags: ['perso', 'bricolage'],
-      urgency: 9, entry: '20260101T080000Z' },
+      estTime: 'PT2H', urgency: 9, entry: '20260101T080000Z' },
     { id: 2, uuid: 'aaaaaaaa-0000-0000-0000-000000000002', description: 'Relire la spec',
       status: 'pending', project: 'WebTaskManager', tags: ['pro'],
-      urgency: 7, entry: '20260101T080000Z' },
+      estTime: 'PT1H', urgency: 7, entry: '20260101T080000Z' },
     { id: 3, uuid: 'aaaaaaaa-0000-0000-0000-000000000003', description: 'Courir 10 km',
       status: 'pending', tags: ['perso', 'sport'],
-      urgency: 5, entry: '20260101T080000Z' },
+      estTime: 'PT45M', urgency: 5, entry: '20260101T080000Z' },
   ];
 
   const PROJETS_STUB = ['Maison.Cuisine', 'WebTaskManager', 'ProjetTermine'];
@@ -493,9 +493,9 @@ test.describe('Pages et filtres', () => {
     }
 
     const p = await context.newPage();
-    const vus = { taches: 0, contextes: 0, projets: 0 };
+    const vus = { taches: 0, planifiees: 0, contextes: 0, projets: 0 };
 
-    await p.route('**/api/tasks?**', async route => {
+    await p.route('**/api/tasks**', async route => {
       vus.taches++;
       await route.fulfill({
         status: 200, contentType: 'application/json',
@@ -509,6 +509,15 @@ test.describe('Pages et filtres', () => {
       await route.fulfill({
         status: 200, contentType: 'application/json',
         body: JSON.stringify({ success: true, contexts: contextes, filters: filtres, active: '' }),
+      });
+    });
+    // Enregistree apres la route des taches : Playwright donne la priorite a
+    // la derniere posee, et le motif ci-dessus matcherait aussi cette URL.
+    await p.route('**/api/tasks/planned', async route => {
+      vus.planifiees++;
+      await route.fulfill({
+        status: 200, contentType: 'application/json',
+        body: JSON.stringify({ success: true, data: options.planifiees || [] }),
       });
     });
     await p.route('**/api/projects', async route => {
@@ -663,6 +672,53 @@ test.describe('Pages et filtres', () => {
       await p.waitForTimeout(500);
       expect(vus.taches,
         'filtrer par projet ne doit pas relancer /api/tasks').toBe(avant);
+    } finally {
+      await context.close();
+    }
+  });
+
+  test('le calendrier suit les filtres de la barre nav', async ({ browser }) => {
+    // La page calendrier appelait `/api/tasks` sans le moindre parametre :
+    // ni contexte, ni statut, ni projet, ni tags. Elle ignorait donc
+    // entierement l'etat partage par les deux autres pages.
+    const { context, page: p, vus } = await pageAvecDonnees(browser);
+    try {
+      await p.goto('/calendar-planner.html');
+      await expect(p.locator('#unplanned-tasks .task-card')).toHaveCount(3, { timeout: 15000 });
+
+      // Tags : filtrage client, sans nouvel appel au backend.
+      const avant = vus.taches;
+      await p.locator('#tw-tags').fill('sport');
+      await expect(p.locator('#unplanned-tasks .task-card')).toHaveCount(1, { timeout: 5000 });
+      await p.waitForTimeout(500);
+      expect(vus.taches,
+        'filtrer par tag ne doit pas relancer /api/tasks').toBe(avant);
+
+      // Projet : prefixe sur la hierarchie pointee.
+      await p.locator('#tw-tags').fill('');
+      await p.locator('#tw-project').fill('Maison');
+      await expect(p.locator('#unplanned-tasks .task-card')).toHaveCount(1, { timeout: 5000 });
+
+      // Le contexte, lui, filtre cote serveur : la page doit recharger.
+      await p.locator('#tw-project').fill('');
+      await expect(p.locator('#unplanned-tasks .task-card')).toHaveCount(3, { timeout: 5000 });
+      const avantContexte = vus.taches;
+      await p.locator('.tw-ctx-btn[data-ctx="pro"]').click();
+      await expect.poll(() => vus.taches, { timeout: 5000 }).toBeGreaterThan(avantContexte);
+    } finally {
+      await context.close();
+    }
+  });
+
+  test('le menu des pools a disparu du calendrier', async ({ browser }) => {
+    // Le pool etait une recopie manuelle, sur chaque tache, d'une information
+    // deja portee par ses tags -- et le menu mentait : `task.pool || 'pro'`
+    // declarait « pro » toute tache sans pool.
+    const { context, page: p } = await pageAvecDonnees(browser);
+    try {
+      await p.goto('/calendar-planner.html');
+      await expect(p.locator('#task-count')).toBeVisible({ timeout: 15000 });
+      await expect(p.locator('#filter-pool')).toHaveCount(0);
     } finally {
       await context.close();
     }
