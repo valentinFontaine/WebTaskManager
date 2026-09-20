@@ -481,8 +481,20 @@ test.describe('Pages et filtres', () => {
 
   const PROJETS_STUB = ['Maison.Cuisine', 'WebTaskManager', 'ProjetTermine'];
 
+  // Date de planification du jour, a une heure locale donnee, au format
+  // TaskWarrior. Construite relativement a maintenant : une date en dur
+  // sortirait de la semaine affichee des le lendemain.
+  function planifieAujourdHui(heureLocale) {
+    const d = new Date();
+    d.setHours(heureLocale, 0, 0, 0);
+    const n = v => String(v).padStart(2, '0');
+    return `${d.getUTCFullYear()}${n(d.getUTCMonth() + 1)}${n(d.getUTCDate())}`
+         + `T${n(d.getUTCHours())}${n(d.getUTCMinutes())}00Z`;
+  }
+
   async function pageAvecDonnees(browser, options = {}) {
     const contextes = options.contextes || ['pro', 'perso'];
+    const taches = options.taches || TACHES_STUB;
     const etatInitial = options.etatInitial || null;
     const context = await browser.newContext();
 
@@ -499,7 +511,7 @@ test.describe('Pages et filtres', () => {
       vus.taches++;
       await route.fulfill({
         status: 200, contentType: 'application/json',
-        body: JSON.stringify({ success: true, tasks: TACHES_STUB }),
+        body: JSON.stringify({ success: true, tasks: taches }),
       });
     });
     await p.route('**/api/contexts', async route => {
@@ -719,6 +731,91 @@ test.describe('Pages et filtres', () => {
       await p.goto('/calendar-planner.html');
       await expect(p.locator('#task-count')).toBeVisible({ timeout: 15000 });
       await expect(p.locator('#filter-pool')).toHaveCount(0);
+    } finally {
+      await context.close();
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Blocs hors filtre (lot 3)
+  //
+  // Filtrer le calendrier par contexte ne doit pas faire disparaitre les
+  // creneaux deja occupes : on planifierait deux choses en meme temps. Les
+  // blocs hors filtre restent donc visibles, hachures et sans titre -- assez
+  // pour savoir que le creneau est pris, pas assez pour lire ce qu'il contient.
+
+  const PLANIFIEE_HORS = {
+    id: 9, uuid: 'bbbbbbbb-0000-0000-0000-000000000009',
+    description: 'Reunion perso confidentielle', status: 'pending',
+    tags: ['perso'], estTime: 'PT1H', urgency: 4, entry: '20260101T080000Z',
+  };
+
+  test('un bloc hors filtre reste visible, hachure et sans titre', async ({ browser }) => {
+    const planifiee = { ...PLANIFIEE_HORS, scheduled: planifieAujourdHui(10) };
+    // La tache planifiee est **absente** de la reponse de /api/tasks : c'est
+    // exactement ce que produit un filtre de contexte applique cote serveur.
+    const { context, page: p } = await pageAvecDonnees(browser, {
+      planifiees: [planifiee],
+      etatInitial: { statuses: ['pending'], context: 'pro', filter: '',
+                     priority: '', project: '', tags: '' },
+    });
+    try {
+      await p.goto('/calendar-planner.html');
+      await expect(p.locator('#task-count')).toBeVisible({ timeout: 15000 });
+
+      // Le creneau est occupe, et ca se voit.
+      const hachure = p.locator('.calendar-event-hors-filtre');
+      await expect(hachure.first()).toBeVisible({ timeout: 10000 });
+
+      // Mais son contenu ne fuite pas.
+      await expect(p.locator('#calendar'))
+        .not.toContainText('Reunion perso confidentielle');
+    } finally {
+      await context.close();
+    }
+  });
+
+  test('la bascule cache les blocs hors filtre, et est cochee par defaut', async ({ browser }) => {
+    const planifiee = { ...PLANIFIEE_HORS, scheduled: planifieAujourdHui(10) };
+    const { context, page: p } = await pageAvecDonnees(browser, {
+      planifiees: [planifiee],
+      etatInitial: { statuses: ['pending'], context: 'pro', filter: '',
+                     priority: '', project: '', tags: '' },
+    });
+    try {
+      await p.goto('/calendar-planner.html');
+      await expect(p.locator('#task-count')).toBeVisible({ timeout: 15000 });
+
+      // Le defaut sur : on voit ce qui est deja pris.
+      const bascule = p.locator('#filter-hors-filtre');
+      await expect(bascule).toBeChecked();
+      await expect(p.locator('.calendar-event-hors-filtre').first())
+        .toBeVisible({ timeout: 10000 });
+
+      await bascule.uncheck();
+      await expect(p.locator('.calendar-event-hors-filtre')).toHaveCount(0, { timeout: 5000 });
+    } finally {
+      await context.close();
+    }
+  });
+
+  test('un bloc dans le filtre garde son titre', async ({ browser }) => {
+    // Le pendant du test precedent : sans lui, masquer *tous* les titres
+    // passerait pour un succes.
+    const dansLeFiltre = { ...TACHES_STUB[1], scheduled: planifieAujourdHui(14) };
+    const { context, page: p } = await pageAvecDonnees(browser, {
+      taches: [TACHES_STUB[0], dansLeFiltre, TACHES_STUB[2]],
+      planifiees: [dansLeFiltre],
+    });
+    try {
+      await p.goto('/calendar-planner.html');
+      await expect(p.locator('#task-count')).toBeVisible({ timeout: 15000 });
+
+      await expect(p.locator('#calendar')).toContainText('Relire la spec', { timeout: 10000 });
+      await expect(p.locator('.calendar-event-hors-filtre')).toHaveCount(0);
+
+      // Et il a quitte la colonne de gauche, puisqu'il est planifie.
+      await expect(p.locator('#unplanned-tasks .task-card')).toHaveCount(2);
     } finally {
       await context.close();
     }

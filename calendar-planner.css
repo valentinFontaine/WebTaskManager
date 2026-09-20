@@ -893,3 +893,26 @@ body {
     cursor: pointer;
     margin: 0;
 }
+
+/* ===================================
+   Blocs hors filtre
+   =================================== */
+
+/* Hachures plutot que transparence : la transparence est deja le langage des
+   cartes selectionnees dans la colonne de droite, et les deux se seraient
+   confondues. */
+/* Positionne en absolu, et non `height: 100%` : TOAST UI enveloppe la sortie
+   du gabarit dans un `.toastui-calendar-template-time` dimensionne par son
+   contenu. Un contenu vide donnait donc une hauteur nulle, et des hachures
+   invisibles. L'ancetre positionne est le bloc de l'evenement lui-meme. */
+.calendar-event-hors-filtre {
+    position: absolute;
+    inset: 0;
+    background-image: repeating-linear-gradient(
+        45deg,
+        rgba(255, 255, 255, 0.55) 0,
+        rgba(255, 255, 255, 0.55) 5px,
+        transparent 5px,
+        transparent 10px
+    );
+}

@@ -72,15 +72,27 @@ n'atteignait jamais l'etat. Un minuteur par champ desormais.
 
 ## Lot 3 — deux sources, et les blocs hors filtre
 
-- [ ] Test : en contexte `pro`, un bloc planifié `+perso` est **présent** dans le
-      calendrier, porte la classe hachurée, et son titre n'est pas lisible
-- [ ] Test : décocher « Afficher les blocs hors filtre » le fait disparaître ; l'état par
-      défaut au premier chargement est **coché**
-- [ ] Charger les blocs occupés sans filtre, indépendamment de la liste à planifier
-- [ ] Marquer chaque bloc dans/hors filtre ; hachures + titre masqué pour les seconds
-- [ ] Bascule « Afficher les blocs hors filtre », à côté de « Prêtes seulement »,
-      persistée dans `localStorage`
-- [ ] Commit
+- [x] Test : en contexte `pro`, un bloc planifie absent de la reponse `/api/tasks` est
+      **present** dans le calendrier, hachure, et son titre n'est pas rendu
+- [x] Test : la bascule est cochee par defaut, et la decocher fait disparaitre ces blocs
+- [x] Test : un bloc **dans** le filtre garde son titre — garde-fou contre un masquage
+      trop large (vert avant comme apres, il ne prouve pas la correction mais empeche
+      la sur-correction)
+- [x] `uuidsEnContexte` : les UUID retenus par le backend pour le filtre courant. Le
+      contexte est une expression TaskWarrior, seul le serveur sait y repondre — on se
+      souvient donc de sa reponse au lieu de la reinterpreter en JavaScript. Aucune
+      requete supplementaire : la reponse contenait deja les taches planifiees.
+- [x] Calendrier `hors-filtre` dedie, titre vide, `raw` reduit a l'UUID, `isReadOnly`
+- [x] Hachures en CSS plutot que transparence : la transparence est deja le langage des
+      cartes selectionnees, les deux se seraient confondues
+- [x] Bascule « Blocs hors filtre », persistee, a cote de « Pretes seulement »
+- [x] Commit
+
+### Defaut corrige au passage
+
+`template.time` injectait `event.title` dans `innerHTML` **sans echappement** : une
+description contenant du balisage etait interpretee. Echappe desormais — et c'est aussi
+ce qui garantit qu'un titre hors filtre ne fuite pas dans le DOM.
 
 ## Lot 4 — dérivation du pool (préparé, **non branché**)
 

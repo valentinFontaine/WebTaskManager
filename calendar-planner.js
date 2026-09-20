@@ -25,10 +25,39 @@ function lireReadyOnly() {
 
 // Le tri et la bascule sont propres a cette page. Projet, tags, contexte et
 // statut viennent de la barre nav, partagee avec la liste et le kanban.
+// Les blocs hors filtre sont visibles par defaut : le defaut sur est de voir
+// ce qui est deja pris, sous peine de planifier deux choses en meme temps.
+const HORS_FILTRE_KEY = 'tw-calendar-hors-filtre';
+
+function lireHorsFiltre() {
+    try {
+        const stocke = localStorage.getItem(HORS_FILTRE_KEY);
+        return stocke === null ? true : stocke === 'true';
+    } catch {
+        return true;
+    }
+}
+
 let currentFilter = {
     sort: 'urgency',
-    readyOnly: lireReadyOnly()
+    readyOnly: lireReadyOnly(),
+    horsFiltre: lireHorsFiltre()
 };
+
+// Identifiant du calendrier TOAST UI reserve aux blocs hors filtre.
+const CAL_HORS_FILTRE = 'hors-filtre';
+
+// UUID des taches que le backend a renvoyees pour le filtre courant. Le
+// contexte est une expression TaskWarrior : seul le serveur sait y repondre,
+// donc on se souvient de ce qu'il a repondu plutot que de le reinterpreter.
+let uuidsEnContexte = new Set();
+// Le titre d'une tache finissait dans `innerHTML` sans echappement.
+function echapperHtml(valeur) {
+    return String(valeur == null ? '' : valeur)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 let selectedTaskCard = null;
 let selectedTaskData = null;
 let tempEventData = null; 
@@ -86,8 +115,13 @@ function initializeCalendar() {
         },
         template: {
             time(event) {
-                const { title } = event;
-                return `<div class="calendar-event-title">${title}</div>`;
+                // Un bloc hors filtre montre que le creneau est pris, et rien
+                // d'autre : ni titre, ni donnee rendue dans le DOM.
+                if (event.calendarId === CAL_HORS_FILTRE) {
+                    return '<div class="calendar-event-hors-filtre"'
+                         + ' title="Creneau occupe, hors du filtre courant"></div>';
+                }
+                return `<div class="calendar-event-title">${echapperHtml(event.title)}</div>`;
             },
             popupSave() {
               return 'Ajouter';
@@ -105,6 +139,12 @@ function initializeCalendar() {
                 name: 'Pool Perso',
                 backgroundColor: '#ffc107',
                 borderColor: '#e0a800',
+            },
+            {
+                id: CAL_HORS_FILTRE,
+                name: 'Hors filtre',
+                backgroundColor: '#b0b8c1',
+                borderColor: '#8a929c',
             }
         ]
     });
@@ -190,9 +230,25 @@ function setupEventListeners() {
     // on recharge ; le projet et les tags filtrent cote client, un re-rendu
     // suffit. Recharger a chaque frappe relancerait TaskWarrior pour rien.
     document.addEventListener('tw-filter-change', (e) => {
-        if (e.detail && e.detail.clientOnly) filterAndDisplayTasks();
-        else loadTasks();
+        if (e.detail && e.detail.clientOnly) {
+            filterAndDisplayTasks();
+            // Le calendrier aussi : projet et tags redecoupent les blocs entre
+            // « dans le filtre » et « hors filtre ».
+            processTasksForCalendar();
+        } else {
+            loadTasks();
+        }
     });
+
+    const basculeHors = document.getElementById('filter-hors-filtre');
+    if (basculeHors) {
+        basculeHors.checked = currentFilter.horsFiltre;
+        basculeHors.addEventListener('change', (e) => {
+            currentFilter.horsFiltre = e.target.checked;
+            try { localStorage.setItem(HORS_FILTRE_KEY, String(e.target.checked)); } catch {}
+            processTasksForCalendar();
+        });
+    }
 
     const basculePretes = document.getElementById('filter-ready-only');
     if (basculePretes) {
@@ -487,6 +543,10 @@ function loadTasks() {
                 // Réinitialiser allTasks avant d'ajouter les nouvelles tâches
                 allTasks = [];
                 const initialTasks = data.tasks || [];
+                // Premiere source : ce que le backend retient du filtre. On
+                // garde les UUID -- planifiees comprises -- pour savoir plus
+                // bas quels blocs sont dans le filtre et lesquels n'y sont pas.
+                uuidsEnContexte = new Set(initialTasks.map(t => t.uuid));
                 unplannedTasks = initialTasks.filter(task => !task.scheduled);
                 console.log(`${unplannedTasks.length} tâches non planifiées trouvées`);
                 filterAndDisplayTasks();
@@ -548,11 +608,15 @@ function processTasksForCalendar() {
         }
     });
 
-    // Créer les événements pour les tâches planifiées
+    // Seconde source : /api/tasks/planned renvoie **tous** les creneaux pris,
+    // sans filtre. Les masquer ferait planifier deux choses en meme temps ;
+    // ceux qui sortent du filtre sont donc rendus hachures et muets.
     const events = [];
     scheduledTasks.forEach(task => {
         try {
-            const event = createCalendarEvent(task, task.scheduled);
+            const dedans = estDansLeFiltre(task);
+            if (!dedans && !currentFilter.horsFiltre) return;
+            const event = createCalendarEvent(task, task.scheduled, dedans);
             if (event) {
                 events.push(event);
             }
@@ -574,7 +638,7 @@ function processTasksForCalendar() {
 /**
  * Créer un événement calendrier depuis une tâche 
  */
-function createCalendarEvent(task, scheduledDate) {
+function createCalendarEvent(task, scheduledDate, dansLeFiltre = true) {
     // Vérifier et formater la date de planification au format ISO 8601 (20251220T120000Z)
     let start;
     try {
@@ -612,6 +676,21 @@ function createCalendarEvent(task, scheduledDate) {
     // Durée par défaut de 60 minutes si non spécifiée ou invalide
     duration = duration || 60;
     const end = new Date(start.getTime() + duration * 60000);
+
+    // Hors filtre : on annonce un creneau occupe, et rien de plus. Ni titre,
+    // ni `raw` -- la fiche de detail ne doit pas rendre ce qu'on vient de
+    // masquer dans la grille.
+    if (!dansLeFiltre) {
+        return {
+            id: task.uuid,
+            calendarId: CAL_HORS_FILTRE,
+            title: '',
+            start: start,
+            end: end,
+            isReadOnly: true,
+            raw: { uuid: task.uuid }
+        };
+    }
 
     // Déterminer le pool et l'ID du calendrier
     const pool = (task.pool || 'scheduled').toLowerCase();
@@ -692,28 +771,34 @@ function getSelectedTask() {
 /**
  * Filtrer et afficher les tâches non planifiées 
  */
-function filterAndDisplayTasks() {
-    let filteredTasks = [...unplannedTasks];
-
-    // Projet et tags, depuis la barre nav. Le projet est un prefixe sur la
-    // hierarchie pointee, comme TaskWarrior : `Maison` retient `Maison.Cuisine`.
-    //
-    // Remplace le menu des pools, qui recopiait a la main sur chaque tache une
-    // information deja portee par ses tags -- et qui mentait : `task.pool ||
-    // 'pro'` declarait « pro » toute tache sans pool.
+// Projet et tags, depuis la barre nav. Le projet est un prefixe sur la
+// hierarchie pointee, comme TaskWarrior : `Maison` retient `Maison.Cuisine`.
+//
+// Remplace le menu des pools, qui recopiait a la main sur chaque tache une
+// information deja portee par ses tags -- et qui mentait : `task.pool ||
+// 'pro'` declarait « pro » toute tache sans pool.
+function passeProjetEtTags(task) {
     const etatNav = window.twNav ? window.twNav.getState() : {};
     const projet = (etatNav.project || '').trim();
     const tags = window.twNav ? window.twNav.getTags(etatNav) : [];
     if (projet) {
-        filteredTasks = filteredTasks.filter(task => {
-            const porte = task.project || '';
-            return porte === projet || porte.startsWith(projet + '.');
-        });
+        const porte = task.project || '';
+        if (porte !== projet && !porte.startsWith(projet + '.')) return false;
     }
-    if (tags.length) {
-        filteredTasks = filteredTasks.filter(
-            task => tags.every(tag => (task.tags || []).includes(tag)));
-    }
+    if (tags.length && !tags.every(tag => (task.tags || []).includes(tag))) return false;
+    return true;
+}
+
+// Une tache est « dans le filtre » si le backend l'a renvoyee pour le contexte
+// et le statut courants, **et** qu'elle passe le filtre client.
+function estDansLeFiltre(task) {
+    return uuidsEnContexte.has(task.uuid) && passeProjetEtTags(task);
+}
+
+function filterAndDisplayTasks() {
+    let filteredTasks = [...unplannedTasks];
+
+    filteredTasks = filteredTasks.filter(passeProjetEtTags);
 
     // Ne garder que les taches pretes a etre planifiees, c'est-a-dire dont la
     // duree est exploitable. `parseEstTime` fait autorite : une valeur presente
