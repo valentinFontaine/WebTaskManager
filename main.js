@@ -9,7 +9,12 @@ class TaskWarriorUI {
             project: null,
             tags: []
         };
-        this.projects = new Set(); // Pour stocker la liste des projets uniques
+        // Projets deduits des taches affichees. Insuffisant a lui seul :
+        // une tache masquee par le filtre courant emporte son projet avec elle.
+        this.projects = new Set();
+        // Projets connus du backend (`task _projects`), taches terminees
+        // comprises. C'est la liste qui fait autorite.
+        this.backendProjects = [];
         
         // Initialiser le composant TaskEditor
         this.taskEditor = new TaskEditor({
@@ -149,7 +154,7 @@ class TaskWarriorUI {
             }
 
             if (projectsData.success) {
-                this.updateProjectDatalist(projectsData.projects);
+                this.setBackendProjects(projectsData.projects);
                 // Mettre à jour aussi les suggestions du TaskCreator
                 if (this.taskCreator) {
                     this.taskCreator.updateProjectSuggestions(projectsData.projects);
@@ -166,22 +171,15 @@ class TaskWarriorUI {
         }
     }
     
-    // Update the project datalist with all available projects
-    updateProjectDatalist(projects) {
-        const datalist = document.getElementById('project-options');
-        if (!datalist) return;
-        
-        // Clear existing options
-        datalist.innerHTML = '';
-        
-        // Add projects to datalist
-        projects.forEach(project => {
-            if (project) {  // Only add non-empty projects
-                const option = document.createElement('option');
-                option.value = project;
-                datalist.appendChild(option);
-            }
-        });
+    // Enregistre la liste faisant autorite et rafraichit les suggestions.
+    //
+    // Remplace `updateProjectDatalist()`, qui alimentait `project-options` --
+    // un identifiant absent de toutes les pages. Sa garde `if (!datalist)
+    // return;` rendait l'echec invisible : la reponse de /api/projects etait
+    // recuperee a chaque chargement, puis jetee.
+    setBackendProjects(projects) {
+        this.backendProjects = (projects || []).filter(Boolean);
+        this.updateProjectsList();
     }
 
 
@@ -341,6 +339,11 @@ class TaskWarriorUI {
 
     updateProjectsList() {
         this.projects.clear();
+        // La liste du backend d'abord : elle seule contient les projets dont
+        // toutes les taches sont terminees ou exclues par le filtre en cours.
+        this.backendProjects.forEach(projet => this.projects.add(projet));
+        // Puis celle des taches affichees : un projet tout juste cree n'est pas
+        // encore dans la reponse du backend.
         this.tasks.forEach(task => {
             if (task.project) {
                 this.projects.add(task.project);

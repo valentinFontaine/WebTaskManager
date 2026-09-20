@@ -375,4 +375,72 @@ test.describe('Task Manager', () => {
       await context.close();
     }
   });
+
+  // ---------------------------------------------------------------------------
+  // Autocompletion des projets (lot 0)
+  //
+  // Deux mecanismes concurrents alimentaient la meme fonctionnalite :
+  //
+  //   - `updateProjectDatalist()` (main.js), nourri par `/api/projects` -- la
+  //     liste faisant autorite, projets des taches terminees compris -- mais qui
+  //     ecrit dans `project-options`, un identifiant qui n'existe nulle part.
+  //     `if (!datalist) return;` avalait l'echec en silence. Code mort.
+  //   - `updateProjectSuggestions()`, nourri par `this.projects`, un Set
+  //     reconstruit a partir des seules taches **actuellement affichees**.
+  //
+  // C'est le second qui gagne, donc la reponse de `/api/projects` est recuperee
+  // a chaque chargement puis jetee. Consequence : un projet dont toutes les
+  // taches sont terminees -- ou simplement exclues par le filtre en cours -- est
+  // introuvable dans la saisie semi-automatique. On ne peut pas filtrer vers ce
+  // qu'on ne voit pas deja.
+  //
+  // Le defaut devient bloquant au lot 1 : des que le contexte filtrera cote
+  // serveur, `this.projects` se reduira au contexte courant.
+  //
+  // Le test stubbe donc `/api/projects` avec un projet volontairement absent des
+  // taches chargees. Dependre du contenu de la base de dev ne prouverait rien.
+
+  test('la liste de projets alimente la saisie semi-automatique', async ({ browser }) => {
+    const context = await browser.newContext();
+    const p = await context.newPage();
+    // Un nom qu'aucune tache ne porte : il ne peut venir que de /api/projects.
+    const FANTOME = 'ProjetSansTacheVisible';
+    let stubs = 0;
+
+    await p.route('**/api/projects', async route => {
+      stubs++;
+      const reponse = await route.fetch();
+      const donnees = await reponse.json();
+      const projets = (donnees.projects || []).concat([FANTOME]);
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: true, projects: projets }),
+      });
+    });
+
+    try {
+      await p.goto('/');
+      await expect(p.locator('#error-message')).toBeHidden();
+
+      // Le champ doit pointer vers une datalist qui existe reellement.
+      const champ = p.locator('#filter-project');
+      const idListe = await champ.getAttribute('list');
+      expect(idListe, 'le champ projet doit referencer une datalist').toBeTruthy();
+      await expect(p.locator(`datalist#${idListe}`)).toHaveCount(1);
+
+      // Et un projet connu du seul backend doit y figurer.
+      const options = p.locator(`datalist#${idListe} option`);
+      await expect(options.first()).toBeAttached({ timeout: 10000 });
+      const valeurs = await options.evaluateAll(els => els.map(e => e.value));
+      expect(valeurs,
+        'la datalist doit refleter /api/projects, pas les seules taches affichees')
+        .toContain(FANTOME);
+
+      // Auto-verification : sans interception, le test ne prouverait rien.
+      expect(stubs, '/api/projects aurait du etre intercepte').toBeGreaterThan(0);
+    } finally {
+      await context.close();
+    }
+  });
 });
