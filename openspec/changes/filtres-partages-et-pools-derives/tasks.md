@@ -94,18 +94,38 @@ n'atteignait jamais l'etat. Un minuteur par champ desormais.
 description contenant du balisage etait interpretee. Echappe desormais — et c'est aussi
 ce qui garantit qu'un titre hors filtre ne fuite pas dans le DOM.
 
-## Lot 4 — dérivation du pool (préparé, **non branché**)
+## Lot 4 — derivation du pool (prepare, **non branche**)
 
-- [ ] Test `pytest` : une tâche candidate à **zéro** pool est signalée non-planifiable
-- [ ] Test `pytest` : une tâche candidate à **plusieurs** pools les renvoie tous
-- [ ] Test `pytest` : une tâche portant `pool:asso` explicitement force ce pool, quelle
-      que soit la dérivation
-- [ ] Table de configuration des pools : nom → (grille hebdomadaire, nom de contexte)
-- [ ] Fonction d'éligibilité tâche → liste de pools candidats
-- [ ] Grille `perso` : lun-ven 18:30-22:00, sam-dim 09:00-22:00
-- [ ] Supprimer le pool `sleep`
-- [ ] **Ne pas** modifier `twplanner.py` : l'ancien chemin reste intact
-- [ ] Commit
+`pools.py` et `test_pools.py`, a cote de l'existant. `twplanner.py` et
+`TWCalendar.py` ne sont pas touches : ils continuent de lire l'UDA comme avant.
+
+- [x] Test : une tache candidate a **zero** pool est signalee non-planifiable
+- [x] Test : une tache candidate a **plusieurs** pools les renvoie tous
+- [x] Test : `pool:asso` explicite force ce pool ; une valeur inconnue est ignoree
+      plutot que de rendre la tache orpheline
+- [x] Test : le filtre de contexte arrive **intact** a TaskWarrior, jamais reinterprete
+- [x] Test : la grille `perso` n'est pas vide, et aucune plage n'en chevauche une autre
+- [x] Test : plus aucun pool `sleep`
+- [x] Table `POOLS` : nom → (grille hebdomadaire, nom de contexte)
+- [x] `pools_candidats()` / `est_planifiable()` / `charger_uuids_par_pool()`
+- [x] Grille `perso` : lun-ven 18:30-22:00, sam-dim 09:00-22:00
+- [x] `sleep` absent de la nouvelle table
+- [x] **`twplanner.py` intact** — l'ancien chemin fonctionne comme avant
+- [x] Commit
+
+### Pourquoi `sleep` disparait, et pourquoi `perso` doit gagner une grille
+
+La semaine est **vide par defaut**, et les pools y decoupent des plages : ce qu'aucun
+pool ne couvre est indisponible. Un pool « sommeil » n'a donc plus rien a
+representer. Mais `TWCalendar.get_default_calendars` donnait a `perso` une grille
+**vide**, commentee « c'est le reste du temps » : sous ce modele, vide veut dire
+« jamais disponible », l'exact contraire de l'intention.
+
+### Ce qui reste a brancher (lot 5, apres l'aval de l'utilisateur)
+
+- faire lire `POOLS` a `twplanner.py` a la place de `CALENDARS_BY_ASSIGNEE` ;
+- supprimer `sleep` de `TWCalendar.get_default_calendars` ;
+- migrer la base de dev.
 
 ## À trancher au retour de l'utilisateur
 
