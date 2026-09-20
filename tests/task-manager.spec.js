@@ -330,4 +330,49 @@ test.describe('Task Manager', () => {
       await context.close();
     }
   });
+
+  // ── Integrite de la feuille de style du calendrier ─────────────────────────
+  //
+  // Bug du 2026-09-20 : un marqueur de conflit Git (`=======`) et un commentaire
+  // casse avaient avale le bloc `:root` de calendar-planner.css. Les 67 `var(--…)`
+  // du fichier ne resolvaient plus rien -- le compteur s'affichait en blanc sur
+  // fond transparent, donc invisible.
+  //
+  // Une erreur de syntaxe CSS ne leve pas : elle se rattrape en silence, en
+  // avalant ce qui suit. Rien dans la console, rien dans les autres tests. D'ou
+  // ce controle, qui verifie le resultat calcule plutot que le fichier source.
+
+  test('les variables CSS du calendrier sont definies', async ({ browser }) => {
+    const context = await browser.newContext();
+    const p = await context.newPage();
+
+    try {
+      await p.goto('/calendar-planner.html');
+      await expect(p.locator('#task-count')).toBeVisible({ timeout: 15000 });
+
+      const variables = await p.evaluate(() => {
+        const racine = getComputedStyle(document.documentElement);
+        const noms = ['--primary-color', '--secondary-color', '--border-color',
+                      '--light-bg', '--danger-color'];
+        return Object.fromEntries(
+          noms.map(n => [n, racine.getPropertyValue(n).trim()]));
+      });
+
+      for (const [nom, valeur] of Object.entries(variables)) {
+        expect(valeur, `${nom} doit etre definie dans :root`).not.toBe('');
+      }
+
+      // Et le symptome visible : le compteur doit se detacher de son fond.
+      const rendu = await p.locator('#task-count').evaluate(el => {
+        const st = getComputedStyle(el);
+        return { couleur: st.color, fond: st.backgroundColor };
+      });
+      expect(rendu.fond, 'le badge du compteur ne doit pas etre transparent')
+        .not.toBe('rgba(0, 0, 0, 0)');
+      expect(rendu.couleur, 'texte et fond ne doivent pas etre identiques')
+        .not.toBe(rendu.fond);
+    } finally {
+      await context.close();
+    }
+  });
 });

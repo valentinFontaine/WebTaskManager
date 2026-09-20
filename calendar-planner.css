@@ -1,3 +1,4 @@
+/* ===================================
    Carte de Tâche
    =================================== */
 .task-card {
@@ -17,19 +18,6 @@
     transform: translateY(-2px);
 }
 
-   Header
-   =================================== */
-.app-header {
-    background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
-    color: white;
-    padding: 1rem 2rem;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    box-shadow: var(--shadow);
-    z-index: 100;
-}
-=======
 /* ===================================
    Header
    =================================== */
@@ -58,7 +46,9 @@
 
 .header-add-btn .icon {
     font-size: 1.2rem;
-}Selected task card state */
+}
+
+/* Selected task card state */
 .task-card.selected {
     border-color: var(--primary-color);
     background-color: rgba(74, 144, 226, 0.05);
@@ -158,11 +148,12 @@
     display: block;
     margin-bottom: 0.5rem;
 }
-=======
 /* ===================================
    Carte de Tâche
    =================================== */
-/* Task card styles moved to task-card-styles.css */===================================
+/* Task card styles moved to task-card-styles.css */
+
+/* ===================================
    Variables CSS
    =================================== */
 :root {
