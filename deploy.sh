@@ -116,15 +116,28 @@ stop_staging_server() {
 }
 trap stop_staging_server EXIT
 
+# Un serveur de staging deja en place tient le port, et uvicorn echoue alors
+# sur un « address already in use » enfoui dans son log. C'est exactement ce
+# qui est arrive au premier essai de ce script, dont le `trap` n'avait jamais
+# obtenu de PID a nettoyer. On repart donc d'un port libre.
+RESTES="$(pgrep -f "uvicorn main_fastapi:app --host 127.0.0.1 --port $STAGING_PORT" || true)"
+if [ -n "$RESTES" ]; then
+    echo "Serveur de staging deja en cours (pid(s) : $RESTES) : arret avant de repartir."
+    kill $RESTES 2>/dev/null || true
+    sleep 2
+fi
+
+# Pas de fichier de PID intermediaire : `/tmp` n'existe pas sous Termux (le
+# repertoire temporaire est $PREFIX/tmp), et un `echo $!` depuis un sous-shell
+# ne remonterait de toute facon pas au shell principal. Le sous-shell `exec`
+# dans uvicorn, donc le PID que `$!` nous donne ici est bien celui du serveur.
 (
-    cd "$STAGING_CLONE"
-    TASKRC="$STAGING_TASKRC" DEVELOPER_MODE=false \
+    cd "$STAGING_CLONE" || exit 1
+    exec env TASKRC="$STAGING_TASKRC" DEVELOPER_MODE=false \
         "$STAGING_PY" -m uvicorn main_fastapi:app --host 127.0.0.1 --port "$STAGING_PORT" \
-        >"$STAGING_HOME/webtaskmanager-staging.log" 2>&1 &
-    echo $! > /tmp/deploy-staging-uvicorn.pid
-)
-STAGING_UVICORN_PID="$(cat /tmp/deploy-staging-uvicorn.pid)"
-rm -f /tmp/deploy-staging-uvicorn.pid
+        >"$STAGING_HOME/webtaskmanager-staging.log" 2>&1
+) &
+STAGING_UVICORN_PID=$!
 
 echo "uvicorn de staging lance (pid $STAGING_UVICORN_PID), attente de la reponse (max ${STAGING_WAIT_MAX_S}s)..."
 READY=0
