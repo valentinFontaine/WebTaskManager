@@ -48,7 +48,25 @@ die()  { echo "ERREUR : $*" >&2; exit 1; }
 # ----------------------------------------------------------------------
 # 1. Garde-fou Syncthing
 # ----------------------------------------------------------------------
-if pgrep -x syncthing >/dev/null 2>&1; then
+
+# Detection de Syncthing. Trois methodes, et non `pgrep -x` seul : verifie sur
+# ce telephone le 2026-09-21, `pgrep -x syncthing` ne detecte PAS un processus
+# dont /proc/<pid>/comm vaut pourtant exactement « syncthing », alors que
+# `pidof` et `pgrep -f` le trouvent tous les deux -- et que `pgrep -x bash` ou
+# `pgrep -x sleep` fonctionnent normalement. La cause exacte n'est pas
+# etablie ; ce qui est etabli, c'est qu'on ne peut pas faire reposer la
+# protection des donnees sur cette seule commande.
+#
+# Le motif `[s]yncthing` evite que la recherche ne se trouve elle-meme dans la
+# ligne de commande du `pgrep -f`.
+syncthing_tourne() {
+    pidof syncthing            >/dev/null 2>&1 && return 0
+    pgrep -x syncthing         >/dev/null 2>&1 && return 0
+    pgrep -f '[s]yncthing'     >/dev/null 2>&1 && return 0
+    return 1
+}
+
+if syncthing_tourne; then
     die "Syncthing tourne. Arrete-le toi-meme avant de continuer (ce script ne le tue pas) : le seed va ecrire dans une base qui doit rester hors de son perimetre de synchronisation, et une course avec Syncthing pendant le seed n'est pas quelque chose que ce script peut garantir sans risque."
 fi
 log "Syncthing n'est pas actif : on continue."

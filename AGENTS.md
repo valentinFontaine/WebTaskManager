@@ -327,6 +327,14 @@ PW_NO_SERVER=1 PW_BASE_URL=http://localhost:8765 npm test
   « Deleted 0 tasks » avec un code de retour **nul**. `rc.bulk=0` est obligatoire — sans lui, la
   purge de `seed-staging.sh` ne purgeait rien et le script accumulait des doublons à chaque
   passage.
+- **`pgrep -x` ne suffit pas à détecter Syncthing.** Vérifié le 2026-09-21 : un processus dont
+  `/proc/<pid>/comm` vaut exactement `syncthing` n'est trouvé ni par `pgrep -x syncthing` ni par
+  `pgrep syncthing`, alors que `pidof syncthing` et `pgrep -f syncthing` le trouvent tous les
+  deux — et que `pgrep -x bash` ou `pgrep -x sleep` fonctionnent normalement sur la même machine.
+  La cause n'est pas établie. Les deux scripts combinent donc `pidof`, `pgrep -x` et
+  `pgrep -f '[s]yncthing'` : on ne fait pas reposer la protection des données de prod sur une
+  seule commande dont on a constaté qu'elle pouvait manquer sa cible.
+
 - **`pydantic-core` n'a pas de roue pour Android/aarch64** : pip le compile, et maturin s'arrête
   sur « Failed to determine Android API level ». D'où `ANDROID_API_LEVEL=24` posé par
   `seed-staging.sh`. La compilation est longue.
