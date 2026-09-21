@@ -217,14 +217,18 @@ Tout passe par `run_task_command()` (`main_fastapi.py`), qui appelle
 | `task rc.confirmation=off <id> delete` | `DELETE /api/task/{id}/delete` |
 | `task rc.confirmation=off <id> modify …` | `PUT /api/task/{id}/modify` |
 | `task add "<desc>" …` puis `task +LATEST export` | `POST /api/task/add` |
-| `task <uuid> export`, `modify proposed_scheduled:` | `TWTask.py` |
 
 **UDA requis dans le `taskrc`** (définition de référence : `example_taskrc.txt`) :
-`estTime` (duration), `proposed_scheduled` (date), `assignee` (string).
-L'UDA `pool` a été supprimée le 2026-09-21 : aucune des 277 tâches en attente de la
-production ne la portait, et le code qui la lisait était injoignable. Le contexte
-TaskWarrior porte seul cette information. `proposed_scheduled` n'a plus non plus ni
-lecteur ni auteur depuis la suppression de `TWTask.py` — à trancher séparément.
+`estTime` (duration), `assignee` (string).
+Les UDA `pool` et `proposed_scheduled` ont été supprimées le 2026-09-21. Aucune des
+277 tâches en attente de la production ne les portait, et le code qui les lisait était
+injoignable depuis toute route. Le contexte TaskWarrior porte seul l'information que
+`pool` recopiait à la main ; `proposed_scheduled` n'avait plus d'auteur depuis la
+suppression de `TWTask.py`.
+
+Pour les retirer d'un `taskrc` existant, il suffit d'en effacer les lignes `uda.pool.*`
+et `uda.proposed_scheduled.*` : aucune tâche ne portant ces attributs, il n'y a rien à
+migrer.
 Également nécessaires : `urgency.inherit=on`, `urgency.blocked/blocking.coefficient`,
 `urgency.user.tag.{committed,commit,rapide}=2`, contextes `pro`/`perso`.
 Sans ces UDA, les requêtes de `twplanner.py` échouent ou renvoient des résultats faux.

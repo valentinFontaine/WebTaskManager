@@ -118,19 +118,17 @@ log "data.location verifie : pointe bien sur une base de staging ($DATA_LOCATION
 # ----------------------------------------------------------------------
 declare -A REQUIRED_UDA_TYPE=(
     [estTime]="duration"
-    [proposed_scheduled]="date"
     [assignee]="string"
     [state]="string"
 )
 declare -A REQUIRED_UDA_LABEL=(
     [estTime]="estimateTime"
-    [proposed_scheduled]="propScheduled"
     [assignee]="Assignee"
     [state]="State"
 )
 
 ADDED_UDA=()
-for uda in estTime proposed_scheduled assignee state; do
+for uda in estTime assignee state; do
     if ! printf '%s\n' "$TW_SHOW" | grep -q "^uda\.${uda}\.type="; then
         {
             echo ""
@@ -146,7 +144,7 @@ if [ "${#ADDED_UDA[@]}" -gt 0 ]; then
     # Rafraichir TW_SHOW apres modification du taskrc.
     TW_SHOW="$(task _show 2>/dev/null || true)"
 else
-    log "Tous les UDA requis (estTime, proposed_scheduled, assignee, state) sont deja presents."
+    log "Tous les UDA requis (estTime, assignee, state) sont deja presents."
 fi
 
 # ----------------------------------------------------------------------
@@ -226,7 +224,7 @@ log "Injection du jeu de taches +seed."
 #  - tags de contexte (+pro, +perso) : le pool a ete supprime, le contexte
 #    TaskWarrior porte desormais seul cette information
 #  - avec et sans estTime (formats valides : 90min, 1.5h -- jamais 1h30)
-#  - avec proposed_scheduled, avec scheduled, et sans aucun des deux
+#  - avec scheduled et sans scheduled
 #  - avec due
 #  - une paire avec depends:
 #  - tags d'urgency perso : committed, commit, rapide
@@ -250,7 +248,6 @@ task rc.confirmation=off add +seed +perso +rapide \
 
 task rc.confirmation=off add +seed +perso +commit \
     project:Perso estTime:45min \
-    proposed_scheduled:tomorrow+18h30 \
     "Préparer le sac de sport" >/dev/null
 
 task rc.confirmation=off add +seed +pro \

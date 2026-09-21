@@ -23,8 +23,6 @@ urgency.user.tag.rapide=2
 #Definition des UDA
 uda.estTime.type=duration
 uda.estTime.label=estimateTime
-uda.proposed_scheduled.type=date
-uda.proposed_scheduled.label=propScheduled
 uda.assignee.type=string
 uda.assignee.label=Assignee
 

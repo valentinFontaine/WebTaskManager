@@ -59,7 +59,6 @@ Les UDAs définis dans `example_taskrc.txt` pour étendre TaskWarrior :
 | UDA | Type | Label | Description | Obligatoire |
 |-----|------|-------|-------------|------------|
 | `estTime` | duration | estimateTime | Durée estimée pour compléter la tâche (en minutes) | **Oui** (pour la planification) |
-| `proposed_scheduled` | date | propScheduled | Date de planification proposée par le planificateur | Non |
 | `assignee` | string | Assignee | Personne à qui la tâche est assignée | Non (défaut: "default") |
 
 ### Configuration TaskWarrior requise
@@ -68,8 +67,6 @@ Les UDAs définis dans `example_taskrc.txt` pour étendre TaskWarrior :
 # Definition des UDA (à ajouter dans ~/.taskrc)
 uda.estTime.type=duration
 uda.estTime.label=estimateTime
-uda.proposed_scheduled.type=date
-uda.proposed_scheduled.label=propScheduled
 uda.assignee.type=string
 uda.assignee.label=Assignee
 ```
@@ -241,7 +238,6 @@ Métadonnées spécifiques au moteur de planification (`twplanner.py`) :
   "urgency": 12.5,
   "uda": {
     "estTime": "PT4H",
-    "proposed_scheduled": "20251214T080000Z",
     "assignee": "john.doe"
   }
 }
