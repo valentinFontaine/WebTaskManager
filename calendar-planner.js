@@ -129,16 +129,15 @@ function initializeCalendar() {
         },
         calendars: [
             {
-                id: 'pro',
-                name: 'Pool Pro',
+                // Un seul calendrier pour les taches planifiees. Les deux
+                // precedents, « Pool Pro » et « Pool Perso », n'etaient jamais
+                // atteints : `calendarId` valait 'scheduled' pour toute tache
+                // sans `pool`, c'est-a-dire pour toutes -- et 'scheduled' ne
+                // figurait meme pas dans cette liste.
+                id: 'scheduled',
+                name: 'Planifie',
                 backgroundColor: '#28a745',
                 borderColor: '#1e7e34',
-            },
-            {
-                id: 'perso',
-                name: 'Pool Perso',
-                backgroundColor: '#ffc107',
-                borderColor: '#e0a800',
             },
             {
                 id: CAL_HORS_FILTRE,
@@ -572,8 +571,7 @@ function loadTasks() {
                         description: task.description,
                         scheduled: task.scheduled,
                         due: task.due,
-                        estTime: task.estTime,
-                        pool: task.pool
+                        estTime: task.estTime
                     });
                     //*/
                 });
@@ -692,13 +690,9 @@ function createCalendarEvent(task, scheduledDate, dansLeFiltre = true) {
         };
     }
 
-    // Déterminer le pool et l'ID du calendrier
-    const pool = (task.pool || 'scheduled').toLowerCase();
-    const calendarId = ['pro', 'perso'].includes(pool) ? pool : 'scheduled';
-
     return {
         id: task.uuid,
-        calendarId: calendarId,
+        calendarId: 'scheduled',
         title: task.description,
         start: start,
         end: end,

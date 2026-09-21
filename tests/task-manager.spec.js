@@ -834,4 +834,20 @@ test.describe('Filtres partages', () => {
       await context.close();
     }
   });
+
+  test('une tache sans pool n\'affiche pas de pool invente', async ({ browser }) => {
+    // `task.pool || 'pro'` affichait « pro » sur la totalite des taches : en
+    // production, 277 taches en attente, dont **zero** ne portait l'attribut.
+    // L'UDA a ete supprimee, le badge avec.
+    const { context, page: p } = await pageAvecDonnees(browser);
+    try {
+      await p.goto('/');
+      await expect(p.locator('#error-message')).toBeHidden();
+      await expect(p.locator('.task-card').first()).toBeVisible({ timeout: 15000 });
+      await expect(p.locator('[name="pool"]')).toHaveCount(0);
+      await expect(p.getByText('pro', { exact: true })).toHaveCount(0);
+    } finally {
+      await context.close();
+    }
+  });
 });

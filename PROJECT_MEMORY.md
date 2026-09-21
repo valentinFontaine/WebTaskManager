@@ -138,7 +138,7 @@ Le projet utilise les UDA (User Defined Attributes) suivants dans Taskwarrior :
 
 1. **estTime** : Durée estimée de la tâche en minutes
 2. **assignee** : Personne à qui la tâche est assignée
-3. **pool** : Catégorie/pool de la tâche (ex: pro, asso, sleep, perso)
+3. ~~**pool**~~ : supprimée le 2026-09-21 (voir AGENTS.md §5)
 4. **proposed_scheduled** : Date/heure proposée pour la planification de la tâche
 
 Ces UDA sont utilisés dans les fichiers suivants :

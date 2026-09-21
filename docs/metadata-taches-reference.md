@@ -1,5 +1,14 @@
 # Référence des Métadonnées de Gestion des Tâches
 
+> **Avertissement — 2026-09-21.** Tout ce document qui décrit la *planification*
+> (`PoolCalendar`, `CALENDARS_BY_ASSIGNEE`, `TWTask.py`, `twplanner.py`,
+> `critical_due_date`, l'UDA `pool`) documente du code **supprimé**. Ces modules
+> n'étaient atteignables depuis aucune route : `main_fastapi.py` n'importait
+> qu'eux-mêmes. Ils restent consultables dans l'historique git avant le commit de
+> suppression. Le reste du document — la carte des métadonnées de tâche — reste
+> valable.
+
+
 ## Table des Matières
 
 1. [Introduction](#introduction)
@@ -51,7 +60,6 @@ Les UDAs définis dans `example_taskrc.txt` pour étendre TaskWarrior :
 |-----|------|-------|-------------|------------|
 | `estTime` | duration | estimateTime | Durée estimée pour compléter la tâche (en minutes) | **Oui** (pour la planification) |
 | `proposed_scheduled` | date | propScheduled | Date de planification proposée par le planificateur | Non |
-| `pool` | string | pool | Catégorie de temps (pro, perso, asso, sleep) | **Oui** |
 | `assignee` | string | Assignee | Personne à qui la tâche est assignée | Non (défaut: "default") |
 
 ### Configuration TaskWarrior requise
@@ -62,8 +70,6 @@ uda.estTime.type=duration
 uda.estTime.label=estimateTime
 uda.proposed_scheduled.type=date
 uda.proposed_scheduled.label=propScheduled
-uda.pool.type=string
-uda.pool.label=pool
 uda.assignee.type=string
 uda.assignee.label=Assignee
 ```
@@ -236,7 +242,6 @@ Métadonnées spécifiques au moteur de planification (`twplanner.py`) :
   "uda": {
     "estTime": "PT4H",
     "proposed_scheduled": "20251214T080000Z",
-    "pool": "pro",
     "assignee": "john.doe"
   }
 }
@@ -256,7 +261,6 @@ Métadonnées spécifiques au moteur de planification (`twplanner.py`) :
   "depends": ["a1b2c3d4-5678-90ef-ghij-klmnopqrstuv"],
   "uda": {
     "estTime": "PT1H30M",
-    "pool": "pro",
     "assignee": "devops-team"
   }
 }

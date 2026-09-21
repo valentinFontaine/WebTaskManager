@@ -284,13 +284,6 @@ class TaskCardManager {
             durationSlot.textContent = durationText;
         }
 
-        // Pool
-        const pool = task.pool || 'pro';
-        const poolSlot = card.querySelector('[name="pool"]');
-        if (poolSlot) {
-            poolSlot.textContent = pool;
-        }
-        
         // Pour le mode minimal, ajouter l'UUID au bouton edit
         if (mode === 'minimal') {
             const editButton = card.querySelector('.task-edit');

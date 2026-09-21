@@ -119,20 +119,18 @@ log "data.location verifie : pointe bien sur une base de staging ($DATA_LOCATION
 declare -A REQUIRED_UDA_TYPE=(
     [estTime]="duration"
     [proposed_scheduled]="date"
-    [pool]="string"
     [assignee]="string"
     [state]="string"
 )
 declare -A REQUIRED_UDA_LABEL=(
     [estTime]="estimateTime"
     [proposed_scheduled]="propScheduled"
-    [pool]="pool"
     [assignee]="Assignee"
     [state]="State"
 )
 
 ADDED_UDA=()
-for uda in estTime proposed_scheduled pool assignee state; do
+for uda in estTime proposed_scheduled assignee state; do
     if ! printf '%s\n' "$TW_SHOW" | grep -q "^uda\.${uda}\.type="; then
         {
             echo ""
@@ -148,7 +146,7 @@ if [ "${#ADDED_UDA[@]}" -gt 0 ]; then
     # Rafraichir TW_SHOW apres modification du taskrc.
     TW_SHOW="$(task _show 2>/dev/null || true)"
 else
-    log "Tous les UDA requis (estTime, proposed_scheduled, pool, assignee, state) sont deja presents."
+    log "Tous les UDA requis (estTime, proposed_scheduled, assignee, state) sont deja presents."
 fi
 
 # ----------------------------------------------------------------------
@@ -225,7 +223,8 @@ fi
 log "Injection du jeu de taches +seed."
 
 # Couverture visee (cf. twplanner.py, TWCalendar.py, calendar-planner.js) :
-#  - pool:pro et pool:perso
+#  - tags de contexte (+pro, +perso) : le pool a ete supprime, le contexte
+#    TaskWarrior porte desormais seul cette information
 #  - avec et sans estTime (formats valides : 90min, 1.5h -- jamais 1h30)
 #  - avec proposed_scheduled, avec scheduled, et sans aucun des deux
 #  - avec due
@@ -236,37 +235,37 @@ log "Injection du jeu de taches +seed."
 #  - une description accentuee
 
 task rc.confirmation=off add +seed +pro \
-    project:Maison.Cuisine pool:pro estTime:90min \
+    project:Maison.Cuisine estTime:90min \
     due:tomorrow+9h \
     "Ranger le tiroir a couverts" >/dev/null
 
 task rc.confirmation=off add +seed +pro +committed \
-    project:Maison.Cuisine pool:pro estTime:1.5h \
+    project:Maison.Cuisine estTime:1.5h \
     scheduled:tomorrow+14h \
     "Réparer le robinet de la cuisine" >/dev/null
 
 task rc.confirmation=off add +seed +perso +rapide \
-    project:Perso pool:perso \
+    project:Perso \
     "Appeler le dentiste" >/dev/null
 
 task rc.confirmation=off add +seed +perso +commit \
-    project:Perso pool:perso estTime:45min \
+    project:Perso estTime:45min \
     proposed_scheduled:tomorrow+18h30 \
     "Préparer le sac de sport" >/dev/null
 
 task rc.confirmation=off add +seed +pro \
-    project:Maison pool:pro estTime:2h \
+    project:Maison estTime:2h \
     "Tâche sans aucune date planifiée" >/dev/null
 
 # Paire avec dependance : la premiere doit exister avant qu'on puisse la
 # referencer par UUID dans depends: de la seconde.
 task rc.confirmation=off add +seed +pro \
-    project:Maison.Cuisine pool:pro estTime:1h \
+    project:Maison.Cuisine estTime:1h \
     "Commander la pièce de rechange" >/dev/null
 UUID_DEP_PARENT="$(task +LATEST +seed _uuid)"
 
 task rc.confirmation=off add +seed +pro \
-    project:Maison.Cuisine pool:pro estTime:30min \
+    project:Maison.Cuisine estTime:30min \
     "depends:$UUID_DEP_PARENT" \
     "Installer la pièce reçue" >/dev/null
 

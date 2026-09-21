@@ -218,10 +218,13 @@ Tout passe par `run_task_command()` (`main_fastapi.py`), qui appelle
 | `task rc.confirmation=off <id> modify …` | `PUT /api/task/{id}/modify` |
 | `task add "<desc>" …` puis `task +LATEST export` | `POST /api/task/add` |
 | `task <uuid> export`, `modify proposed_scheduled:` | `TWTask.py` |
-| filtre composé `pool:"X" and status.not:"completed" and \( scheduled.not: or proposed_scheduled.not: \)` | `twplanner.py`, `get_previous_free_slot()` |
 
 **UDA requis dans le `taskrc`** (définition de référence : `example_taskrc.txt`) :
-`estTime` (duration), `proposed_scheduled` (date), `pool` (string), `assignee` (string).
+`estTime` (duration), `proposed_scheduled` (date), `assignee` (string).
+L'UDA `pool` a été supprimée le 2026-09-21 : aucune des 277 tâches en attente de la
+production ne la portait, et le code qui la lisait était injoignable. Le contexte
+TaskWarrior porte seul cette information. `proposed_scheduled` n'a plus non plus ni
+lecteur ni auteur depuis la suppression de `TWTask.py` — à trancher séparément.
 Également nécessaires : `urgency.inherit=on`, `urgency.blocked/blocking.coefficient`,
 `urgency.user.tag.{committed,commit,rapide}=2`, contextes `pro`/`perso`.
 Sans ces UDA, les requêtes de `twplanner.py` échouent ou renvoient des résultats faux.
