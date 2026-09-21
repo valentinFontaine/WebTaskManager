@@ -8,8 +8,10 @@ const { defineConfig, devices } = require('@playwright/test');
  * Surchargeable par variables d'environnement, pour couvrir les 3 etages de test :
  *
  *   dev-pc    (defaut)                      -> demarre main_fastapi.py sur 8000
- *   staging   PW_BASE_URL=http://localhost:8000 PW_NO_SERVER=1
- *   telephone PW_BASE_URL=http://localhost:1875 PW_NO_SERVER=1   (via adb forward)
+ *   staging   PW_BASE_URL=http://localhost:8765 PW_NO_SERVER=1   (via adb forward)
+ *
+ * Le port 1875 du telephone sert la PRODUCTION : le viser est refuse, voir
+ * le garde-fou plus bas.
  *
  * PW_NO_SERVER=1 empeche Playwright de lancer un backend local quand on cible
  * un serveur deja demarre (telephone, staging).
@@ -19,17 +21,49 @@ const BASE_URL = process.env.PW_BASE_URL || `http://localhost:${PORT}`;
 const START_SERVER = !process.env.PW_NO_SERVER;
 
 /*
- * Garde-fou : les tests executent de vraies commandes Taskwarrior des lors que
- * DEVELOPER_MODE est desactive. Sans TASKRC explicite, Taskwarrior ecrirait dans
- * la base de PRODUCTION (~/.task, synchronisee par Syncthing).
- * Retire ce bloc si tu preferes gerer l'isolation autrement.
+ * Garde-fou 1 : ne jamais viser le port de PRODUCTION.
+ *
+ * Le telephone sert la prod sur 1875, sur la base ~/.task synchronisee par
+ * Syncthing. Un `npm test` dirige la-dessus creerait, modifierait et
+ * supprimerait de vraies taches.
+ *
+ * Ce garde-fou est le seul qui vaille pour une cible distante : quand le
+ * backend tourne ailleurs, c'est l'environnement DU SERVEUR qui decide de la
+ * base touchee. Un TASKRC pose ici, cote client, ne protege alors rien du
+ * tout -- il n'est jamais lu par le processus qui ecrit.
+ */
+const PORTS_DE_PROD = ['1875'];
+const portVise = (() => {
+  try { return new URL(BASE_URL).port; } catch (e) { return ''; }
+})();
+
+if (PORTS_DE_PROD.includes(portVise) && !process.env.PW_CIBLE_PROD) {
+  throw new Error(
+    `PW_BASE_URL vise ${BASE_URL}, soit le port de PRODUCTION du telephone.
+Les tests y creeraient de vraies taches dans ~/.task (synchronisee par Syncthing).
+
+  Pour tester le telephone, vise son serveur de STAGING :
+    adb forward tcp:8765 tcp:8765
+    PW_NO_SERVER=1 PW_BASE_URL=http://localhost:8765 npm test
+
+  Pour viser la prod en connaissance de cause : PW_CIBLE_PROD=1.`
+  );
+}
+
+/*
+ * Garde-fou 2 : backend local, base jetable.
+ *
+ * Ne s'applique qu'au cas ou Playwright demarre lui-meme le backend : c'est
+ * alors le seul cas ou notre environnement est aussi celui du serveur, donc
+ * le seul ou TASKRC protege quoi que ce soit. Voir le garde-fou 1 pour les
+ * cibles distantes.
  */
 if (START_SERVER && !process.env.TASKRC && !process.env.TASKDATA) {
   throw new Error(
-    "TASKRC (ou TASKDATA) n'est pas defini : refus de lancer les tests pour ne pas " +
-    "ecrire dans la base Taskwarrior de production.\n" +
-    "  PC      : $env:TASKRC='C:/Users/irpaui/taskwarrior-dev/taskrc'\n" +
-    "  Termux  : export TASKRC=~/taskwarrior-staging/taskrc"
+    `TASKRC (ou TASKDATA) n'est pas defini : refus de lancer les tests pour ne pas
+ecrire dans la base Taskwarrior de production.
+  PC      : $env:TASKRC='C:/Users/irpaui/taskwarrior-dev/taskrc'
+  Termux  : export TASKRC=~/taskwarrior-staging/taskrc`
   );
 }
 

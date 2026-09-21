@@ -36,6 +36,33 @@ de serveur, accessible depuis le PC de travail par un port-forward adb.
 Le code circule par **git**. Les données circulent par **Syncthing**, sur un canal séparé —
 elles ne passent jamais par le dépôt.
 
+### Chemins réels sur le téléphone — vérifiés le 2026-09-21
+
+Le tableau ci-dessus décrit une **cible**. L'état effectif en diffère, et c'est important :
+
+| | Chemin réel | État |
+|---|---|---|
+| clone de prod | `~/phone-sync-projects/WebTaskManager` | existe, sert la prod sur le port 1875 |
+| clone de staging | `~/phone-sync-projects/WebTaskManager-staging` | **n'existe pas encore** — créé par `seed-staging.sh` |
+| taskrc de staging | `~/taskwarrior-staging/taskrc` | existe, UDA complets |
+| données de staging | `~/.task-staging` | existe |
+| données de prod | `~/.task` | **ne jamais y toucher** |
+
+**Il n'y a à ce jour qu'un seul clone sur le téléphone, et c'est celui de la prod.** La
+séparation staging/prod est une cible, pas l'état courant : tant que `seed-staging.sh` n'a
+pas tourné, valider et déployer se feraient au même endroit, ce qui vide l'étage staging de
+son sens.
+
+Autres faits constatés le 2026-09-21, à ne pas redécouvrir :
+
+- `rsync` et `jq` sont **absents** de Termux. `python`, `node`, `npm`, `git`, `curl` sont là.
+- Le remote est en **SSH** côté téléphone, en **HTTPS** côté PC.
+- Aucun service ni `~/.termux/boot` : le lancement de l'application est **manuel**.
+- Les port-forwards adb (`tcp:8022` pour ssh, `tcp:1875` pour la prod) **sautent** à chaque
+  reconnexion du téléphone ou redémarrage du serveur adb. Un téléphone qui semble injoignable
+  est le plus souvent un forward tombé : `adb devices`, `adb forward --list`, puis les
+  remonter.
+
 ### Pièges de cette topologie
 
 - **Trois machines partagent la base de prod par Syncthing** : le téléphone (Termux), le PC
@@ -99,15 +126,30 @@ Variables de surcharge :
 
 | Variable | Usage |
 |---|---|
-| `PW_BASE_URL` | cible complète (ex. `http://localhost:1875` pour le téléphone via adb) |
+| `PW_BASE_URL` | cible complète (ex. `http://localhost:8765`, staging du téléphone via adb) |
 | `PW_PORT` | port seul, si l'hôte reste localhost |
 | `PW_NO_SERVER=1` | ne pas démarrer de backend local (serveur déjà lancé) |
+| `PW_CIBLE_PROD=1` | lever le refus de viser le port de production — voir l'avertissement ci-dessous |
 | `PW_SERVER_CMD` | commande de démarrage alternative |
 
-```bash
-# tester contre le téléphone depuis le PC
-PW_NO_SERVER=1 PW_BASE_URL=http://localhost:1875 npm test
-```
+> **Le port 1875 du téléphone sert la PRODUCTION.** Une version antérieure de ce fichier
+> donnait `PW_BASE_URL=http://localhost:1875 npm test` comme la façon de tester le téléphone.
+> C'était dangereux : les tests créent, modifient et suppriment de vraies tâches, dans la base
+> `~/.task` synchronisée par Syncthing sur trois machines.
+>
+> Le garde-fou `TASKRC` ne couvrait pas ce cas, et ne pouvait pas le couvrir : il est
+> conditionné au démarrage d'un backend local, et surtout, **quand le backend tourne ailleurs,
+> c'est l'environnement du serveur qui décide de la base touchée**. Un `TASKRC` posé côté
+> client n'est jamais lu par le processus qui écrit.
+>
+> `playwright.config.js` **refuse** désormais toute cible sur le port 1875, sauf
+> `PW_CIBLE_PROD=1` posé en connaissance de cause. Pour tester le téléphone, viser son
+> serveur de staging :
+>
+> ```bash
+> adb forward tcp:8765 tcp:8765
+> PW_NO_SERVER=1 PW_BASE_URL=http://localhost:8765 npm test
+> ```
 
 ### Pipeline en trois étages
 
@@ -121,8 +163,9 @@ PW_NO_SERVER=1 PW_BASE_URL=http://localhost:1875 npm test
    Lancer `pytest` sans argument : viser un seul fichier laisserait l'autre de côté.
 2. **dev-pc, intégration réelle** — `TASKRC` sur `taskwarrior-dev`, `DEVELOPER_MODE` désactivé,
    vraies commandes `task`, plus Playwright. Sans risque grâce à l'isolation de la base.
-3. **staging sur téléphone** — mêmes tests sur `~/.task-staging`. **Non facultatif** : c'est le
-   seul étage qui valide le comportement sur Taskwarrior 3.3.0.
+3. **staging sur téléphone** — mêmes tests sur `~/.task-staging`. **Non facultatif** : le PC tourne
+   sur le fork wilt00 (nightly build `3.5.0.6`), qui n'est pas le même binaire que l'amont
+   sur le téléphone, même à version équivalente. Seul l'étage staging valide le comportement réel.
 
 Prod ne reçoit qu'un `git pull` + redémarrage, jamais de test.
 
@@ -161,7 +204,7 @@ depuis Firefox, dont les messages d'erreur diffèrent : un vert ici ne couvre pa
 
 ## 5. Surface Taskwarrior utilisée
 
-Tout passe par `run_task_command()` (`main_fastapi.py:28`), qui appelle
+Tout passe par `run_task_command()` (`main_fastapi.py`), qui appelle
 `subprocess.run(..., shell=True)`.
 
 | Commande | Appelée depuis |
@@ -175,7 +218,7 @@ Tout passe par `run_task_command()` (`main_fastapi.py:28`), qui appelle
 | `task rc.confirmation=off <id> modify …` | `PUT /api/task/{id}/modify` |
 | `task add "<desc>" …` puis `task +LATEST export` | `POST /api/task/add` |
 | `task <uuid> export`, `modify proposed_scheduled:` | `TWTask.py` |
-| filtre composé `pool:"X" and status.not:"completed" and \( scheduled.not: or proposed_scheduled.not: \)` | `twplanner.py:145` |
+| filtre composé `pool:"X" and status.not:"completed" and \( scheduled.not: or proposed_scheduled.not: \)` | `twplanner.py`, `get_previous_free_slot()` |
 
 **UDA requis dans le `taskrc`** (définition de référence : `example_taskrc.txt`) :
 `estTime` (duration), `proposed_scheduled` (date), `pool` (string), `assignee` (string).
@@ -186,8 +229,8 @@ Sans ces UDA, les requêtes de `twplanner.py` échouent ou renvoient des résult
 ### Points de fragilité vérifiés
 
 - `shell=True` passe par **cmd.exe sur Windows**, pas bash. Ça fonctionne parce que les
-  descriptions sont entourées de guillemets **doubles** (`main_fastapi.py:323`). Ne jamais
-  passer aux guillemets simples : cmd.exe ne les interprète pas comme des délimiteurs.
+  descriptions sont entourées de guillemets **doubles** (`main_fastapi.py`, fonction `add_task()`).
+  Ne jamais passer aux guillemets simples : cmd.exe ne les interprète pas comme des délimiteurs.
 - Le filtre composé de `twplanner.py` se comporte identiquement sous Windows, parenthèses
   échappées (`\(`) ou non.
 - **`estTime` n'accepte pas `1h30`** (rejeté, code retour 2). Formats valides : `90min`,
@@ -201,8 +244,8 @@ Sans ces UDA, les requêtes de `twplanner.py` échouent ou renvoient des résult
   et `run_task_command` décodait la sortie avec l'encodage local (`cp1252`) au lieu d'UTF-8.
   Corrigés respectivement par `repair_text_fields()` et par `encoding='utf-8'`.
   Ne concerne que **dev-pc** : sous Linux `argv` gère l'UTF-8, et les correctifs y sont
-  inertes. **Non validé sur staging** (Taskwarrior 3.3.0) — obligatoire avant prod, cf. §4.
-  Détail : `openspec/changes/fix-nonascii-argv-windows/`.
+  inertes. **Non validé sur staging** — obligatoire avant prod (cf. §4, l'étage staging teste
+  le binaire de prod). Détail : `openspec/changes/fix-nonascii-argv-windows/`.
 
 ---
 
@@ -218,7 +261,82 @@ Sans ces UDA, les requêtes de `twplanner.py` échouent ou renvoient des résult
 
 ---
 
-## 7. Avertissement sur la documentation existante
+## 7. Déployer sur le téléphone
+
+Deux scripts, à exécuter **sur le téléphone** sous Termux. Ils remplacent une procédure écrite
+qui dépendait de la vigilance humaine à chaque passage — le mode de défaillance que le garde-fou
+`TASKRC` élimine côté tests.
+
+| Script | Rôle | Fréquence |
+|---|---|---|
+| `seed-staging.sh` | bootstrap : crée le clone de staging, son venv, son taskrc, et sème un jeu de tâches | une fois, puis à chaque évolution du jeu de seed |
+| `deploy.sh` | valide sur staging, puis avance la prod si tout est vert | à chaque déploiement |
+
+```bash
+./seed-staging.sh          # bootstrap
+./deploy.sh --dry-run      # tout sauf l'étape prod
+./deploy.sh                # pipeline complet
+```
+
+### Pourquoi deux scripts et pas un
+
+`deploy.sh` **refuse de tourner** si le clone de staging est absent, et renvoie vers
+`seed-staging.sh`. Un `git clone` est un bootstrap unique, dépendant du réseau, qui peut échouer
+à moitié ; l'intégrer à `deploy.sh` ferait que le tout premier passage — celui qui compte le
+plus — emprunterait un chemin qu'aucun passage suivant n'emprunte jamais.
+
+### Ce que valide réellement l'étage staging
+
+**Playwright ne peut pas tourner sur Termux.** Ce n'est pas une question d'installation :
+`playwright-core` lève `Error: Unsupported platform: android` avant même de chercher un
+navigateur, et il n'y a pas de chromium système. Vérifié le 2026-09-21.
+
+L'étage staging valide donc ce que lui seul peut valider — **le binaire Taskwarrior 3.5.0 amont
+à travers la vraie API** — et non la couche navigateur, qui est identique sur PC et téléphone et
+reste couverte par l'étage dev-pc. Concrètement, `deploy.sh` enchaîne :
+
+1. refus si Syncthing tourne ;
+2. refus si le clone de staging manque, ou si son arbre de travail est sale ;
+3. mise à jour du clone de staging sur `master` ;
+4. `pytest` (mocké) dans le venv de staging ;
+5. un uvicorn de staging sur **:8765** avec `TASKRC` sur `~/taskwarrior-staging/taskrc`, puis
+   `tools/staging-smoke.py` — appels HTTP réels contre la base de staging, y compris une
+   description accentuée relue après écriture et un `estTime` invalide qui doit être refusé
+   proprement plutôt que de produire un 500. Le serveur est arrêté par un `trap`, y compris en
+   cas d'échec ;
+6. seulement si tout est vert : `git pull` dans le clone de prod, redémarrage sur **:1875**,
+   et vérification que la prod répond.
+
+Pour lancer Playwright contre ce serveur de staging depuis le PC :
+
+```bash
+adb forward tcp:8765 tcp:8765
+PW_NO_SERVER=1 PW_BASE_URL=http://localhost:8765 npm test
+```
+
+### Pièges du téléphone, vérifiés le 2026-09-21
+
+- **Pas de credential GitHub utilisable sans interaction.** `~/.ssh/id_ed25519` est protégé par
+  une phrase de passe et aucun agent ne tourne : `git clone git@github.com:…` échoue en
+  `Permission denied (publickey)`. Le dépôt étant public et le déploiement en **lecture seule**,
+  les deux scripts passent par l'URL **HTTPS anonyme** (`WTM_REPO_URL` pour la surcharger), avec
+  `GIT_TERMINAL_PROMPT=0` pour qu'aucune invite ne puisse les bloquer. Si le dépôt devient privé,
+  il faudra un credential non interactif.
+- **`rc.confirmation=off` ne suffit pas pour une modification en lot.** Taskwarrior redemande
+  alors tâche par tâche, ne lit rien sur une entrée non interactive, et annonce
+  « Deleted 0 tasks » avec un code de retour **nul**. `rc.bulk=0` est obligatoire — sans lui, la
+  purge de `seed-staging.sh` ne purgeait rien et le script accumulait des doublons à chaque
+  passage.
+- **`pydantic-core` n'a pas de roue pour Android/aarch64** : pip le compile, et maturin s'arrête
+  sur « Failed to determine Android API level ». D'où `ANDROID_API_LEVEL=24` posé par
+  `seed-staging.sh`. La compilation est longue.
+- **Fins de ligne.** `core.autocrlf=true` sur le PC : les copies sur disque ont des CR, les blobs
+  git sont propres. `.gitattributes` fixe `*.sh text eol=lf` pour que la garantie ne dépende plus
+  de la configuration git locale — un `.sh` en CRLF échoue sous Termux en `bad interpreter`.
+
+---
+
+## 8. Avertissement sur la documentation existante
 
 `README.md` et `PROJECT_MEMORY.md` **sont périmés sur un point central** : ils décrivent Flask
 (`app.py`) sur le port 5000 comme le backend du projet, alors que la migration vers FastAPI a
@@ -228,7 +346,7 @@ présent fichier, **AGENTS.md fait foi**.
 
 ---
 
-## 8. Historique des décisions
+## 9. Historique des décisions
 
 ### 2026-09-18 — Taskwarrior natif sur le PC de travail
 
@@ -267,10 +385,14 @@ backend Flask) et `tests/task-manager.spec.js` codait `http://localhost:5000` en
 court-circuitant `baseURL`. Les deux ont été corrigés, la cible est paramétrable par
 environnement, et le garde-fou `TASKRC` a été ajouté.
 
-### Reste à faire
+### Fait
 
 - créer le remote git et cloner proprement sur le PC
-- `deploy.sh` sur le téléphone : `git fetch`, tests staging, puis avance de prod si vert
-- script de seed de la base staging
-- étendre `.gitignore` (ne couvre pas encore un `taskrc` local)
-- envisager d'aligner les versions de Taskwarrior entre PC et téléphone
+- aligner les versions de Taskwarrior entre PC et téléphone (les deux sont en 3.5.0 ; seule
+  la différence fork/amont subsiste)
+- étendre `.gitignore` pour un `taskrc` local
+- `seed-staging.sh` et `deploy.sh` (cf. §7)
+
+### Reste à faire
+
+- faire tourner `seed-staging.sh` sur le téléphone : le clone de staging n'existe pas encore

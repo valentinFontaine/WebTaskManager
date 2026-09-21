@@ -11,6 +11,9 @@ ENV/
 .env.test.local
 .env.production.local
 
+# taskrc local : pointe vers une base spécifique à la machine
+taskrc
+
 # Dossiers de dépendances
 node_modules/
 __pycache__/
