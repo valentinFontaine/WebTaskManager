@@ -300,9 +300,22 @@ function initializeCalendar() {
             // n'arrivaient jamais dans la page -- deux des trois regimes du
             // plan restaient invisibles, sans le moindre message.
             eventView: ['allday', 'time'],
+            // Replier les doublons, oui -- mais un doublon, c'est la MEME
+            // chose affichee deux fois, pas deux choses qui portent le meme
+            // nom. Le groupage sur le seul titre repliait les blocs d'une
+            // tache coupee en plusieurs creneaux : l'ordonnanceur leur donne
+            // a tous la description de la tache, donc deux creneaux distincts
+            // passaient pour un doublon. Un bloc s'affichait normalement,
+            // l'autre en filet de 14px contre 85px -- comme s'ils avaient lieu
+            // en meme temps. On exige donc aussi les memes bornes.
             collapseDuplicateEvents: {
                 getDuplicateEvents: (targetEvent, events) => {
-                    return events.filter(event => event.title === targetEvent.title);
+                    const instant = e => [
+                        new Date(e.start).getTime(), new Date(e.end).getTime()
+                    ].join('-');
+                    const cible = instant(targetEvent);
+                    return events.filter(event => event.title === targetEvent.title
+                                              && instant(event) === cible);
                 },
                 getMainEvent: (events) => events[0]
             }

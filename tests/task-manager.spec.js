@@ -1047,6 +1047,76 @@ test.describe('Filtres partages', () => {
       }
     });
 
+  // Une tache trop longue pour une seule plage est coupee en plusieurs blocs
+  // par l'ordonnanceur, qui portent tous la MEME description. Le calendrier les
+  // repliait alors l'un sur l'autre : `collapseDuplicateEvents` groupait sur le
+  // seul titre, donc deux creneaux distincts de la meme tache passaient pour un
+  // doublon. Un bloc s'affichait normalement, l'autre en filet de quelques
+  // pixels -- comme s'ils avaient lieu en meme temps.
+  function planTacheEnDeuxBlocs() {
+    return {
+      version: 1,
+      statut: 'OPTIMAL',
+      retard_total: 0,
+      en_retard: [],
+      t0: localISOAujourdHui(0),
+      granularite_minutes: 30,
+      taches: {
+        'dddddddd-0000-0000-0000-000000000001': {
+          description: 'Tache coupee en deux',
+          projet: 'Test',
+          debut: localISOAujourdHui(9),
+          fin: localISOAujourdHui(12),
+          blocs: [
+            {
+              indice: 0, debut: localISOAujourdHui(9), fin: localISOAujourdHui(11),
+              externe: false, agrege: false, opportuniste: false, precision: 'heure',
+            },
+            {
+              indice: 1, debut: localISOAujourdHui(11), fin: localISOAujourdHui(12),
+              externe: false, agrege: false, opportuniste: false, precision: 'heure',
+            },
+          ],
+        },
+      },
+    };
+  }
+
+  test('deux blocs de la meme tache s\'affichent cote a cote, pas replies l\'un sur l\'autre',
+    async ({ browser }) => {
+      const { context, page: p } = await pageAvecDonnees(browser, {
+        plan: { body: JSON.stringify(planTacheEnDeuxBlocs()) },
+      });
+      try {
+        await p.goto('/calendar-planner.html');
+        await expect(p.locator('#task-count')).toBeVisible({ timeout: 15000 });
+
+        const blocs = p.locator('.bloc--contraint');
+        await expect(blocs).toHaveCount(2, { timeout: 10000 });
+
+        const largeurs = await blocs.evaluateAll(
+          els => els.map(el => el.getBoundingClientRect().width));
+        const [etroit, large] = [Math.min(...largeurs), Math.max(...largeurs)];
+
+        // Les deux blocs sont a des heures differentes : aucun n'a de raison
+        // d'etre ecrase. Avec le repliage, on mesurait 14px contre 93px.
+        expect(etroit / large,
+          `largeurs mesurees : ${largeurs.map(l => Math.round(l)).join(' et ')}px`
+        ).toBeGreaterThan(0.8);
+
+        // Et leurs hauteurs restent proportionnelles a leurs durees (2 h et
+        // 1 h) : la correction ne doit pas non plus les empiler au meme
+        // endroit.
+        const hauteurs = await blocs.evaluateAll(
+          els => els.map(el => el.getBoundingClientRect().height));
+        const ratio = Math.max(...hauteurs) / Math.min(...hauteurs);
+        expect(ratio).toBeGreaterThan(1.5);
+        expect(ratio).toBeLessThan(2.5);
+      } finally {
+        await context.close();
+      }
+    });
+
   test('un plan absent ne produit ni bandeau d\'erreur ni calendrier vide', async ({ browser }) => {
     const { context, page: p, vus } = await pageAvecDonnees(browser); // plan par defaut : 404
     let alerteDeclenchee = false;
