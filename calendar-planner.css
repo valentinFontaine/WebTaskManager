@@ -916,3 +916,68 @@ body {
         transparent 10px
     );
 }
+
+/* ===================================
+   Blocs du plan (lot 9 -- ordonnanceur-par-contraintes)
+   =================================== */
+
+/* Meme convention que `.calendar-event-hors-filtre` : positionnement absolu
+   sur l'ancetre positionne fourni par TOAST UI (le bloc de l'evenement). */
+.bloc-plan {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 5px;
+    font-size: 0.8rem;
+    line-height: 1.2;
+    color: #fff;
+    box-sizing: border-box;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+/* Regime contraint : un engagement pose contre son mur. Trait plein, gras,
+   opaque -- exactement ce qu'on attend d'un rendez-vous ferme. */
+.bloc--contraint {
+    border-left: 4px solid #08306b;
+    font-weight: 600;
+    opacity: 1;
+}
+
+/* Regime opportuniste : une suggestion, pas un ordre. La distinction n'est
+   pas qu'une teinte differente (exigence de tasks.md) : bordure en tirets,
+   trame diagonale, opacite reduite et intitule en italique -- quatre signaux
+   independants de la couleur, pour qu'un daltonien ou une capture en niveaux
+   de gris la voie tout autant. */
+.bloc--opportuniste {
+    border: 2px dashed #c56000;
+    font-style: italic;
+    opacity: 0.85;
+    background-image: repeating-linear-gradient(
+        135deg,
+        rgba(255, 255, 255, 0.35) 0,
+        rgba(255, 255, 255, 0.35) 4px,
+        transparent 4px,
+        transparent 8px
+    );
+}
+
+/* Externe : ne consomme pas la capacite de l'utilisateur (design.md §7). En
+   retrait volontaire -- bordure fine pointillee et opacite basse -- pour ne
+   jamais se lire comme du travail reel. */
+.bloc--externe {
+    border: 1px dotted #707070;
+    opacity: 0.55;
+    font-style: italic;
+}
+
+/* Precision "jour" (regime agrege) : le bloc est rendu en evenement journee
+   entiere par calendar-planner.js, justement pour ne pas laisser croire a un
+   horaire precis. Aucun style supplementaire requis ici -- le marqueur de
+   classe existe pour que d'eventuels styles futurs puissent le cibler sans
+   dupliquer la logique de regime. */
+.bloc--jour {
+}

@@ -506,6 +506,51 @@ test.describe('Filtres partages', () => {
          + `T${n(d.getUTCHours())}${n(d.getUTCMinutes())}00Z`;
   }
 
+  // Meme principe que `planifieAujourdHui`, mais au format du contrat de
+  // plan JSON (lot 9) : heure locale naive, sans `Z`. Voir design.md §7.
+  function localISOAujourdHui(heureLocale, minuteLocale = 0) {
+    const d = new Date();
+    d.setHours(heureLocale, minuteLocale, 0, 0);
+    const n = v => String(v).padStart(2, '0');
+    return `${d.getFullYear()}-${n(d.getMonth() + 1)}-${n(d.getDate())}`
+         + `T${n(d.getHours())}:${n(d.getMinutes())}:00`;
+  }
+
+  // Un plan valide minimal, avec un bloc de chaque regime. Sert de base aux
+  // tests de degradation, qui le cassent de differentes facons.
+  function planValide() {
+    return {
+      version: 1,
+      statut: 'OPTIMAL',
+      retard_total: 0,
+      en_retard: [],
+      t0: localISOAujourdHui(0),
+      granularite_minutes: 30,
+      taches: {
+        'cccccccc-0000-0000-0000-000000000001': {
+          description: 'Engagement ferme',
+          projet: 'Test',
+          debut: localISOAujourdHui(9),
+          fin: localISOAujourdHui(10),
+          blocs: [{
+            indice: 0, debut: localISOAujourdHui(9), fin: localISOAujourdHui(10),
+            externe: false, agrege: false, opportuniste: false, precision: 'heure',
+          }],
+        },
+        'cccccccc-0000-0000-0000-000000000002': {
+          description: 'Suggestion souple',
+          projet: 'Test',
+          debut: localISOAujourdHui(13),
+          fin: localISOAujourdHui(14),
+          blocs: [{
+            indice: 0, debut: localISOAujourdHui(13), fin: localISOAujourdHui(14),
+            externe: false, agrege: false, opportuniste: true, precision: 'heure',
+          }],
+        },
+      },
+    };
+  }
+
   async function pageAvecDonnees(browser, options = {}) {
     const contextes = options.contextes || ['pro', 'perso'];
     const taches = options.taches || TACHES_STUB;
@@ -519,7 +564,25 @@ test.describe('Filtres partages', () => {
     }
 
     const p = await context.newPage();
-    const vus = { taches: 0, planifiees: 0, contextes: 0, projets: 0 };
+    const vus = { taches: 0, planifiees: 0, contextes: 0, projets: 0, plan: 0 };
+
+    // Le plan JSON du lot 9 (design.md §7). Par defaut, absent (404) : la
+    // majorite des tests de ce bloc ne s'en soucient pas et ne doivent pas
+    // dependre d'un fichier reel sur le serveur de test.
+    await p.route('**/plan.json', async route => {
+      vus.plan++;
+      const plan = options.plan;
+      if (!plan) {
+        await route.fulfill({ status: 404, contentType: 'application/json',
+          body: '{"detail":"File not found"}' });
+        return;
+      }
+      await route.fulfill({
+        status: plan.status || 200,
+        contentType: plan.contentType || 'application/json',
+        body: plan.body,
+      });
+    });
 
     await p.route('**/api/tasks**', async route => {
       vus.taches++;
@@ -850,4 +913,101 @@ test.describe('Filtres partages', () => {
       await context.close();
     }
   });
+
+  // ---------------------------------------------------------------------------
+  // Le calendrier consomme le plan JSON (lot 9)
+  //
+  // Le plan est un fichier stubbe : `../TaskWarriorPlanner` documente le
+  // contrat dans design.md §7, ce depot ne le produit pas. Trois exigences :
+  // les deux regimes se voient par un selecteur, et l'absence ou la
+  // malformation du plan ne casse jamais l'affichage.
+
+  test('les deux regimes du plan sont distinguables par un selecteur, pas seulement a l\'oeil',
+    async ({ browser }) => {
+      const { context, page: p } = await pageAvecDonnees(browser, {
+        plan: { body: JSON.stringify(planValide()) },
+      });
+      try {
+        await p.goto('/calendar-planner.html');
+        await expect(p.locator('#task-count')).toBeVisible({ timeout: 15000 });
+
+        const contraint = p.locator('.bloc--contraint').first();
+        const opportuniste = p.locator('.bloc--opportuniste').first();
+        await expect(contraint).toBeVisible({ timeout: 10000 });
+        await expect(opportuniste).toBeVisible({ timeout: 10000 });
+
+        // Pas qu'une histoire de nom de classe : la difference doit se voir
+        // dans le style effectivement applique.
+        const styleContraint = await contraint.evaluate(el => getComputedStyle(el).borderStyle);
+        const styleOpportuniste = await opportuniste.evaluate(el => getComputedStyle(el).borderStyle);
+        expect(styleOpportuniste).not.toBe(styleContraint);
+      } finally {
+        await context.close();
+      }
+    });
+
+  test('un plan absent ne produit ni bandeau d\'erreur ni calendrier vide', async ({ browser }) => {
+    const { context, page: p, vus } = await pageAvecDonnees(browser); // plan par defaut : 404
+    let alerteDeclenchee = false;
+    p.on('dialog', async dialog => { alerteDeclenchee = true; await dialog.dismiss(); });
+    try {
+      await p.goto('/calendar-planner.html');
+
+      // Le contenu attendu est bien la : le calendrier n'est pas une page
+      // vide qui aurait simplement echoue silencieusement.
+      await expect(p.locator('#unplanned-tasks .task-card')).toHaveCount(3, { timeout: 15000 });
+      await expect(p.locator('#calendar')).toBeVisible();
+      await expect(p.locator('.toastui-calendar-layout')).toBeVisible({ timeout: 10000 });
+
+      // Ni bandeau (absent de cette page), ni alert() de secours.
+      await expect(p.locator('#error-message')).toBeHidden();
+      expect(vus.plan, '/plan.json aurait du etre appele').toBeGreaterThan(0);
+      expect(alerteDeclenchee, 'un plan absent ne doit declencher aucune alerte').toBe(false);
+    } finally {
+      await context.close();
+    }
+  });
+
+  test('un plan malformé (JSON invalide) ne casse pas davantage qu\'un plan absent',
+    async ({ browser }) => {
+      const { context, page: p, vus } = await pageAvecDonnees(browser, {
+        plan: { body: '{ceci n\'est pas du JSON' },
+      });
+      let alerteDeclenchee = false;
+      p.on('dialog', async dialog => { alerteDeclenchee = true; await dialog.dismiss(); });
+      try {
+        await p.goto('/calendar-planner.html');
+
+        await expect(p.locator('#unplanned-tasks .task-card')).toHaveCount(3, { timeout: 15000 });
+        await expect(p.locator('.toastui-calendar-layout')).toBeVisible({ timeout: 10000 });
+        await expect(p.locator('#error-message')).toBeHidden();
+        expect(alerteDeclenchee).toBe(false);
+        // Preuve que le test exerce bien le chemin d'analyse du plan, et ne
+        // passe pas simplement parce que rien ne fetch /plan.json.
+        expect(vus.plan, '/plan.json aurait du etre appele').toBeGreaterThan(0);
+      } finally {
+        await context.close();
+      }
+    });
+
+  test('un plan de version inattendue est traite comme malformé, pas devine',
+    async ({ browser }) => {
+      const planVersionInconnue = { ...planValide(), version: 2 };
+      const { context, page: p, vus } = await pageAvecDonnees(browser, {
+        plan: { body: JSON.stringify(planVersionInconnue) },
+      });
+      try {
+        await p.goto('/calendar-planner.html');
+
+        await expect(p.locator('#unplanned-tasks .task-card')).toHaveCount(3, { timeout: 15000 });
+        await expect(p.locator('.toastui-calendar-layout')).toBeVisible({ timeout: 10000 });
+        await expect(p.locator('#error-message')).toBeHidden();
+        // Le plan est refuse : aucun bloc de plan ne doit apparaitre.
+        await expect(p.locator('.bloc--contraint')).toHaveCount(0);
+        await expect(p.locator('.bloc--opportuniste')).toHaveCount(0);
+        expect(vus.plan, '/plan.json aurait du etre appele').toBeGreaterThan(0);
+      } finally {
+        await context.close();
+      }
+    });
 });

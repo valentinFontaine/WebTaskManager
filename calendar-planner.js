@@ -47,6 +47,183 @@ let currentFilter = {
 // Identifiant du calendrier TOAST UI reserve aux blocs hors filtre.
 const CAL_HORS_FILTRE = 'hors-filtre';
 
+/**
+ * Plan calcule par l'ordonnanceur (lot 9, ordonnanceur-par-contraintes).
+ *
+ * Contrat documente dans `../TaskWarriorPlanner/openspec/changes/
+ * ordonnanceur-par-contraintes/design.md` §7. Produit par `planif/sortie.py`
+ * dans cet autre depot ; ce fichier-ci ne fait que le lire. Aucune donnee du
+ * plan n'est recalculee : `externe`, `agrege`, `opportuniste` et `precision`
+ * sont lus tels quels sur chaque bloc.
+ *
+ * Chemin choisi : `/plan.json`, a la racine, servi par la route catch-all
+ * deja presente dans `main_fastapi.py` (`FileResponse` sur le nom de fichier
+ * demande). Rien n'a ete ajoute cote backend : ce depot ne produit pas encore
+ * ce fichier, et ce lot se developpe sur un plan bouchonne (cf. tasks.md).
+ */
+const VERSION_PLAN_ATTENDUE = 1;
+const URL_PLAN = '/plan.json';
+
+// Trois calendriers TOAST UI distincts, un par regime lu dans le plan, plus
+// un pour l'externe (qui n'est pas un regime de travail, voir plus bas).
+const CAL_PLAN_CONTRAINT = 'plan-contraint';
+const CAL_PLAN_OPPORTUNISTE = 'plan-opportuniste';
+const CAL_PLAN_EXTERNE = 'plan-externe';
+
+// Evenements construits a partir du dernier plan charge avec succes. Vide
+// tant qu'aucun plan valide n'a ete lu -- c'est ainsi que la degradation
+// propre est obtenue : on ne rend simplement rien de plus.
+let planEvents = [];
+
+function estCalendrierDePlan(calendarId) {
+    return calendarId === CAL_PLAN_CONTRAINT
+        || calendarId === CAL_PLAN_OPPORTUNISTE
+        || calendarId === CAL_PLAN_EXTERNE;
+}
+
+/**
+ * Verifie que le plan respecte le contrat minimal avant d'en tirer quoi que
+ * ce soit. Rien n'est devine : `version` autre que 1, ou `taches` absent/mal
+ * forme, et le plan entier est traite comme malformé (design.md §7 regle 6).
+ */
+function planEstValide(donnees) {
+    if (!donnees || typeof donnees !== 'object') return false;
+    if (donnees.version !== VERSION_PLAN_ATTENDUE) return false;
+    if (!donnees.taches || typeof donnees.taches !== 'object' || Array.isArray(donnees.taches)) {
+        return false;
+    }
+    return true;
+}
+
+/**
+ * Un plan est considere perime quand la fin de **tous** ses blocs est deja
+ * passee : il n'y a alors plus rien a en montrer dans un calendrier tourne
+ * vers l'avenir. Le contrat JSON ne porte aucune date de generation -- c'est
+ * le seul critere qu'on puisse tirer honnetement de son contenu, plutot que
+ * d'inventer un champ qui n'existe pas.
+ *
+ * Un plan sans aucun bloc n'est pas perime : il n'y a rien a juger, et un
+ * plan techniquement vide (aucune tache a planifier) est un plan valide.
+ */
+function planEstPerime(donnees, maintenant = new Date()) {
+    const blocs = [];
+    Object.values(donnees.taches).forEach(tache => {
+        (tache.blocs || []).forEach(bloc => blocs.push(bloc));
+    });
+    if (blocs.length === 0) return false;
+    return blocs.every(bloc => {
+        const fin = new Date(bloc.fin);
+        return !isNaN(fin.getTime()) && fin <= maintenant;
+    });
+}
+
+/**
+ * Transforme le plan valide en evenements TOAST UI. Ne recalcule aucun
+ * regime : `externe`, `opportuniste` et `precision` sont lus tels quels.
+ *
+ * - `precision: "jour"` (regime agrege) : seule la journee est garantie, et
+ *   deux blocs agreges d'une meme journee peuvent se chevaucher dans le JSON
+ *   (design.md §7 regle 1). Les afficher comme des creneaux a l'heure pres
+ *   mentirait sur leur precision reelle ; ils sont donc rendus en evenements
+ *   « jour entier », qui ne se disputent pas d'heure et ne se chevauchent
+ *   jamais visuellement entre eux.
+ * - `externe: true` : delai fournisseur, qui ne consomme pas la capacite de
+ *   l'utilisateur (design.md §7, ecriture de `scheduled`). Le montrer comme un
+ *   creneau de travail donnerait l'illusion d'un agenda charge alors que
+ *   l'utilisateur est libre. Rendu en marqueur journee, sur un calendrier a
+ *   part, en retrait visuel (voir calendar-planner.css) : l'information reste
+ *   visible sans se confondre avec du travail reel.
+ */
+function construireEvenementsPlan(donnees) {
+    const evenements = [];
+    Object.entries(donnees.taches).forEach(([uuid, tache]) => {
+        const description = tache.description || '(tache sans description)';
+        (tache.blocs || []).forEach(bloc => {
+            const regime = bloc.externe ? 'externe' : (bloc.opportuniste ? 'opportuniste' : 'contraint');
+            const calendarId = regime === 'externe' ? CAL_PLAN_EXTERNE
+                : regime === 'opportuniste' ? CAL_PLAN_OPPORTUNISTE
+                : CAL_PLAN_CONTRAINT;
+            const estJour = bloc.precision === 'jour';
+
+            const base = {
+                id: `plan-${uuid}-${bloc.indice}`,
+                calendarId,
+                title: description,
+                isReadOnly: true,
+                raw: { uuid, regime, agrege: estJour, projet: tache.projet || null }
+            };
+
+            if (estJour || regime === 'externe') {
+                // Jour entier : le debut du bloc suffit a situer le jour, la
+                // fin exacte n'a de toute facon pas de sens a l'heure pres.
+                const jour = new Date(bloc.debut);
+                evenements.push({ ...base, isAllday: true, category: 'allday', start: jour, end: jour });
+            } else {
+                evenements.push({ ...base, start: new Date(bloc.debut), end: new Date(bloc.fin) });
+            }
+        });
+    });
+    return evenements;
+}
+
+/**
+ * Gabarit d'affichage commun aux blocs du plan (heure et jour entier). La
+ * distinction contraint/opportuniste doit se voir sans lire de couleur --
+ * bordure, trame et icone different franchement, et surtout les classes
+ * `.bloc--contraint` / `.bloc--opportuniste` sont stables : c'est sur elles
+ * que s'appuie le test Playwright, pas sur un rendu visuel.
+ */
+function gabaritBlocPlan(event) {
+    const raw = event.raw || {};
+    const classes = ['bloc-plan', `bloc--${raw.regime || 'contraint'}`];
+    if (raw.agrege) classes.push('bloc--jour');
+    const icone = raw.regime === 'opportuniste' ? '💡' : raw.regime === 'externe' ? '🏭' : '📌';
+    return `<div class="${classes.join(' ')}">${icone} ${echapperHtml(event.title)}</div>`;
+}
+
+/**
+ * Charge le plan et remplit `planEvents`. Ne lance jamais d'exception et
+ * n'affiche jamais de bandeau : un plan absent (404), illisible (reseau) ou
+ * malforme (JSON invalide, version inattendue, `taches` absent) degenere
+ * silencieusement vers « pas de plan », exactement comme s'il n'y avait
+ * jamais eu de plan a afficher. C'est le piege nomme par tasks.md : le
+ * calendrier doit continuer a s'afficher normalement dans tous ces cas.
+ */
+async function chargerPlan() {
+    planEvents = [];
+    try {
+        const reponse = await fetch(URL_PLAN);
+        if (!reponse.ok) {
+            console.warn('Plan absent ou inaccessible (' + reponse.status + '), calendrier sans plan.');
+            return;
+        }
+        const texte = await reponse.text();
+        if (!texte || !texte.trim()) {
+            console.warn('Fichier de plan vide, calendrier sans plan.');
+            return;
+        }
+        let donnees;
+        try {
+            donnees = JSON.parse(texte);
+        } catch (e) {
+            console.warn('Plan JSON illisible, calendrier sans plan:', e.message);
+            return;
+        }
+        if (!planEstValide(donnees)) {
+            console.warn('Plan malforme (version ou structure inattendue), calendrier sans plan.', donnees);
+            return;
+        }
+        if (planEstPerime(donnees)) {
+            console.warn('Plan perime (tous les blocs sont dans le passe), calendrier sans plan.');
+            return;
+        }
+        planEvents = construireEvenementsPlan(donnees);
+    } catch (e) {
+        // Erreur reseau ou autre : degradation silencieuse, jamais de bandeau.
+        console.warn('Impossible de charger le plan, calendrier sans plan:', e.message);
+    }
+}
+
 // UUID des taches que le backend a renvoyees pour le filtre courant. Le
 // contexte est une expression TaskWarrior : seul le serveur sait y repondre,
 // donc on se souvient de ce qu'il a repondu plutot que de le reinterpreter.
@@ -72,7 +249,10 @@ document.addEventListener('DOMContentLoaded', () => {
     setupEventListeners();
     // Les templates de cartes arrivent par fetch : sans cette attente, le premier
     // rendu tombe avant eux. Meme contrat que dans main.js.
-    taskCardManager.templatesReady.then(() => loadTasks());
+    // Le plan est charge avant les taches : il ne bloque jamais le rendu (il
+    // degenere silencieusement vers « rien a montrer »), donc l'attendre en
+    // premier ne coute rien et evite un second passage de rendu.
+    taskCardManager.templatesReady.then(() => chargerPlan().then(loadTasks));
     console.log('SetupTasksSelection');
     console.log('Setup Task Selection Done');
     
@@ -121,6 +301,17 @@ function initializeCalendar() {
                     return '<div class="calendar-event-hors-filtre"'
                          + ' title="Creneau occupe, hors du filtre courant"></div>';
                 }
+                if (estCalendrierDePlan(event.calendarId)) {
+                    return gabaritBlocPlan(event);
+                }
+                return `<div class="calendar-event-title">${echapperHtml(event.title)}</div>`;
+            },
+            allday(event) {
+                // Les blocs agreges (precision "jour") et externes du plan
+                // sont les seuls evenements journee entiere de cette page.
+                if (estCalendrierDePlan(event.calendarId)) {
+                    return gabaritBlocPlan(event);
+                }
                 return `<div class="calendar-event-title">${echapperHtml(event.title)}</div>`;
             },
             popupSave() {
@@ -144,6 +335,32 @@ function initializeCalendar() {
                 name: 'Hors filtre',
                 backgroundColor: '#b0b8c1',
                 borderColor: '#8a929c',
+            },
+            {
+                // Regime contraint (design.md §7) : un engagement, date, pose
+                // contre son mur. Bleu soutenu, pour ne pas se confondre avec
+                // le vert des taches deja planifiees dans Taskwarrior.
+                id: CAL_PLAN_CONTRAINT,
+                name: 'Plan - engagement',
+                backgroundColor: '#0d47a1',
+                borderColor: '#08306b',
+            },
+            {
+                // Regime opportuniste : une suggestion, non datee, qui remplit
+                // par urgence. Ambre, delibrement different du bleu contraint.
+                id: CAL_PLAN_OPPORTUNISTE,
+                name: 'Plan - suggestion',
+                backgroundColor: '#ff8f00',
+                borderColor: '#c56000',
+            },
+            {
+                // Externe : delai fournisseur, ne consomme pas la capacite de
+                // l'utilisateur. Gris en retrait, pour ne pas se lire comme un
+                // engagement de travail.
+                id: CAL_PLAN_EXTERNE,
+                name: 'Plan - externe',
+                backgroundColor: '#9e9e9e',
+                borderColor: '#707070',
             }
         ]
     });
@@ -628,7 +845,13 @@ function processTasksForCalendar() {
     if (events.length > 0) {
         calendar.createEvents(events);
     }
-    
+    // Le plan (lot 9) est independant des taches Taskwarrior deja planifiees :
+    // il vient s'ajouter, jamais remplacer. `planEvents` est vide tant qu'aucun
+    // plan valide n'a ete charge -- degradation propre par simple absence.
+    if (planEvents.length > 0) {
+        calendar.createEvents(planEvents);
+    }
+
     // Mettre à jour l'affichage
     calendar.render();
 }
