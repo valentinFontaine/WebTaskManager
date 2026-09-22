@@ -66,3 +66,6 @@ after-add.png
 command.debug
 _*
 
+
+# Plan produit par ../TaskWarriorPlanner : une sortie, jamais une source.
+plan.json

@@ -153,9 +153,22 @@ function construireEvenementsPlan(donnees) {
                 raw: { uuid, regime, agrege: estJour, projet: tache.projet || null }
             };
 
-            if (estJour || regime === 'externe') {
-                // Jour entier : le debut du bloc suffit a situer le jour, la
-                // fin exacte n'a de toute facon pas de sens a l'heure pres.
+            if (regime === 'externe') {
+                // Bandeau couvrant TOUTE l'attente, du depart a l'arrivee.
+                // Le reduire a son jour de depart perdrait la seule
+                // information qui compte ici : combien de temps on attend.
+                // C'est ce delai qui explique pourquoi le travail en aval est
+                // place si loin, et c'est le scenario qui a motive
+                // l'ordonnanceur.
+                evenements.push({
+                    ...base, isAllday: true, category: 'allday',
+                    start: new Date(bloc.debut), end: new Date(bloc.fin)
+                });
+            } else if (estJour) {
+                // Journee entiere, sur la seule journee du bloc : l'heure
+                // n'est pas garantie en regime agrege, donc on ne l'affiche
+                // pas. La fin est ramenee a la journee de debut -- un bloc
+                // agrege repond a « quel jour », jamais a « de quand a quand ».
                 const jour = new Date(bloc.debut);
                 evenements.push({ ...base, isAllday: true, category: 'allday', start: jour, end: jour });
             } else {
@@ -280,7 +293,13 @@ function initializeCalendar() {
             hourStart: 6,
             hourEnd: 23,
             taskView: true,
-            eventView: ['time'],
+            // `allday` est INDISPENSABLE, pas decoratif : les blocs `externe`
+            // et ceux du regime agrege sont rendus en evenements journee
+            // entiere (voir `construireEvenementsPlan`). Avec le seul panneau
+            // `time`, ils etaient construits, remis au calendrier, et
+            // n'arrivaient jamais dans la page -- deux des trois regimes du
+            // plan restaient invisibles, sans le moindre message.
+            eventView: ['allday', 'time'],
             collapseDuplicateEvents: {
                 getDuplicateEvents: (targetEvent, events) => {
                     return events.filter(event => event.title === targetEvent.title);

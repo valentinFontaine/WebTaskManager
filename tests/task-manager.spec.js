@@ -516,6 +516,25 @@ test.describe('Filtres partages', () => {
          + `T${n(d.getHours())}:${n(d.getMinutes())}:00`;
   }
 
+  // Meme principe, decale de `jours` par rapport a aujourd'hui.
+  function localISODecale(jours, heureLocale, minuteLocale = 0) {
+    const d = new Date();
+    d.setDate(d.getDate() + jours);
+    d.setHours(heureLocale, minuteLocale, 0, 0);
+    const n = v => String(v).padStart(2, '0');
+    return `${d.getFullYear()}-${n(d.getMonth() + 1)}-${n(d.getDate())}`
+         + `T${n(d.getHours())}:${n(d.getMinutes())}:00`;
+  }
+
+  // Decalage en jours entre aujourd'hui et le lundi / dimanche de la semaine
+  // affichee (`startDayOfWeek: 1` dans calendar-planner.js). Sert a construire
+  // une attente externe qui couvre TOUTE la semaine visible, quel que soit le
+  // jour ou le test tourne.
+  function decalageLundi() {
+    const jour = new Date().getDay();          // 0 = dimanche
+    return jour === 0 ? -6 : 1 - jour;
+  }
+
   // Un plan valide minimal, avec un bloc de chaque regime. Sert de base aux
   // tests de degradation, qui le cassent de differentes facons.
   function planValide() {
@@ -545,6 +564,33 @@ test.describe('Filtres partages', () => {
           blocs: [{
             indice: 0, debut: localISOAujourdHui(13), fin: localISOAujourdHui(14),
             externe: false, agrege: false, opportuniste: true, precision: 'heure',
+          }],
+        },
+        // Attente chez un tiers. Elle couvre toute la semaine affichee : c'est
+        // la DUREE de l'attente qui est l'information utile, pas son instant de
+        // depart. Ce bloc manquait au jeu d'essai, et c'est ce qui a laisse
+        // passer le fait qu'aucun evenement « journee entiere » n'etait rendu.
+        'cccccccc-0000-0000-0000-000000000003': {
+          description: 'Fabrication chez le tiers',
+          projet: 'Test',
+          debut: localISODecale(decalageLundi(), 0),
+          fin: localISODecale(decalageLundi() + 6, 23, 30),
+          blocs: [{
+            indice: 0,
+            debut: localISODecale(decalageLundi(), 0),
+            fin: localISODecale(decalageLundi() + 6, 23, 30),
+            externe: true, agrege: false, opportuniste: false, precision: 'heure',
+          }],
+        },
+        // Bloc du regime agrege : seule la journee est garantie.
+        'cccccccc-0000-0000-0000-000000000004': {
+          description: 'Travail agrege',
+          projet: 'Test',
+          debut: localISOAujourdHui(9),
+          fin: localISOAujourdHui(11),
+          blocs: [{
+            indice: 0, debut: localISOAujourdHui(9), fin: localISOAujourdHui(11),
+            externe: false, agrege: true, opportuniste: false, precision: 'jour',
           }],
         },
       },
@@ -941,6 +987,61 @@ test.describe('Filtres partages', () => {
         const styleContraint = await contraint.evaluate(el => getComputedStyle(el).borderStyle);
         const styleOpportuniste = await opportuniste.evaluate(el => getComputedStyle(el).borderStyle);
         expect(styleOpportuniste).not.toBe(styleContraint);
+      } finally {
+        await context.close();
+      }
+    });
+
+  // Les deux tests qui suivent comptent les blocs DANS LE DOM, et pas dans le
+  // tableau d'evenements passe au calendrier. C'est la difference qui compte :
+  // les blocs `externe` et `agrege` etaient bien construits et bien remis au
+  // calendrier, mais `eventView: ['time']` n'affichait aucun panneau « journee
+  // entiere » -- ils n'arrivaient jamais dans la page. Un test qui interroge
+  // l'etat JavaScript aurait ete vert sur un ecran vide.
+
+  test('l\'attente chez un tiers est visible et couvre sa duree, pas seulement son depart',
+    async ({ browser }) => {
+      const { context, page: p } = await pageAvecDonnees(browser, {
+        plan: { body: JSON.stringify(planValide()) },
+      });
+      try {
+        await p.goto('/calendar-planner.html');
+        await expect(p.locator('#task-count')).toBeVisible({ timeout: 15000 });
+
+        const externe = p.locator('.bloc--externe').first();
+        await expect(externe).toBeVisible({ timeout: 10000 });
+
+        // L'attente construite couvre les sept jours affiches. Un bandeau
+        // reduit a son jour de depart est le defaut qu'on veut interdire :
+        // c'est la duree de l'attente qui informe, pas son instant initial.
+        const largeurBloc = (await externe.boundingBox()).width;
+        const colonnes = p.locator('.toastui-calendar-week-view-day-names'
+                                 + ' .toastui-calendar-day-name-item');
+        await expect(colonnes).toHaveCount(7);
+        const largeurColonne = (await colonnes.first().boundingBox()).width;
+        expect(largeurBloc,
+          `le bandeau d'attente fait ${largeurBloc}px, une colonne ${largeurColonne}px`
+        ).toBeGreaterThan(largeurColonne * 3);
+      } finally {
+        await context.close();
+      }
+    });
+
+  test('un bloc du regime agrege s\'affiche en journee entiere, pas au creneau',
+    async ({ browser }) => {
+      const { context, page: p } = await pageAvecDonnees(browser, {
+        plan: { body: JSON.stringify(planValide()) },
+      });
+      try {
+        await p.goto('/calendar-planner.html');
+        await expect(p.locator('#task-count')).toBeVisible({ timeout: 15000 });
+
+        const agrege = p.locator('.bloc--jour').first();
+        await expect(agrege).toBeVisible({ timeout: 10000 });
+
+        // Et il n'est pas dans la grille horaire : l'y placer mentirait sur sa
+        // precision reelle, puisque seule la journee est garantie.
+        await expect(p.locator('.toastui-calendar-time .bloc--jour')).toHaveCount(0);
       } finally {
         await context.close();
       }
