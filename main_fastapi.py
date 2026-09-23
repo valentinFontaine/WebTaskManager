@@ -18,6 +18,7 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse
+from pydantic import BaseModel
 
 import plan_runner
 from config import (
@@ -802,6 +803,57 @@ async def add_task(task_data: TaskCreate):
         error=create_result.stderr if create_result and not create_result.success else 'Failed to create task',
         task=None
     )
+
+
+# Un uuid canonique Taskwarrior, sans marge : c'est la seule forme admise pour
+# tout identifiant qui finit dans la commande shell ci-dessous.
+UUID_CANONIQUE_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+)
+
+
+def _est_uuid_canonique(valeur):
+    return bool(UUID_CANONIQUE_RE.fullmatch(valeur))
+
+
+class TaskDepends(BaseModel):
+    """Corps de POST /api/task/{uuid}/depends"""
+    ajouter: List[str] = []
+    retirer: List[str] = []
+
+
+@app.post("/api/task/{task_id:path}/depends")
+async def modify_depends(task_id: str, corps: TaskDepends):
+    """Ajoute et/ou retire des dependances sur une tache, en une seule commande.
+
+    {task_id} est la tache dependante (celle qui porte le champ depends).
+    run_task_command utilise shell=True : tout identifiant (chemin ou corps)
+    doit donc etre un uuid canonique avant toute construction de commande.
+    """
+    tous_identifiants = [task_id] + corps.ajouter + corps.retirer
+    if not all(_est_uuid_canonique(i) for i in tous_identifiants):
+        raise HTTPException(status_code=400, detail="Identifiant de tache invalide")
+
+    if not corps.ajouter and not corps.retirer:
+        raise HTTPException(status_code=400, detail="Aucune dependance a ajouter ou a retirer")
+
+    if task_id in corps.ajouter:
+        raise HTTPException(status_code=400, detail="Une tache ne peut pas dependre d'elle-meme")
+
+    termes = list(corps.ajouter) + [f"-{u}" for u in corps.retirer]
+    valeur = ",".join(termes)
+
+    result = run_task_command(f'task {task_id} modify depends:{valeur}')
+
+    if not result.success:
+        if "circular dependency" in result.stderr.lower():
+            raise HTTPException(
+                status_code=409,
+                detail="Dependance circulaire detectee : cette modification creerait un cycle de dependances.",
+            )
+        raise HTTPException(status_code=400, detail=result.stderr)
+
+    return ResponseModel(success=True, message=result.stdout)
 
 
 # Catch-all route for static files (must be last)
