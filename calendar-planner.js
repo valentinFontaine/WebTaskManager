@@ -237,6 +237,113 @@ async function chargerPlan() {
     }
 }
 
+/**
+ * Declenchement du calcul de plan depuis l'interface (lot E2), et suivi
+ * jusqu'a la fin.
+ *
+ * `chargerPlan()` degrade en silence par construction (voir plus haut) : elle
+ * est faite pour un plan qu'on LIT, pas pour prevenir d'un echec. Ici, c'est
+ * l'inverse : un calcul qu'on DECLENCHE nous-memes ne doit jamais se taire,
+ * sous peine de laisser croire que le plan affiche est a jour alors qu'il ne
+ * l'est pas. D'ou l'affichage explicite dans #plan-etat a chaque etape, y
+ * compris et surtout sur l'echec.
+ */
+let minuteurEtatPlan = null;
+
+function afficherEtatPlan(texte) {
+    const el = document.getElementById('plan-etat');
+    if (el) el.textContent = texte;
+}
+
+function arreterInterrogationEtatPlan() {
+    if (minuteurEtatPlan) {
+        clearTimeout(minuteurEtatPlan);
+        minuteurEtatPlan = null;
+    }
+}
+
+/**
+ * Interroge une fois l'etat du calcul, et reagit si l'etat est terminal.
+ *
+ * Reprogrammee par `setTimeout` a la fin de son propre traitement plutot que
+ * par un `setInterval` a echeance fixe : la relecture du plan sur `termine`
+ * (chargerPlan + redessin du calendrier) peut prendre du temps, et un
+ * `setInterval` aurait pu declencher un appel suivant pendant que celui-ci
+ * tourne encore, avant que l'arret ne soit pose. Ici, il n'y a simplement pas
+ * d'appel suivant tant que celui-ci n'a pas decide s'il y en a un.
+ */
+async function interrogerEtatPlan() {
+    const btn = document.getElementById('calculer-plan-btn');
+    try {
+        const reponse = await fetch('/api/plan/etat');
+        const donnees = await reponse.json();
+        if (!donnees.success) {
+            // Reponse qu'on ne sait pas lire : on arrete plutot que de
+            // boucler indefiniment dessus, mais on ne le tait pas.
+            arreterInterrogationEtatPlan();
+            if (btn) btn.disabled = false;
+            afficherEtatPlan(donnees.error || 'Etat du calcul indisponible.');
+            return;
+        }
+        const etat = donnees.data || {};
+        if (etat.statut === 'termine') {
+            // Etat terminal : on arrete d'interroger, on relit le plan (celui
+            // qu'on vient de calculer, pas celui d'avant), puis on redessine
+            // avec la meme fonction que sur un changement de filtre.
+            arreterInterrogationEtatPlan();
+            if (btn) btn.disabled = false;
+            afficherEtatPlan('Calcul termine.');
+            await chargerPlan();
+            processTasksForCalendar();
+        } else if (etat.statut === 'echec') {
+            arreterInterrogationEtatPlan();
+            if (btn) btn.disabled = false;
+            afficherEtatPlan(etat.message || 'Le calcul a echoue.');
+        } else if (etat.statut === 'en_cours') {
+            afficherEtatPlan('Calcul en cours...');
+            minuteurEtatPlan = setTimeout(interrogerEtatPlan, 2000);
+        } else {
+            // 'inactif' ou valeur inconnue : rien de terminal, on continue
+            // d'interroger.
+            afficherEtatPlan('En attente du calcul...');
+            minuteurEtatPlan = setTimeout(interrogerEtatPlan, 2000);
+        }
+    } catch (e) {
+        // Erreur reseau sur une interrogation qu'on a nous-memes declenchee :
+        // meme regle, ca ne se tait pas.
+        arreterInterrogationEtatPlan();
+        if (btn) btn.disabled = false;
+        afficherEtatPlan('Impossible de recuperer l\'etat du calcul: ' + e.message);
+    }
+}
+
+/** Lance le calcul du plan et demarre le suivi si le backend l'accepte. */
+async function lancerCalculPlan() {
+    const btn = document.getElementById('calculer-plan-btn');
+    // Desactive tout de suite, avant meme l'appel reseau : sinon la fenetre
+    // entre le clic et la reponse du POST laisse le bouton recliquable, et
+    // rien ne distingue plus « pas encore parti » de « deja fini ».
+    if (btn) btn.disabled = true;
+    afficherEtatPlan('Lancement du calcul...');
+    try {
+        const reponse = await fetch('/api/plan/calculer', { method: 'POST' });
+        const donnees = await reponse.json();
+        if (!donnees.success) {
+            // Refus du backend (calcul deja en cours, etc.) : montre, pas
+            // avale.
+            if (btn) btn.disabled = false;
+            afficherEtatPlan(donnees.error || 'Le calcul n\'a pas pu demarrer.');
+            return;
+        }
+        afficherEtatPlan('Calcul en cours...');
+        arreterInterrogationEtatPlan();
+        minuteurEtatPlan = setTimeout(interrogerEtatPlan, 2000);
+    } catch (e) {
+        if (btn) btn.disabled = false;
+        afficherEtatPlan('Erreur reseau lors du lancement du calcul: ' + e.message);
+    }
+}
+
 // UUID des taches que le backend a renvoyees pour le filtre courant. Le
 // contexte est une expression TaskWarrior : seul le serveur sait y repondre,
 // donc on se souvient de ce qu'il a repondu plutot que de le reinterpreter.
@@ -473,6 +580,15 @@ function setupEventListeners() {
     document.getElementById('refresh-btn').addEventListener('click', () => {
         loadTasks();
     });
+
+    // Calculer le plan (lot E2) : declenche le calcul cote serveur, puis
+    // suit son etat jusqu'a la fin.
+    const calculerPlanBtn = document.getElementById('calculer-plan-btn');
+    if (calculerPlanBtn) {
+        calculerPlanBtn.addEventListener('click', () => {
+            lancerCalculPlan();
+        });
+    }
 
     // Filtres partages : le contexte et le statut filtrent cote serveur, donc
     // on recharge ; le projet et les tags filtrent cote client, un re-rendu
