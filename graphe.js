@@ -31,6 +31,22 @@
  * + scale) tout en desactivant le defilement de la page pendant le survol,
  * ce que la bibliotheque fait deja de facon eprouvee ; l'ecrire a la main
  * n'aurait rien simplifie pour un gain de taille de code negligeable.
+ *
+ * Edition d'une tache depuis un noeud (H3) : un bouton stylo est pose APRES
+ * le rendu Mermaid, en DOM (createElement + textContent/aria-label), plutot
+ * qu'injecte dans le texte du libelle Mermaid. Deux raisons : le libelle
+ * Mermaid passe par sa propre syntaxe d'echappement (echapperLabel), qui ne
+ * connait rien du HTML d'un bouton -- y injecter un <button> obligerait a
+ * dupliquer/contourner cet echappement au risque de casser la securite deja
+ * en place (securityLevel 'loose' + htmlLabels rend Mermaid capable
+ * d'interpreter du HTML dans un libelle, donc une description mal echappee y
+ * deviendrait une injection) ; et le label rendu est de toute facon un
+ * foreignObject HTML (htmlLabels), donc y ajouter un <button> apres coup est
+ * strictement equivalent visuellement sans repasser par cette syntaxe.
+ * Seuls les noeuds `dans_projet: true` recoivent le bouton (voir
+ * appliquerAttributsNoeuds). Au clic, la tache complete est recuperee via
+ * GET /api/tasks (et non depuis le noeud /api/graphe, qui n'expose ni tags,
+ * ni priority, ni scheduled) puis passee a taskEditor.showForTask.
  */
 (function () {
     'use strict';
@@ -41,6 +57,9 @@
 
     // Instance svg-pan-zoom courante, recreee a chaque nouveau rendu.
     let panZoom = null;
+
+    // Instance TaskEditor partagee, creee au premier besoin (cf. initTaskEditor).
+    let taskEditor = null;
 
     function elt(id) {
         return document.getElementById(id);
@@ -190,6 +209,69 @@
             if (n.externe) g.classList.add('externe');
             if (n.fige) g.classList.add('fige');
             if (!n.dans_projet) g.classList.add('hors-projet');
+            if (n.dans_projet) ajouterBoutonEdition(g, n.uuid);
+        }
+    }
+
+    // Pose le bouton stylo dans le libelle HTML du noeud (foreignObject posee
+    // par Mermaid, htmlLabels). Voir la note d'en-tete du fichier : ajoute en
+    // DOM apres le rendu, pas dans le texte du libelle Mermaid.
+    function ajouterBoutonEdition(g, uuid) {
+        const labelDiv = g.querySelector('.label foreignObject > div, foreignObject > div');
+        const porteur = labelDiv || g.querySelector('.label') || g;
+        const bouton = document.createElement('button');
+        bouton.type = 'button';
+        bouton.className = 'graphe-btn-modifier';
+        bouton.setAttribute('aria-label', 'Modifier la tâche');
+        bouton.textContent = '✏️';
+        // Empeche le glisser/zoom du graphe (svg-pan-zoom ecoute mousedown sur
+        // le SVG) et l'ouverture depuis un autre gestionnaire de clic porte
+        // par le noeud : la propagation est coupee avant toute chose.
+        bouton.addEventListener('mousedown', (e) => e.stopPropagation());
+        bouton.addEventListener('click', (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            ouvrirEdition(uuid);
+        });
+        porteur.appendChild(bouton);
+    }
+
+    function initTaskEditor() {
+        if (taskEditor || typeof TaskEditor === 'undefined') return;
+        taskEditor = new TaskEditor({
+            showAllFields: true,
+            priorityFormat: 'letters',
+            language: 'fr',
+            modalId: 'graphe-task-editor',
+            onSaveSuccess: () => actualiser(),
+            onSaveError: (erreur) => definirMessage(erreur || 'Erreur lors de l\'enregistrement.', { erreur: true }),
+            onCancel: () => {},
+        });
+    }
+
+    // Recupere la tache complete depuis /api/tasks (pas le noeud /api/graphe,
+    // qui n'expose ni tags, ni priority, ni scheduled) et ouvre l'editeur.
+    async function ouvrirEdition(uuid) {
+        initTaskEditor();
+        if (!taskEditor) return;
+        definirMessage('');
+        try {
+            const r = await fetch('/api/tasks');
+            if (!r.ok) {
+                definirMessage('Erreur lors de la récupération de la tâche (' + r.status + ').', { erreur: true });
+                return;
+            }
+            const d = await r.json();
+            const taches = d.tasks || [];
+            const tache = taches.find(t => t.uuid === uuid);
+            if (!tache) {
+                definirMessage('Tâche introuvable : impossible de l\'éditer.', { erreur: true });
+                return;
+            }
+            taskEditor.showForTask(tache);
+        } catch (e) {
+            console.error(e);
+            definirMessage('Erreur réseau lors de la récupération de la tâche.', { erreur: true });
         }
     }
 
@@ -341,6 +423,7 @@
         if (window.mermaid) {
             window.mermaid.initialize({ startOnLoad: false, securityLevel: 'loose' });
         }
+        initTaskEditor();
         initBoutons();
         window.addEventListener('resize', surRedimensionnement);
         document.addEventListener('tw-filter-change', actualiser);

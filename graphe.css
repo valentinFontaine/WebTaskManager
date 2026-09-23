@@ -119,3 +119,20 @@ body {
     fill: #eee;
     opacity: 0.8;
 }
+
+/* Bouton stylo, pose en DOM apres le rendu Mermaid (cf. graphe.js,
+   ajouterBoutonEdition) dans le foreignObject HTML du libelle. */
+.graphe-btn-modifier {
+    margin-left: 6px;
+    padding: 0 4px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-size: 0.9em;
+    line-height: 1;
+    vertical-align: middle;
+}
+
+.graphe-btn-modifier:hover {
+    opacity: 0.7;
+}

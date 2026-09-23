@@ -664,8 +664,10 @@ test.describe('graphe.html — zoom et deplacement', () => {
     // svg-pan-zoom applique chaque transformation a l'image suivante : on
     // attend que les deux zooms avant soient appliques avant de mesurer, puis
     // on attend l'effet du zoom arriere.
+    // UN seul zoom avant : avec deux clics, l'attente pouvait se conclure
+    // apres le premier, le second s'appliquant apres la mesure "avant" et
+    // compensant exactement le zoom arriere (echec observe le 23/09).
     const initial = (await noeud.boundingBox()).width;
-    await page.getByRole('button', { name: 'Zoom avant' }).click();
     await page.getByRole('button', { name: 'Zoom avant' }).click();
     await expect.poll(async () => (await noeud.boundingBox()).width)
       .toBeGreaterThanOrEqual(initial * 1.1);
