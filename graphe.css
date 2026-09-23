@@ -1,30 +1,105 @@
 /* Page Graphe — visualisation des dependances (Mermaid) */
 
-.graphe-message {
-    margin: 20px 0;
-    padding: 16px 20px;
+/* Specification (23/09) : un seul cadre visuel (titre + graphe), avec le
+   MEME ecart fixe (pas un pourcentage) entre ce cadre et : le bas de la
+   barre de nav.js, le bas de la fenetre, et les deux cotes. Pas de
+   defilement vertical de page.
+   Realise en pur CSS via flexbox plutot qu'une mesure JS de la hauteur de
+   la nav : nav.js insere ses barres en flux normal juste avant #graphe-page
+   (voir insertBefore(body.firstChild) dans nav.js). En rendant body flex en
+   colonne et #graphe-page flex:1, l'espace vertical restant apres les
+   barres de nav est distribue automatiquement au cadre, marges comprises :
+   les quatre ecarts (haut/bas/gauche/droite) valent alors tous MARGE, sans
+   dependre de la hauteur de la nav (une ou deux lignes). Pas de JS de mise
+   en page necessaire ; un ecouteur de resize reste utile pour re-ajuster
+   svg-pan-zoom (cf. graphe.js), la geometrie CSS n'a pas besoin de lui. */
+
+html, body {
+    height: 100%;
+}
+
+body {
+    display: flex;
+    flex-direction: column;
+    overflow-x: hidden;
+    overflow-y: auto;
+}
+
+/* Hauteur minimale de #graphe-svg (320px, cf. plus bas) : si la fenetre est
+   trop basse pour l'accueillir a cote de la nav, #graphe-page doit pouvoir
+   depasser sa hauteur flexible plutot que d'ecraser la zone du graphe a
+   0 px. D'ou overflow visible ici (au lieu de hidden) : c'est alors le body,
+   overflow-y:auto ci-dessus, qui fait defiler la page. */
+#graphe-page {
+    max-width: none;
+    width: auto;
+    flex: 1 1 auto;
+    min-height: 0;
+    margin: 16px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
     background: white;
     border-radius: 8px;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    box-sizing: border-box;
+    overflow: visible;
+}
+
+#graphe-page header {
+    flex: 0 0 auto;
+}
+
+.graphe-toolbar {
+    flex: 0 0 auto;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 16px 0;
+}
+
+.graphe-toolbar button {
+    padding: 6px 14px;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+    background: white;
+    color: #333;
+    cursor: pointer;
+    font-size: 0.95rem;
+}
+
+.graphe-toolbar button:hover {
+    background: #f0f0f0;
+}
+
+.graphe-message {
+    flex: 0 0 auto;
+    margin-bottom: 12px;
     color: #555;
 }
 
 .graphe-message.erreur {
     color: #c0392b;
-    background: #fdecea;
 }
 
 #graphe-svg {
-    background: white;
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    padding: 16px;
-    overflow: auto;
+    position: relative;
+    flex: 1 1 auto;
+    min-height: 320px;
+    padding: 8px;
+    box-sizing: border-box;
+    overflow: hidden;
+    cursor: grab;
+}
+
+#graphe-svg:active {
+    cursor: grabbing;
 }
 
 #graphe-svg svg {
-    max-width: 100%;
-    height: auto;
+    display: block;
+    width: 100%;
+    height: 100%;
 }
 
 /* Classes posees sur les groupes de noeuds Mermaid apres rendu. */

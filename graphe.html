@@ -9,18 +9,25 @@
     <link rel="stylesheet" href="graphe.css">
 </head>
 <body>
-<div class="container">
+<div class="container" id="graphe-page">
     <header>
         <div class="header-content">
             <h1>Graphe des dependances</h1>
         </div>
     </header>
 
+    <div class="graphe-toolbar">
+        <button type="button" id="graphe-zoom-avant">Zoom avant</button>
+        <button type="button" id="graphe-zoom-arriere">Zoom arriere</button>
+        <button type="button" id="graphe-ajuster">Ajuster</button>
+    </div>
+
     <div id="graphe-message" class="graphe-message"></div>
     <div id="graphe-svg"></div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
 <script src="graphe.js"></script>
 </body>
 </html>
