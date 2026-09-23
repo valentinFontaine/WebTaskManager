@@ -3,14 +3,20 @@
 
 ## La garantie centrale
 
-**Rien n'est jamais ecrit dans Taskwarrior par ce module.**
+**Le CALCUL n'ecrit jamais dans Taskwarrior.** Valider, si.
 
 L'ordonnanceur n'ecrit que sur demande explicite (`--ecrire-scheduled`,
-`--ecrire-due`) ; sans ces drapeaux, il se contente de produire son JSON. La
-ligne de commande construite ici ne les porte pas, et un test verifie cette
-ligne elle-meme -- sans rien executer, donc sans dependre d'un mock. La base de
-l'utilisateur est synchronisee sur trois machines : une ecriture involontaire n'y
-serait pas rattrapable depuis ici.
+`--ecrire-due`, ou `--appliquer`) ; sans ces drapeaux, il se contente de
+produire son JSON. La ligne de commande construite par
+`commande_planification` (le CALCUL) ne les porte pas, et un test verifie
+cette ligne elle-meme -- sans rien executer, donc sans dependre d'un mock. La
+base de l'utilisateur est synchronisee sur trois machines : une ecriture
+involontaire n'y serait pas rattrapable depuis ici.
+
+Valider (nuit 3, E4) est le seul chemin qui ecrit : il applique **exactement**
+le plan affiche (`plan.json`, sans recalcul) via `--appliquer`, jamais
+`--ecrire-scheduled` / `--ecrire-due` qui recalculeraient. Voir
+`commande_validation` et `valider`.
 
 ## Pourquoi un sous-processus
 
@@ -38,6 +44,7 @@ PLANIFICATEUR_REUNIONS sont positionnees, la commande passe les options de
 chemin correspondantes, pour viser une base de test sans jamais ajouter de
 drapeau d'ecriture.
 """
+import hashlib
 import os
 import subprocess
 import threading
@@ -47,16 +54,24 @@ from config import (PLANIFICATEUR_CONFIG, PLANIFICATEUR_ECHEANCES,
                     PLANIFICATEUR_PYTHON, PLANIFICATEUR_RACINE,
                     PLANIFICATEUR_REUNIONS, PLAN_SORTIE, PLAN_TIMEOUT)
 
-__all__ = ["commande_planification", "lancer", "etat", "attendre",
-           "reinitialiser"]
+__all__ = ["commande_planification", "commande_validation", "lancer",
+           "valider", "etat", "attendre", "reinitialiser", "empreinte",
+           "empreinte_du_calcul"]
 
 #: Rendus modifiables pour les tests, qui doivent pouvoir simuler un chemin faux.
 PYTHON = PLANIFICATEUR_PYTHON
 RACINE = PLANIFICATEUR_RACINE
 
+#: Chemin de sortie par defaut, modifiable par les tests (voir SORTIE dans
+#: `commande_planification`/`commande_validation`/`lancer`).
+SORTIE = PLAN_SORTIE
+
 _verrou = threading.Lock()
 _fil = None
 _etat = None
+#: Empreinte de la base au moment du calcul dont l'etat est "termine".
+#: Reprise par Valider pour verifier que la base n'a pas change depuis.
+_empreinte_calcul = None
 
 
 def _au_repos():
@@ -65,14 +80,31 @@ def _au_repos():
 
 
 def reinitialiser():
-    """Remet le lanceur au repos. Reserve aux tests."""
-    global _etat, _fil
+    """Remet le lanceur au repos et oublie l'empreinte. Reserve aux tests."""
+    global _etat, _fil, _empreinte_calcul
     with _verrou:
         _etat = _au_repos()
         _fil = None
+        _empreinte_calcul = None
 
 
 _etat = _au_repos()
+
+
+def empreinte(taches):
+    """SHA-256 hex des lignes `uuid|modified`, triees, jointes par `\\n`.
+
+    Sert a detecter si la base a change entre le calcul et la validation.
+    Pure : ne lit rien, ne fait qu'assembler ce qu'on lui donne.
+    """
+    lignes = sorted("{}|{}".format(t.get("uuid"), t.get("modified"))
+                    for t in taches)
+    return hashlib.sha256("\n".join(lignes).encode("utf-8")).hexdigest()
+
+
+def empreinte_du_calcul():
+    """L'empreinte memorisee au lancement du dernier calcul accepte."""
+    return _empreinte_calcul
 
 
 def commande_planification(sortie=None):
@@ -85,13 +117,23 @@ def commande_planification(sortie=None):
     pour viser une base de test sans changer le comportement par defaut.
     """
     commande = [PYTHON, "-m", "planif", "--sortie",
-               os.path.abspath(sortie or PLAN_SORTIE)]
+               os.path.abspath(sortie or SORTIE)]
     for option, chemin in (("--config", PLANIFICATEUR_CONFIG),
                            ("--echeances", PLANIFICATEUR_ECHEANCES),
                            ("--reunions", PLANIFICATEUR_REUNIONS)):
         if chemin:
             commande += [option, os.path.abspath(chemin)]
     return commande
+
+
+def commande_validation(plan=None):
+    """La ligne de commande de Valider : `--appliquer` sur le plan affiche.
+
+    Jamais `--ecrire-scheduled` ni `--ecrire-due`, qui recalculeraient au lieu
+    d'appliquer exactement ce que l'interface montre.
+    """
+    return [PYTHON, "-m", "planif", "--appliquer",
+           os.path.abspath(plan or SORTIE)]
 
 
 def _executer(commande, delai):
@@ -135,26 +177,55 @@ def _planificateur_absent():
     return None
 
 
-def lancer(sortie=None):
-    """Demarre un calcul en tache de fond. Rend (accepte, etat_ou_message)."""
-    global _fil, _etat
+def lancer(sortie=None, empreinte=None):
+    """Demarre un calcul en tache de fond. Rend (accepte, etat_ou_message).
+
+    `empreinte` est celle de la base, prise par l'appelant juste avant
+    l'appel (elle doit dater d'avant le calcul, pas d'apres) ; elle est
+    memorisee des l'acceptation et rendue ensuite par `empreinte_du_calcul()`,
+    pour que Valider puisse verifier que la base n'a pas bouge depuis.
+    """
+    global _fil, _etat, _empreinte_calcul
 
     absent = _planificateur_absent()
     if absent:
         return False, absent
 
     with _verrou:
-        if _etat["statut"] == "en_cours":
-            return False, ("un calcul est deja en cours ; attendez qu'il "
-                           "finisse avant d'en relancer un")
+        if _etat["statut"] in ("en_cours", "validation"):
+            return False, ("un calcul ou une validation est deja en cours ; "
+                           "attendez qu'il finisse avant d'en relancer un")
         _etat = {"statut": "en_cours", "message": None, "duree_s": None,
                  "fini_a": None}
+        _empreinte_calcul = empreinte
         _fil = threading.Thread(
             target=_travail, args=(commande_planification(sortie), time.time()),
             daemon=True)
         _fil.start()
 
     return True, dict(_etat)
+
+
+def valider(plan=None):
+    """Applique le plan affiche via `--appliquer`. Rend (code, stdout, stderr).
+
+    A la difference du calcul, ecrit reellement dans Taskwarrior -- voir la
+    garantie centrale en tete de module. Le temps de l'execution, l'etat
+    bascule sur "validation" sous le verrou (un calcul ou une seconde
+    validation concurrents sont alors refuses par `lancer`) ; l'etat
+    precedent est restaure ensuite, succes ou echec (try/finally). Le statut
+    du calcul (par ex. "termine") et son empreinte sont donc inchanges apres
+    un Valider.
+    """
+    global _etat
+    with _verrou:
+        ancien = _etat
+        _etat = dict(_etat, statut="validation")
+    try:
+        return _executer(commande_validation(plan), PLAN_TIMEOUT)
+    finally:
+        with _verrou:
+            _etat = ancien
 
 
 def etat():

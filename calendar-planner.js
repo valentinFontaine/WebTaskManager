@@ -74,6 +74,9 @@ const CAL_PLAN_EXTERNE = 'plan-externe';
 // tant qu'aucun plan valide n'a ete lu -- c'est ainsi que la degradation
 // propre est obtenue : on ne rend simplement rien de plus.
 let planEvents = [];
+// Dernier plan valide charge (le JSON brut, pas les evenements TOAST UI) :
+// Valider en a besoin pour compter les taches concernees dans la confirmation.
+let planCourant = null;
 
 function estCalendrierDePlan(calendarId) {
     return calendarId === CAL_PLAN_CONTRAINT
@@ -204,6 +207,7 @@ function gabaritBlocPlan(event) {
  */
 async function chargerPlan() {
     planEvents = [];
+    planCourant = null;
     try {
         const reponse = await fetch(URL_PLAN);
         if (!reponse.ok) {
@@ -231,9 +235,12 @@ async function chargerPlan() {
             return;
         }
         planEvents = construireEvenementsPlan(donnees);
+        planCourant = donnees;
     } catch (e) {
         // Erreur reseau ou autre : degradation silencieuse, jamais de bandeau.
         console.warn('Impossible de charger le plan, calendrier sans plan:', e.message);
+    } finally {
+        mettreAJourEtatBoutonValider();
     }
 }
 
@@ -249,6 +256,11 @@ async function chargerPlan() {
  * compris et surtout sur l'echec.
  */
 let minuteurEtatPlan = null;
+// Vrai depuis le clic sur Calculer jusqu'a l'etat terminal (termine/echec/erreur) :
+// sert a desactiver Valider pendant un calcul (voir mettreAJourEtatBoutonValider).
+let calculEnCours = false;
+// Vrai pendant la requete POST /api/plan/valider elle-meme.
+let validationEnCours = false;
 
 function afficherEtatPlan(texte) {
     const el = document.getElementById('plan-etat');
@@ -282,6 +294,8 @@ async function interrogerEtatPlan() {
             // boucler indefiniment dessus, mais on ne le tait pas.
             arreterInterrogationEtatPlan();
             if (btn) btn.disabled = false;
+            calculEnCours = false;
+            mettreAJourEtatBoutonValider();
             afficherEtatPlan(donnees.error || 'Etat du calcul indisponible.');
             return;
         }
@@ -292,12 +306,15 @@ async function interrogerEtatPlan() {
             // avec la meme fonction que sur un changement de filtre.
             arreterInterrogationEtatPlan();
             if (btn) btn.disabled = false;
+            calculEnCours = false;
             afficherEtatPlan('Calcul termine.');
             await chargerPlan();
             processTasksForCalendar();
         } else if (etat.statut === 'echec') {
             arreterInterrogationEtatPlan();
             if (btn) btn.disabled = false;
+            calculEnCours = false;
+            mettreAJourEtatBoutonValider();
             afficherEtatPlan(etat.message || 'Le calcul a echoue.');
         } else if (etat.statut === 'en_cours') {
             afficherEtatPlan('Calcul en cours...');
@@ -313,6 +330,8 @@ async function interrogerEtatPlan() {
         // meme regle, ca ne se tait pas.
         arreterInterrogationEtatPlan();
         if (btn) btn.disabled = false;
+        calculEnCours = false;
+        mettreAJourEtatBoutonValider();
         afficherEtatPlan('Impossible de recuperer l\'etat du calcul: ' + e.message);
     }
 }
@@ -324,6 +343,8 @@ async function lancerCalculPlan() {
     // entre le clic et la reponse du POST laisse le bouton recliquable, et
     // rien ne distingue plus « pas encore parti » de « deja fini ».
     if (btn) btn.disabled = true;
+    calculEnCours = true;
+    mettreAJourEtatBoutonValider();
     afficherEtatPlan('Lancement du calcul...');
     try {
         const reponse = await fetch('/api/plan/calculer', { method: 'POST' });
@@ -332,6 +353,8 @@ async function lancerCalculPlan() {
             // Refus du backend (calcul deja en cours, etc.) : montre, pas
             // avale.
             if (btn) btn.disabled = false;
+            calculEnCours = false;
+            mettreAJourEtatBoutonValider();
             afficherEtatPlan(donnees.error || 'Le calcul n\'a pas pu demarrer.');
             return;
         }
@@ -340,7 +363,68 @@ async function lancerCalculPlan() {
         minuteurEtatPlan = setTimeout(interrogerEtatPlan, 2000);
     } catch (e) {
         if (btn) btn.disabled = false;
+        calculEnCours = false;
+        mettreAJourEtatBoutonValider();
         afficherEtatPlan('Erreur reseau lors du lancement du calcul: ' + e.message);
+    }
+}
+
+/**
+ * Le bouton Valider est actif seulement quand il y a quelque chose a
+ * valider : au moins un bloc de plan affiche, aucun calcul en cours, aucune
+ * validation en cours.
+ */
+function mettreAJourEtatBoutonValider() {
+    const btn = document.getElementById('valider-plan-btn');
+    if (!btn) return;
+    btn.disabled = planEvents.length === 0 || calculEnCours || validationEnCours;
+}
+
+/**
+ * Ecrit dans Taskwarrior exactement le plan affiche, apres confirmation.
+ *
+ * Un refus du serveur (409/500, forme FastAPI `{"detail": "..."}`) s'affiche
+ * tel quel, sans relancer de calcul. Un succes affiche le compte rendu puis
+ * relance un calcul (defaut declare : le plan affiche doit integrer ce qui
+ * vient d'etre ecrit, et l'empreinte doit etre reprise).
+ */
+async function validerPlan() {
+    const compteRendu = document.getElementById('valider-compte-rendu');
+    if (!planCourant) return;
+    const nbTaches = Object.keys(planCourant.taches).length;
+    const confirme = confirm(
+        `Écrire le plan dans Taskwarrior ? ${nbTaches} tâches concernées.`);
+    if (!confirme) return;
+
+    validationEnCours = true;
+    mettreAJourEtatBoutonValider();
+    try {
+        const reponse = await fetch('/api/plan/valider', { method: 'POST' });
+        const corps = await reponse.json();
+        if (!reponse.ok) {
+            // Forme reelle des refus FastAPI : {"detail": "..."}.
+            if (compteRendu) compteRendu.textContent = corps.detail || 'Échec de la validation.';
+            return;
+        }
+        const donnees = corps.data || {};
+        const scheduled = donnees.scheduled || {};
+        const due = donnees.due || {};
+        const compte = (liste) => (liste || []).length;
+        if (compteRendu) {
+            compteRendu.textContent =
+                `Planification : ${compte(scheduled.modifiees)} modifiée(s), ` +
+                `${compte(scheduled.inchangees)} inchangée(s), ` +
+                `${compte(scheduled.ignorees)} ignorée(s) — ` +
+                `Échéances : ${compte(due.modifiees)} modifiée(s), ` +
+                `${compte(due.inchangees)} inchangée(s), ` +
+                `${compte(due.ignorees)} ignorée(s)`;
+        }
+        await lancerCalculPlan();
+    } catch (e) {
+        if (compteRendu) compteRendu.textContent = 'Erreur réseau lors de la validation: ' + e.message;
+    } finally {
+        validationEnCours = false;
+        mettreAJourEtatBoutonValider();
     }
 }
 
@@ -587,6 +671,15 @@ function setupEventListeners() {
     if (calculerPlanBtn) {
         calculerPlanBtn.addEventListener('click', () => {
             lancerCalculPlan();
+        });
+    }
+
+    // Valider le plan (nuit 3, E4) : ecrit dans Taskwarrior exactement le
+    // plan affiche, apres confirmation.
+    const validerPlanBtn = document.getElementById('valider-plan-btn');
+    if (validerPlanBtn) {
+        validerPlanBtn.addEventListener('click', () => {
+            validerPlan();
         });
     }
 

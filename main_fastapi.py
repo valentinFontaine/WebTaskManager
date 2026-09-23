@@ -264,6 +264,23 @@ async def read_root():
         return HTMLResponse(content="<h1>TaskWarrior Web UI</h1><p>Welcome to the TaskWarrior Web Interface</p>", status_code=200)
 
 
+def empreinte_base():
+    """L'empreinte de la base pending, ou None si elle n'a pas pu etre lue.
+
+    Appelle `run_task_command('task status:pending export')` : sous
+    DEVELOPER_MODE, la sortie est du texte de log, pas du JSON -- ce n'est pas
+    une erreur qui remonte, juste une empreinte qu'on ne sait pas prendre.
+    """
+    resultat = run_task_command('task status:pending export')
+    if not resultat.success:
+        return None
+    try:
+        taches = json.loads(resultat.stdout)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    return plan_runner.empreinte(taches)
+
+
 @app.post("/api/plan/calculer")
 async def calculer_plan():
     """Lance l'ordonnanceur en tache de fond et republie `plan.json`.
@@ -273,12 +290,59 @@ async def calculer_plan():
     ligne elle-meme. C'est ce qui fait de ce bouton un dry-run.
 
     Rend la main tout de suite -- la resolution prend de 30 s a 2 minutes --
-    et l'avancement se lit sur `/api/plan/etat`.
+    et l'avancement se lit sur `/api/plan/etat`. L'empreinte de la base est
+    prise ici, juste avant de lancer, pour que Valider puisse verifier plus
+    tard qu'elle n'a pas change entre-temps.
     """
-    accepte, resultat = plan_runner.lancer()
+    accepte, resultat = plan_runner.lancer(empreinte=empreinte_base())
     if not accepte:
         return ResponseModel(success=False, error=resultat)
     return ResponseModel(success=True, data=resultat)
+
+
+@app.post("/api/plan/valider")
+async def valider_plan():
+    """Ecrit dans Taskwarrior exactement le plan affiche (`--appliquer`).
+
+    Refuse (409) si : un calcul ou une validation est en cours ; aucun calcul
+    termine dans cette session (ou son empreinte est illisible) ; le fichier
+    de plan est absent ; la base a change depuis le calcul. Un echec de
+    l'ecriture (code de retour non nul) remonte en 500.
+    """
+    statut_courant = plan_runner.etat()["statut"]
+    if statut_courant in ("en_cours", "validation"):
+        raise HTTPException(status_code=409,
+                            detail="Un calcul ou une validation est déjà en "
+                                  "cours ; attendez qu'il finisse.")
+
+    empreinte_calcul = plan_runner.empreinte_du_calcul()
+    if statut_courant != "termine" or empreinte_calcul is None:
+        raise HTTPException(status_code=409,
+                            detail="Aucun plan calculé à valider : lancez "
+                                  "d'abord un calcul.")
+
+    if not os.path.exists(plan_runner.SORTIE):
+        raise HTTPException(status_code=409,
+                            detail="Aucun plan à valider : le fichier de "
+                                  "plan est introuvable.")
+
+    empreinte_actuelle = empreinte_base()
+    if empreinte_actuelle is None or empreinte_actuelle != empreinte_calcul:
+        raise HTTPException(status_code=409,
+                            detail="La base a changé depuis le calcul : "
+                                  "recalculez avant de valider.")
+
+    code, stdout, stderr = plan_runner.valider()
+    if code != 0:
+        raise HTTPException(status_code=500,
+                            detail=(stderr or "").strip()
+                                  or "code de retour {}".format(code))
+    try:
+        donnees = json.loads(stdout)
+    except (json.JSONDecodeError, TypeError):
+        raise HTTPException(status_code=500,
+                            detail="Réponse illisible du planificateur.")
+    return ResponseModel(success=True, data=donnees)
 
 
 @app.get("/api/plan/etat")
