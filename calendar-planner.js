@@ -147,13 +147,19 @@ function construireEvenementsPlan(donnees) {
                 : regime === 'opportuniste' ? CAL_PLAN_OPPORTUNISTE
                 : CAL_PLAN_CONTRAINT;
             const estJour = bloc.precision === 'jour';
+            // Seul le bloc 0 d'une tache non externe, a l'heure pres, est
+            // deplacable : c'est le seul dont `+fige` peut imposer le debut.
+            // Les blocs agreges ('jour') restent en lecture seule : leur
+            // heure n'est pas garantie, et un depot en journee entiere
+            // donnerait minuit.
+            const isReadOnly = !(bloc.indice === 0 && regime !== 'externe' && bloc.precision === 'heure');
 
             const base = {
                 id: `plan-${uuid}-${bloc.indice}`,
                 calendarId,
                 title: description,
-                isReadOnly: true,
-                raw: { uuid, regime, agrege: estJour, projet: tache.projet || null }
+                isReadOnly,
+                raw: { uuid, regime, agrege: estJour, projet: tache.projet || null, indice: bloc.indice }
             };
 
             if (regime === 'externe') {
@@ -864,9 +870,80 @@ async function handleBeforeCreateEvent(eventObj) {
 }
 
 /**
+ * Deplace le bloc 0 d'une tache proposee (deposee depuis un calendrier de
+ * plan) : fige la tache au nouveau debut par `POST /api/task/{uuid}/figer`,
+ * jamais par `PUT /modify` qui efface les tags (voir en-tete de fichier).
+ *
+ * N'agit que sur le bloc 0 d'une tache non externe et non agregee -- les
+ * autres blocs et les blocs `precision: 'jour'` sont deja en lecture seule
+ * (`construireEvenementsPlan`), mais le gestionnaire de depot peut toujours
+ * etre appele directement (tests), d'ou cette meme garde ici.
+ *
+ * Un redimensionnement (`changes.start` absent, seule la fin bouge) n'ecrit
+ * rien : `+fige` n'impose que le DEBUT du bloc, une duree ne se fige pas.
+ */
+async function deplacerBlocPlan(event, changes) {
+    const raw = event.raw || {};
+    if (raw.indice !== 0 || raw.regime === 'externe' || raw.agrege) {
+        return false;
+    }
+    if (!changes.start) {
+        return false;
+    }
+    const nouveauDebut = extractDateFromToastChange(changes.start);
+    if (!nouveauDebut) {
+        return false;
+    }
+    const scheduled = nouveauDebut.toISOString()
+        .replace(/\.\d{3}Z$/, 'Z')
+        .replace(/[-:]/g, '');
+
+    let reponse;
+    try {
+        reponse = await fetch(`/api/task/${raw.uuid}/figer`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ scheduled })
+        });
+    } catch (e) {
+        afficherEtatPlan('Erreur réseau lors du figeage : ' + e.message);
+        return false;
+    }
+
+    let corps = null;
+    try {
+        corps = await reponse.json();
+    } catch (e) {
+        corps = null;
+    }
+
+    if (!reponse.ok) {
+        afficherEtatPlan((corps && corps.detail) || 'Le figeage de la tâche a échoué.');
+        return false;
+    }
+
+    // Garde la duree d'origine : seul le debut bouge.
+    const duree = event.end.getTime() - event.start.getTime();
+    const nouvelleFin = new Date(nouveauDebut.getTime() + duree);
+    calendar.updateEvent(event.id, event.calendarId, { start: nouveauDebut, end: nouvelleFin });
+
+    afficherEtatPlan('Tâche figée ; recalcul du plan…');
+    lancerCalculPlan();
+    return false;
+}
+
+/**
  * Fonction pour gérer l'événement beforeUpdateEvent
  */
 async function handleBeforeUpdateEvent({ event, changes }) {
+    // Un bloc de plan (contraint/opportuniste/externe) ne passe jamais par le
+    // chemin TaskWarrior existant (PUT /modify, qui efface les tags) : il est
+    // toujours delegue a deplacerBlocPlan, y compris quand il n'y a rien a
+    // faire (bloc en lecture seule, redimensionnement).
+    if (estCalendrierDePlan(event.calendarId)) {
+        return deplacerBlocPlan(event, changes);
+    }
+
     // Only handle TaskWarrior tasks (not toast_ prefixed IDs)
     if (event.id && !event.id.startsWith('toast_')) {
         // Prepare task data in the format expected by the backend

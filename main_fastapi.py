@@ -880,6 +880,46 @@ def _est_uuid_canonique(valeur):
     return bool(UUID_CANONIQUE_RE.fullmatch(valeur))
 
 
+# Une date UTC compacte, comme l'ordonnanceur l'ecrit : YYYYMMDDTHHMMSSZ.
+DATE_COMPACTE_RE = re.compile(r"^\d{8}T\d{6}Z$")
+
+
+class TaskFiger(BaseModel):
+    """Corps de POST /api/task/{uuid}/figer"""
+    scheduled: str
+
+
+@app.post("/api/task/{task_id}/figer")
+async def figer_task(task_id: str, corps: TaskFiger):
+    """Fige une tache a l'instant ou son bloc propose est depose.
+
+    Ecrit uniquement `+fige` et `scheduled` en une seule commande, pour ne
+    jamais effacer les autres tags (contrairement a PUT /modify).
+    """
+    if not _est_uuid_canonique(task_id):
+        raise HTTPException(status_code=400, detail="Identifiant de tâche invalide")
+
+    if not DATE_COMPACTE_RE.fullmatch(corps.scheduled):
+        raise HTTPException(status_code=400, detail="Date de début invalide : format attendu AAAAMMJJTHHMMSSZ")
+
+    result = run_task_command(f'task {task_id} modify +fige scheduled:{corps.scheduled}')
+
+    if not result.success:
+        raise HTTPException(status_code=400, detail=result.stderr)
+
+    task = None
+    export_result = run_task_command(f'task {task_id} export')
+    if export_result.success and export_result.stdout.strip():
+        try:
+            exporte = json.loads(export_result.stdout)
+            if exporte:
+                task = exporte[0]
+        except json.JSONDecodeError as e:
+            print(f"Error parsing task data: {e}")
+
+    return ResponseModel(success=True, task=task)
+
+
 class TaskDepends(BaseModel):
     """Corps de POST /api/task/{uuid}/depends"""
     ajouter: List[str] = []
