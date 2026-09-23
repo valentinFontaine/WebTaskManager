@@ -53,6 +53,14 @@ PLANIFICATEUR_PYTHON = os.environ.get(
     'PLANIFICATEUR_PYTHON',
     os.path.join(PLANIFICATEUR_RACINE, 'venv', 'Scripts', 'python.exe'))
 
+#: Chemins explicites de la grille, des echeances de projet et de l'agenda,
+#: pour viser une base de test (Nuit 3). None si non positionnees : le
+#: planificateur garde alors son comportement par defaut, sur le meme modele
+#: que PLANIFICATEUR_RACINE.
+PLANIFICATEUR_CONFIG = os.environ.get('PLANIFICATEUR_CONFIG')
+PLANIFICATEUR_ECHEANCES = os.environ.get('PLANIFICATEUR_ECHEANCES')
+PLANIFICATEUR_REUNIONS = os.environ.get('PLANIFICATEUR_REUNIONS')
+
 #: Ou l'ordonnanceur ecrit son plan : c'est l'URL que calendar-planner.js
 #: demande (`/plan.json`), servie par la route catch-all.
 PLAN_SORTIE = os.path.join(_RACINE, 'plan.json')

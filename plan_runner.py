@@ -32,14 +32,20 @@ L'appel rend donc la main tout de suite, et l'etat s'interroge.
 Un seul calcul a la fois : deux resolutions simultanees ecriraient le meme
 fichier en meme temps. Le second appel est refuse, pas mis en file -- on veut le
 plan d'aujourd'hui, pas deux fois celui d'il y a dix secondes.
+
+Nuit 3 : si PLANIFICATEUR_CONFIG, PLANIFICATEUR_ECHEANCES ou
+PLANIFICATEUR_REUNIONS sont positionnees, la commande passe les options de
+chemin correspondantes, pour viser une base de test sans jamais ajouter de
+drapeau d'ecriture.
 """
 import os
 import subprocess
 import threading
 import time
 
-from config import (PLANIFICATEUR_PYTHON, PLANIFICATEUR_RACINE, PLAN_SORTIE,
-                    PLAN_TIMEOUT)
+from config import (PLANIFICATEUR_CONFIG, PLANIFICATEUR_ECHEANCES,
+                    PLANIFICATEUR_PYTHON, PLANIFICATEUR_RACINE,
+                    PLANIFICATEUR_REUNIONS, PLAN_SORTIE, PLAN_TIMEOUT)
 
 __all__ = ["commande_planification", "lancer", "etat", "attendre",
            "reinitialiser"]
@@ -73,9 +79,19 @@ def commande_planification(sortie=None):
     """La ligne de commande, isolee pour etre verifiable sans rien executer.
 
     Aucun drapeau d'ecriture : voir la garantie centrale en tete de module.
+    `--config`, `--echeances` et `--reunions` ne sont ajoutes que si les
+    variables d'environnement correspondantes (PLANIFICATEUR_CONFIG,
+    PLANIFICATEUR_ECHEANCES, PLANIFICATEUR_REUNIONS) sont positionnees --
+    pour viser une base de test sans changer le comportement par defaut.
     """
-    return [PYTHON, "-m", "planif", "--sortie",
-            os.path.abspath(sortie or PLAN_SORTIE)]
+    commande = [PYTHON, "-m", "planif", "--sortie",
+               os.path.abspath(sortie or PLAN_SORTIE)]
+    for option, chemin in (("--config", PLANIFICATEUR_CONFIG),
+                           ("--echeances", PLANIFICATEUR_ECHEANCES),
+                           ("--reunions", PLANIFICATEUR_REUNIONS)):
+        if chemin:
+            commande += [option, os.path.abspath(chemin)]
+    return commande
 
 
 def _executer(commande, delai):
