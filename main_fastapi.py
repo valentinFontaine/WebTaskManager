@@ -832,13 +832,13 @@ async def modify_depends(task_id: str, corps: TaskDepends):
     """
     tous_identifiants = [task_id] + corps.ajouter + corps.retirer
     if not all(_est_uuid_canonique(i) for i in tous_identifiants):
-        raise HTTPException(status_code=400, detail="Identifiant de tache invalide")
+        raise HTTPException(status_code=400, detail="Identifiant de tâche invalide")
 
     if not corps.ajouter and not corps.retirer:
-        raise HTTPException(status_code=400, detail="Aucune dependance a ajouter ou a retirer")
+        raise HTTPException(status_code=400, detail="Aucune dépendance à ajouter ou à retirer")
 
     if task_id in corps.ajouter:
-        raise HTTPException(status_code=400, detail="Une tache ne peut pas dependre d'elle-meme")
+        raise HTTPException(status_code=400, detail="Une tâche ne peut pas dépendre d'elle-même")
 
     termes = list(corps.ajouter) + [f"-{u}" for u in corps.retirer]
     valeur = ",".join(termes)
@@ -849,7 +849,7 @@ async def modify_depends(task_id: str, corps: TaskDepends):
         if "circular dependency" in result.stderr.lower():
             raise HTTPException(
                 status_code=409,
-                detail="Dependance circulaire detectee : cette modification creerait un cycle de dependances.",
+                detail="Dépendance circulaire détectée : cette modification créerait un cycle de dépendances.",
             )
         raise HTTPException(status_code=400, detail=result.stderr)
 

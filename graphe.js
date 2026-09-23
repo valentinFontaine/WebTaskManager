@@ -47,6 +47,30 @@
  * appliquerAttributsNoeuds). Au clic, la tache complete est recuperee via
  * GET /api/tasks (et non depuis le noeud /api/graphe, qui n'expose ni tags,
  * ni priority, ni scheduled) puis passee a taskEditor.showForTask.
+ *
+ * Edition des dependances depuis le graphe (H2) : un clic (pas un glisser)
+ * sur un noeud dans_projet le selectionne (classe `selectionne`) ; le bouton
+ * "Relier" (desactive sans selection) passe en mode liaison, ou les
+ * selectionnes recoivent la classe `source-liaison`. Le clic suivant sur un
+ * noeud dans_projet non selectionne poste /api/task/<cible>/depends avec
+ * ajouter=[selectionnes], puis redessine. Une fleche cliquee recoit
+ * `lien-selectionne` (elle porte data-de/data-vers) ; le bouton "Retirer le
+ * lien" ou la touche Suppr postent alors retirer=[data-de] sur data-vers.
+ * Voir tests/graphe-depends.spec.js pour le contrat complet.
+ *
+ * Distinction clic / glisser : svg-pan-zoom ecoute mousedown sur tout le
+ * SVG pour son propre panoramique, donc un simple ecouteur 'click' sur un
+ * noeud se declencherait aussi a l'issue d'un glisser. On mesure donc
+ * nous-memes le deplacement entre mousedown (sur le noeud) et mouseup (sur
+ * le document) : sous le seuil, c'est un clic ; au-dessus, on l'ignore et on
+ * laisse svg-pan-zoom faire son panoramique.
+ *
+ * data-de / data-vers sur les fleches : Mermaid ne les expose pas. On
+ * retrouve chaque arete apres coup via les classes `LS-<id>` / `LE-<id>`
+ * que Mermaid pose sur le <path> (verifie sur le SVG rendu, version 10 du
+ * CDN) -- plus fiable que de decouper l'id du chemin (`L-<id>-<id>-<n>`),
+ * qui suppose implicitement que ni l'id source ni l'id cible ne contiennent
+ * eux-memes de tiret.
  */
 (function () {
     'use strict';
@@ -60,6 +84,20 @@
 
     // Instance TaskEditor partagee, creee au premier besoin (cf. initTaskEditor).
     let taskEditor = null;
+
+    // Etat d'edition des dependances (H2). Remis a zero a chaque redessin,
+    // cf. resetInteractionLiaison() appelee en tete de dessiner().
+    const liaison = {
+        selectionnes: new Set(), // uuids selectionnes (hors mode liaison : selection en cours)
+        modeLiaison: false,
+        lienSelectionne: null, // { de, vers } ou null
+        lienSelectionneEl: null, // element <path> correspondant
+    };
+    let noeudsCourants = new Map(); // uuid -> noeud (donnees /api/graphe du dernier rendu)
+
+    // Distinction clic / glisser sur un noeud : voir la note d'en-tete.
+    const SEUIL_GLISSER_PX = 5;
+    let mousedownNoeud = null; // { uuid, x, y }
 
     function elt(id) {
         return document.getElementById(id);
@@ -168,6 +206,24 @@
         }
     }
 
+    // Une dependance ne peut pas etre dupliquee cote Taskwarrior (depends est
+    // un ensemble), mais un redessin apres ajout peut momentanement recevoir
+    // deux fois la meme paire (de, vers) selon la source de donnees ; deux
+    // lignes Mermaid identiques se rendraient comme deux fleches superposees
+    // et non comme une seule. On ne garde donc que la premiere occurrence de
+    // chaque paire.
+    function dedupeAretes(aretes) {
+        const vues = new Set();
+        const resultat = [];
+        for (const a of aretes) {
+            const cle = a.de + '\u0000' + a.vers;
+            if (vues.has(cle)) continue;
+            vues.add(cle);
+            resultat.push(a);
+        }
+        return resultat;
+    }
+
     function construireDefinitionMermaid(racine, noeuds, aretes) {
         const parProjet = new Map();
         for (const n of noeuds) {
@@ -210,6 +266,244 @@
             if (n.fige) g.classList.add('fige');
             if (!n.dans_projet) g.classList.add('hors-projet');
             if (n.dans_projet) ajouterBoutonEdition(g, n.uuid);
+            g.addEventListener('mousedown', (e) => {
+                mousedownNoeud = { uuid: n.uuid, x: e.clientX, y: e.clientY };
+            });
+        }
+    }
+
+    // ----- Selection des noeuds et mode liaison (H2) -----
+
+    function elementNoeud(uuid) {
+        return elt('graphe-svg').querySelector(selecteurUuid(uuid));
+    }
+
+    function selecteurUuid(uuid) {
+        return `[data-uuid="${cssEchapper(uuid)}"]`;
+    }
+
+    // CSS.escape n'est pas garanti par tous les environnements de test ; les
+    // uuids utilises ici ne contiennent que des caracteres deja surs pour un
+    // attribut CSS entre guillemets (alphanumerique et tirets).
+    function cssEchapper(valeur) {
+        return String(valeur).replace(/"/g, '\\"');
+    }
+
+    function boutonRelier() {
+        return elt('graphe-relier');
+    }
+
+    function boutonRetirerLien() {
+        return elt('graphe-retirer-lien');
+    }
+
+    function majBoutonRelier() {
+        boutonRelier().disabled = liaison.selectionnes.size === 0;
+    }
+
+    function majBoutonRetirerLien() {
+        boutonRetirerLien().hidden = !liaison.lienSelectionne;
+    }
+
+    // Remise a zero de l'etat d'edition des dependances, appelee en tete de
+    // chaque redessin (les elements DOM precedents disparaissent de toute
+    // facon avec viderSvg()).
+    function resetInteractionLiaison() {
+        liaison.selectionnes.clear();
+        liaison.modeLiaison = false;
+        liaison.lienSelectionne = null;
+        liaison.lienSelectionneEl = null;
+        mousedownNoeud = null;
+        majBoutonRelier();
+        majBoutonRetirerLien();
+    }
+
+    function basculerSelection(uuid) {
+        const g = elementNoeud(uuid);
+        if (liaison.selectionnes.has(uuid)) {
+            liaison.selectionnes.delete(uuid);
+            if (g) g.classList.remove('selectionne');
+        } else {
+            liaison.selectionnes.add(uuid);
+            if (g) g.classList.add('selectionne');
+        }
+        majBoutonRelier();
+    }
+
+    function entrerModeLiaison() {
+        if (liaison.selectionnes.size === 0) return;
+        liaison.modeLiaison = true;
+        for (const uuid of liaison.selectionnes) {
+            const g = elementNoeud(uuid);
+            if (g) g.classList.add('source-liaison');
+        }
+    }
+
+    // Sort du mode liaison sans y toucher a la selection (annulation : Echap
+    // ou second clic sur "Relier").
+    function annulerModeLiaison() {
+        liaison.modeLiaison = false;
+        for (const uuid of liaison.selectionnes) {
+            const g = elementNoeud(uuid);
+            if (g) g.classList.remove('source-liaison');
+        }
+    }
+
+    // Efface entierement selection + mode, apres une tentative de liaison
+    // (succes ou refus serveur) : cf. tests/graphe-depends.spec.js.
+    function effacerSelectionEtMode() {
+        for (const uuid of liaison.selectionnes) {
+            const g = elementNoeud(uuid);
+            if (g) g.classList.remove('selectionne', 'source-liaison');
+        }
+        liaison.selectionnes.clear();
+        liaison.modeLiaison = false;
+        majBoutonRelier();
+    }
+
+    function gererClicNoeud(uuid) {
+        const noeud = noeudsCourants.get(uuid);
+        if (!noeud) return;
+        if (liaison.modeLiaison) {
+            gererClicCible(uuid, noeud);
+            return;
+        }
+        if (!noeud.dans_projet) return; // non selectionnable
+        basculerSelection(uuid);
+    }
+
+    function gererClicCible(uuid, noeud) {
+        if (liaison.selectionnes.has(uuid)) {
+            definirMessage('Une tâche ne peut pas être reliée à elle-même.', { erreur: true });
+            return;
+        }
+        if (!noeud.dans_projet) {
+            definirMessage('Impossible de relier vers une tâche hors du projet.', { erreur: true });
+            return;
+        }
+        lierVersLaCible(uuid);
+    }
+
+    // Message d'erreur renvoye par le serveur : `detail` (HTTPException de
+    // FastAPI, forme reelle de l'endpoint /api/task/{uuid}/depends) en
+    // priorite, `error` en repli (autre convention utilisee ailleurs dans le
+    // depot, cf. calendar-planner.js/main.js), puis le message par defaut.
+    function messageServeur(d, parDefaut) {
+        return (d && (d.detail || d.error)) || parDefaut;
+    }
+
+    async function lierVersLaCible(cibleUuid) {
+        const sources = Array.from(liaison.selectionnes);
+        try {
+            const r = await fetch('/api/task/' + encodeURIComponent(cibleUuid) + '/depends', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ajouter: sources, retirer: [] }),
+            });
+            let d = {};
+            try { d = await r.json(); } catch (e) { d = {}; }
+            effacerSelectionEtMode();
+            if (!r.ok || d.success === false) {
+                definirMessage(messageServeur(d, 'Erreur lors de la création du lien.'), { erreur: true });
+                return;
+            }
+            definirMessage('');
+            actualiser();
+        } catch (e) {
+            console.error(e);
+            effacerSelectionEtMode();
+            definirMessage('Erreur réseau lors de la création du lien.', { erreur: true });
+        }
+    }
+
+    // ----- Retrait d'un lien existant (H2) -----
+
+    function selectionnerLien(path, de, vers) {
+        if (liaison.lienSelectionneEl && liaison.lienSelectionneEl !== path) {
+            liaison.lienSelectionneEl.classList.remove('lien-selectionne');
+        }
+        if (liaison.lienSelectionneEl === path && liaison.lienSelectionne) {
+            // second clic sur le meme lien : deselectionne
+            path.classList.remove('lien-selectionne');
+            liaison.lienSelectionne = null;
+            liaison.lienSelectionneEl = null;
+        } else {
+            path.classList.add('lien-selectionne');
+            liaison.lienSelectionne = { de, vers };
+            liaison.lienSelectionneEl = path;
+        }
+        majBoutonRetirerLien();
+    }
+
+    function effacerLienSelectionne() {
+        if (liaison.lienSelectionneEl) liaison.lienSelectionneEl.classList.remove('lien-selectionne');
+        liaison.lienSelectionne = null;
+        liaison.lienSelectionneEl = null;
+        majBoutonRetirerLien();
+    }
+
+    async function retirerLienSelectionne() {
+        if (!liaison.lienSelectionne) return;
+        const { de, vers } = liaison.lienSelectionne;
+        try {
+            const r = await fetch('/api/task/' + encodeURIComponent(vers) + '/depends', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ajouter: [], retirer: [de] }),
+            });
+            let d = {};
+            try { d = await r.json(); } catch (e) { d = {}; }
+            if (!r.ok || d.success === false) {
+                definirMessage(messageServeur(d, 'Erreur lors du retrait du lien.'), { erreur: true });
+                return;
+            }
+            definirMessage('');
+            effacerLienSelectionne();
+            actualiser();
+        } catch (e) {
+            console.error(e);
+            definirMessage('Erreur réseau lors du retrait du lien.', { erreur: true });
+        }
+    }
+
+    const NS_SVG = 'http://www.w3.org/2000/svg';
+    const MARGE_ZONE_CLIC_LIEN = 8; // cf. creerZoneClicLien
+
+    // Une fleche Mermaid parfaitement verticale ou horizontale a un
+    // getBoundingClientRect() de largeur ou hauteur nulle (verifie : le
+    // stroke n'y participe pas dans Chromium, seule la geometrie du trace
+    // compte) -- un element sans aire n'est jamais "visible" pour Playwright,
+    // qui refuse alors tout clic dessus. On pose donc, par-dessus le trace
+    // visible, un second <path> invisible dont la geometrie est un
+    // rectangle englobant la fleche avec une marge : c'est LUI qui porte
+    // data-de/data-vers et l'ecouteur de clic (le selecteur du contrat,
+    // `path[data-de][data-vers]`, n'exige pas que ce soit le trace visible).
+    function creerZoneClicLien(pathVisible, a) {
+        const boite = pathVisible.getBBox();
+        const x = boite.x - MARGE_ZONE_CLIC_LIEN;
+        const y = boite.y - MARGE_ZONE_CLIC_LIEN;
+        const largeur = boite.width + 2 * MARGE_ZONE_CLIC_LIEN;
+        const hauteur = boite.height + 2 * MARGE_ZONE_CLIC_LIEN;
+        const zone = document.createElementNS(NS_SVG, 'path');
+        zone.setAttribute('d', `M${x},${y} L${x + largeur},${y} L${x + largeur},${y + hauteur} L${x},${y + hauteur} Z`);
+        zone.setAttribute('data-de', a.de);
+        zone.setAttribute('data-vers', a.vers);
+        zone.setAttribute('class', 'graphe-zone-clic-lien');
+        pathVisible.insertAdjacentElement('afterend', zone);
+        zone.addEventListener('click', () => selectionnerLien(zone, a.de, a.vers));
+        return zone;
+    }
+
+    // Retrouve chaque arete rendue via les classes LS-<id>/LE-<id> que
+    // Mermaid pose sur le <path> (cf. note d'en-tete du fichier), et pose une
+    // zone de clic dediee (cf. creerZoneClicLien) portant data-de/data-vers.
+    function appliquerAttributsAretes(conteneur, aretes) {
+        for (const a of aretes) {
+            const classeSource = 'LS-' + idNoeud(a.de);
+            const classeCible = 'LE-' + idNoeud(a.vers);
+            const path = conteneur.querySelector(`path.${classeSource}.${classeCible}`);
+            if (!path) continue;
+            creerZoneClicLien(path, a);
         }
     }
 
@@ -332,18 +626,22 @@
 
     async function dessiner(racine, noeuds, aretes) {
         viderSvg();
+        resetInteractionLiaison();
+        noeudsCourants = new Map(noeuds.map(n => [n.uuid, n]));
         if (noeuds.length === 0) {
             definirMessage('Aucune tâche trouvée pour ce projet.');
             return;
         }
         definirMessage('');
-        const { definition, cadres } = construireDefinitionMermaid(racine, noeuds, aretes);
+        const aretesUniques = dedupeAretes(aretes);
+        const { definition, cadres } = construireDefinitionMermaid(racine, noeuds, aretesUniques);
         try {
             const { svg } = await window.mermaid.render('graphe-mermaid-svg', definition);
             const conteneur = elt('graphe-svg');
             conteneur.innerHTML = svg;
             appliquerAttributsNoeuds(conteneur, noeuds);
             appliquerAttributsCadres(conteneur, cadres);
+            appliquerAttributsAretes(conteneur, aretesUniques);
             // svg-pan-zoom peut lever ("matrix not invertible") si la zone
             // est de taille nulle au moment du calcul. Le rendu Mermaid a
             // deja reussi a ce stade : une erreur ici ne doit ni l'effacer,
@@ -406,6 +704,36 @@
             if (panZoom) panZoom.zoomBy(0.8);
         });
         elt('graphe-ajuster').addEventListener('click', ajusterVue);
+        boutonRelier().addEventListener('click', () => {
+            if (liaison.selectionnes.size === 0) return;
+            if (liaison.modeLiaison) annulerModeLiaison();
+            else entrerModeLiaison();
+        });
+        boutonRetirerLien().addEventListener('click', retirerLienSelectionne);
+    }
+
+    // Distingue clic et glisser (cf. note d'en-tete) : le mousedown est pose
+    // sur chaque noeud (appliquerAttributsNoeuds), le mouseup est ecoute une
+    // fois pour toutes sur le document.
+    function initInteractionsGlobales() {
+        document.addEventListener('mouseup', (e) => {
+            if (!mousedownNoeud) return;
+            const info = mousedownNoeud;
+            mousedownNoeud = null;
+            const distance = Math.hypot(e.clientX - info.x, e.clientY - info.y);
+            if (distance > SEUIL_GLISSER_PX) return; // glisser : pas une selection
+            gererClicNoeud(info.uuid);
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                if (liaison.modeLiaison) annulerModeLiaison();
+            } else if (e.key === 'Delete') {
+                if (liaison.lienSelectionne) {
+                    e.preventDefault();
+                    retirerLienSelectionne();
+                }
+            }
+        });
     }
 
     // La geometrie du cadre est purement CSS (flexbox, cf. graphe.css) : pas
@@ -425,6 +753,7 @@
         }
         initTaskEditor();
         initBoutons();
+        initInteractionsGlobales();
         window.addEventListener('resize', surRedimensionnement);
         document.addEventListener('tw-filter-change', actualiser);
         actualiser();
