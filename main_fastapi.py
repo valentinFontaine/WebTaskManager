@@ -421,6 +421,112 @@ async def get_tasks(
         )
 
 
+def _parse_depends(brut):
+    """Normalise le champ depends : liste d'uuid (Taskwarrior 3) ou chaine
+    separee par des virgules (Taskwarrior 2). Renvoie toujours une liste."""
+    if not brut:
+        return []
+    if isinstance(brut, list):
+        return brut
+    if isinstance(brut, str):
+        return [u.strip() for u in brut.split(",") if u.strip()]
+    return []
+
+
+def _dans_projet(project_tache, projet):
+    """Frontiere de point, insensible a la casse : project_tache == projet
+    ou sous-projet de projet."""
+    if not project_tache:
+        return False
+    tache_min = project_tache.lower()
+    projet_min = projet.lower()
+    return tache_min == projet_min or tache_min.startswith(projet_min + ".")
+
+
+def construire_graphe(taches, projet):
+    """Fonction pure : export pending (liste de dicts) + nom de projet ->
+    dict de reponse pour GET /api/graphe.
+
+    Regles (voir test_graphe.py) :
+    - noeuds du projet : project == projet ou sous-projet, frontiere de point ;
+    - voisins directs (predecesseur ou successeur via depends) hors projet
+      inclus avec dans_projet=false, sans voisin de voisin ;
+    - aretes seulement entre deux noeuds presents dans le resultat ;
+    - tri des noeuds par (project, description), insensible a la casse.
+    """
+    par_uuid = {t["uuid"]: t for t in taches if "uuid" in t}
+
+    uuids_projet = {uuid for uuid, t in par_uuid.items() if _dans_projet(t.get("project"), projet)}
+
+    # Voisins directs : un hop seulement, dans un sens ou dans l'autre, a
+    # partir d'une tache du projet. Ne pas etendre a partir d'un voisin.
+    voisins = set()
+    for uuid, t in par_uuid.items():
+        for dep in _parse_depends(t.get("depends")):
+            if dep not in par_uuid:
+                continue
+            dep_dans_projet = dep in uuids_projet
+            tache_dans_projet = uuid in uuids_projet
+            if tache_dans_projet and not dep_dans_projet:
+                voisins.add(dep)
+            elif dep_dans_projet and not tache_dans_projet:
+                voisins.add(uuid)
+
+    inclus = uuids_projet | voisins
+
+    noeuds = []
+    for uuid in inclus:
+        t = par_uuid[uuid]
+        tags = t.get("tags") or []
+        noeuds.append({
+            "uuid": uuid,
+            "description": t.get("description"),
+            "project": t.get("project"),
+            "estTime": t.get("estTime"),
+            "due": t.get("due"),
+            "externe": "externe" in tags,
+            "fige": "fige" in tags,
+            "dans_projet": uuid in uuids_projet,
+        })
+    noeuds.sort(key=lambda n: ((n["project"] or "").lower(), (n["description"] or "").lower()))
+
+    aretes = []
+    for uuid, t in par_uuid.items():
+        if uuid not in inclus:
+            continue
+        for dep in _parse_depends(t.get("depends")):
+            if dep in inclus:
+                aretes.append({"de": dep, "vers": uuid})
+
+    return {
+        "projet": projet,
+        "noeuds": noeuds,
+        "aretes": aretes,
+    }
+
+
+@app.get("/api/graphe")
+async def get_graphe(projet: str = Query(...)):
+    """Graphe des dependances autour d'un projet (et ses sous-projets).
+
+    Le filtrage par projet se fait en Python sur l'export pending complet,
+    pas via un filtre project: envoye a Taskwarrior (cf. test_graphe.py).
+    """
+    if not projet.strip():
+        raise HTTPException(status_code=400, detail="Le parametre projet est requis")
+
+    result = run_task_command("task status:pending export")
+    if not result.success:
+        raise HTTPException(status_code=502, detail=f"Erreur Taskwarrior : {result.stderr}")
+
+    try:
+        taches = json.loads(result.stdout)
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=500, detail=f"JSON decode error: {str(e)}")
+
+    return construire_graphe(taches, projet)
+
+
 @app.get("/api/projects")
 async def get_projects():
     """Get all unique projects from TaskWarrior, including completed tasks"""

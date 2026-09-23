@@ -1,0 +1,46 @@
+/* Page Graphe — visualisation des dependances (Mermaid) */
+
+.graphe-message {
+    margin: 20px 0;
+    padding: 16px 20px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    color: #555;
+}
+
+.graphe-message.erreur {
+    color: #c0392b;
+    background: #fdecea;
+}
+
+#graphe-svg {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    padding: 16px;
+    overflow: auto;
+}
+
+#graphe-svg svg {
+    max-width: 100%;
+    height: auto;
+}
+
+/* Classes posees sur les groupes de noeuds Mermaid apres rendu. */
+#graphe-svg g.node.externe rect,
+#graphe-svg g.node.externe polygon {
+    stroke: #e67e22;
+    stroke-width: 2px;
+}
+
+#graphe-svg g.node.fige rect,
+#graphe-svg g.node.fige polygon {
+    stroke-dasharray: 4 2;
+}
+
+#graphe-svg g.node.hors-projet rect,
+#graphe-svg g.node.hors-projet polygon {
+    fill: #eee;
+    opacity: 0.8;
+}
