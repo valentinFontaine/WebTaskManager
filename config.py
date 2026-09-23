@@ -35,3 +35,29 @@ NOTIFICATION_TIMEOUT = 3000
 # Duree de vie du cache de la liste des contextes, en secondes.
 # `task _show` est couteux et la liste des contextes ne bouge quasiment jamais.
 CONTEXT_CACHE_TTL = 30
+
+
+# --- Ordonnanceur (depot voisin) -----------------------------------------
+# Decision du 23/09/2026 : sous-processus plutot qu'import, avec un chemin
+# CONFIGURABLE et non une constante. Les deux depots restent independants et
+# ortools ne rentre pas dans le venv de l'application web. L'installer comme
+# dependance sera plus propre le jour ou l'on voudra reutiliser le code ; c'est
+# note au carnet (RESTE-A-FAIRE.md).
+_RACINE = os.path.dirname(os.path.abspath(__file__))
+
+PLANIFICATEUR_RACINE = os.environ.get(
+    'PLANIFICATEUR_RACINE',
+    os.path.normpath(os.path.join(_RACINE, '..', 'TaskWarriorPlanner')))
+
+PLANIFICATEUR_PYTHON = os.environ.get(
+    'PLANIFICATEUR_PYTHON',
+    os.path.join(PLANIFICATEUR_RACINE, 'venv', 'Scripts', 'python.exe'))
+
+#: Ou l'ordonnanceur ecrit son plan : c'est l'URL que calendar-planner.js
+#: demande (`/plan.json`), servie par la route catch-all.
+PLAN_SORTIE = os.path.join(_RACINE, 'plan.json')
+
+#: Plafond large : une resolution prend 30 s a 2 min, mais un horizon etendu ou
+#: une machine chargee peuvent aller plus loin. Au-dela, on interrompt et on le
+#: dit -- le plan precedent reste en place.
+PLAN_TIMEOUT = 600

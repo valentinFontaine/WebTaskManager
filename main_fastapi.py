@@ -19,6 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse
 
+import plan_runner
 from config import (
     DEVELOPER_MODE, DEBUG_FILE, TASK_TIMEOUT, KANBAN_COLUMNS,
     NOTIFICATION_TIMEOUT, CONTEXT_CACHE_TTL,
@@ -260,6 +261,33 @@ async def read_root():
         return page_html("index.html")
     except FileNotFoundError:
         return HTMLResponse(content="<h1>TaskWarrior Web UI</h1><p>Welcome to the TaskWarrior Web Interface</p>", status_code=200)
+
+
+@app.post("/api/plan/calculer")
+async def calculer_plan():
+    """Lance l'ordonnanceur en tache de fond et republie `plan.json`.
+
+    N'ECRIT RIEN dans Taskwarrior : la ligne de commande construite par
+    `plan_runner` ne porte aucun drapeau d'ecriture, et un test verifie cette
+    ligne elle-meme. C'est ce qui fait de ce bouton un dry-run.
+
+    Rend la main tout de suite -- la resolution prend de 30 s a 2 minutes --
+    et l'avancement se lit sur `/api/plan/etat`.
+    """
+    accepte, resultat = plan_runner.lancer()
+    if not accepte:
+        return ResponseModel(success=False, error=resultat)
+    return ResponseModel(success=True, data=resultat)
+
+
+@app.get("/api/plan/etat")
+async def etat_plan():
+    """Ou en est le calcul : inactif, en_cours, termine ou echec.
+
+    Un echec porte son message : un plan qui n'a pas ete calcule ne doit pas
+    ressembler a un plan vide.
+    """
+    return ResponseModel(success=True, data=plan_runner.etat())
 
 
 @app.get("/api/tasks/planned")
