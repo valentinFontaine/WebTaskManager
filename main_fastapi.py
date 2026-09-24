@@ -732,13 +732,37 @@ async def modify_task(task_id: str, task_data: TaskModify):
         modifications.append(f'description:"{task_data.description}"')
 
     if task_data.tags is not None:
-        # First clear all existing tags, then add new ones
-        clear_result = run_task_command(f'task rc.confirmation=off {task_id} modify -TAGS')
-        if clear_result.success and task_data.tags:
-            # Add new tags
-            for tag in task_data.tags:
-                if tag and tag.strip():
-                    modifications.append(f'+{tag.strip()}')
+        # Validation stricte avant toute commande : shell=True interdit de
+        # laisser passer un tag qui contiendrait un caractere de controle
+        # shell. Un seul tag invalide bloque toute la modification.
+        for tag in task_data.tags:
+            if (tag or "").startswith(('+', '-')) or not re.fullmatch(r"[\w.-]+", tag or ""):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Tag invalide : {tag!r}"
+                )
+
+        # `task modify -TAGS` est un NO-OP sous Taskwarrior 3.5 : on calcule
+        # donc le diff entre les tags actuels (export) et les tags demandes,
+        # et on ajoute un -t par tag retire et un +t par tag ajoute a la
+        # meme commande modify (voir plus bas).
+        tags_actuels = []
+        export_tags = run_task_command(f'task {task_id} export')
+        if export_tags.success and export_tags.stdout.strip():
+            try:
+                tache_existante = json.loads(export_tags.stdout)
+                if tache_existante:
+                    tags_actuels = tache_existante[0].get('tags') or []
+            except (json.JSONDecodeError, IndexError):
+                tags_actuels = []
+
+        tags_demandes = cleaned_tags(task_data.tags) or []
+        for tag in tags_actuels:
+            if tag not in tags_demandes:
+                modifications.append(f'-{tag}')
+        for tag in tags_demandes:
+            if tag not in tags_actuels:
+                modifications.append(f'+{tag}')
 
     if task_data.due is not None:
         if task_data.due:
