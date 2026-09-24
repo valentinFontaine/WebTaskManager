@@ -310,11 +310,21 @@ async function interrogerEtatPlan() {
             // Etat terminal : on arrete d'interroger, on relit le plan (celui
             // qu'on vient de calculer, pas celui d'avant), puis on redessine
             // avec la meme fonction que sur un changement de filtre.
+            //
+            // Le statut CP-SAT de la passe 1 est repris dans `plan.json`
+            // (`planCourant.statut`) : c'est lui qui decide, pas la presence
+            // de blocs -- la passe 2 (opportuniste) peut en placer meme sur
+            // un plan dont la passe 1 a echoue.
             arreterInterrogationEtatPlan();
             if (btn) btn.disabled = false;
             calculEnCours = false;
-            afficherEtatPlan('Calcul termine.');
             await chargerPlan();
+            if (planStatutRate(planCourant)) {
+                afficherEtatPlan('Le plan calculé est infaisable (statut '
+                    + planCourant.statut + ').');
+            } else {
+                afficherEtatPlan('Calcul termine.');
+            }
             processTasksForCalendar();
         } else if (etat.statut === 'echec') {
             arreterInterrogationEtatPlan();
@@ -383,7 +393,17 @@ async function lancerCalculPlan() {
 function mettreAJourEtatBoutonValider() {
     const btn = document.getElementById('valider-plan-btn');
     if (!btn) return;
-    btn.disabled = planEvents.length === 0 || calculEnCours || validationEnCours;
+    btn.disabled = planEvents.length === 0 || calculEnCours || validationEnCours
+        || planStatutRate(planCourant);
+}
+
+/**
+ * Vrai quand le statut CP-SAT de la passe 1 (`plan.statut`) est rate --
+ * INFEASIBLE, UNKNOWN ou MODEL_INVALID. Ne regarde jamais la presence de
+ * blocs : la passe 2 (opportuniste) peut en placer meme sur un tel plan.
+ */
+function planStatutRate(plan) {
+    return !!plan && ['INFEASIBLE', 'UNKNOWN', 'MODEL_INVALID'].includes(plan.statut);
 }
 
 /**

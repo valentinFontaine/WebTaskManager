@@ -326,6 +326,17 @@ async def valider_plan():
                             detail="Aucun plan à valider : le fichier de "
                                   "plan est introuvable.")
 
+    # Le statut est celui de la passe 1 (CP-SAT) ; la passe 2 (opportuniste)
+    # peut placer des blocs meme si la passe 1 a echoue, donc on ne se fie
+    # jamais a la presence/absence de blocs pour decider.
+    with open(plan_runner.SORTIE, encoding="utf-8") as fichier_plan:
+        statut_plan = json.load(fichier_plan).get("statut")
+    if statut_plan in ("INFEASIBLE", "UNKNOWN", "MODEL_INVALID"):
+        raise HTTPException(status_code=409,
+                            detail="Le plan calculé est infaisable (statut "
+                                  "{}) : impossible de le "
+                                  "valider.".format(statut_plan))
+
     empreinte_actuelle = empreinte_base()
     if empreinte_actuelle is None or empreinte_actuelle != empreinte_calcul:
         raise HTTPException(status_code=409,
