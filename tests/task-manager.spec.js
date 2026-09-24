@@ -1053,27 +1053,36 @@ test.describe('Filtres partages', () => {
   // seul titre, donc deux creneaux distincts de la meme tache passaient pour un
   // doublon. Un bloc s'affichait normalement, l'autre en filet de quelques
   // pixels -- comme s'ils avaient lieu en meme temps.
+  // Blocs places DEMAIN (et non « aujourd'hui a heure fixe ») : la vue par
+  // defaut du calendrier est `week` (calendar-planner.js), pas `day`, donc
+  // demain reste visible sans navigation -- et une journee entiere d'avance
+  // met les blocs a l'abri de `planEstPerime` quelle que soit l'heure a
+  // laquelle le test tourne. Avec des heures figees "aujourd'hui", les deux
+  // blocs (9h-11h, 11h-12h) etaient deja passes des le debut de soiree, et
+  // `planEstPerime` jugeait alors le plan entier perime : rien n'etait rendu,
+  // et le test echouait selon l'heure d'execution -- c'etait un defaut de la
+  // DONNEE du test, pas de son attente.
   function planTacheEnDeuxBlocs() {
     return {
       version: 1,
       statut: 'OPTIMAL',
       retard_total: 0,
       en_retard: [],
-      t0: localISOAujourdHui(0),
+      t0: localISODecale(1, 0),
       granularite_minutes: 30,
       taches: {
         'dddddddd-0000-0000-0000-000000000001': {
           description: 'Tache coupee en deux',
           projet: 'Test',
-          debut: localISOAujourdHui(9),
-          fin: localISOAujourdHui(12),
+          debut: localISODecale(1, 9),
+          fin: localISODecale(1, 12),
           blocs: [
             {
-              indice: 0, debut: localISOAujourdHui(9), fin: localISOAujourdHui(11),
+              indice: 0, debut: localISODecale(1, 9), fin: localISODecale(1, 11),
               externe: false, agrege: false, opportuniste: false, precision: 'heure',
             },
             {
-              indice: 1, debut: localISOAujourdHui(11), fin: localISOAujourdHui(12),
+              indice: 1, debut: localISODecale(1, 11), fin: localISODecale(1, 12),
               externe: false, agrege: false, opportuniste: false, precision: 'heure',
             },
           ],
