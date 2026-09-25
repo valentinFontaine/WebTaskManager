@@ -340,6 +340,9 @@ document.addEventListener('tw-filter-change', e => {
     if (e.detail && e.detail.clientOnly) renderBoard();
     else init();
 });
+// nav.js : ajout de tache via l'editeur generique -> recharger les taches
+// (meme appel qu'au chargement).
+document.addEventListener('tw-task-added', init);
 init();
 </script>
 </body>

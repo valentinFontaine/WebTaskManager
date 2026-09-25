@@ -756,6 +756,8 @@
         initInteractionsGlobales();
         window.addEventListener('resize', surRedimensionnement);
         document.addEventListener('tw-filter-change', actualiser);
+        // nav.js : ajout de tache via l'editeur generique -> rafraichir.
+        document.addEventListener('tw-task-added', actualiser);
         actualiser();
     }
 

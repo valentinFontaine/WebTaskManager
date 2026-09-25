@@ -61,8 +61,10 @@ class TaskWarriorUI {
             else this.loadTasks();
         });
 
-        // nav.js : le bouton + de la barre ouvre l'editeur.
-        document.addEventListener('tw-open-add', () => {
+        // nav.js : le bouton + de la barre ouvre l'editeur. preventDefault()
+        // empeche nav.js d'ouvrir en plus son propre editeur generique.
+        document.addEventListener('tw-open-add', (event) => {
+            event.preventDefault();
             if (typeof taskEditor !== 'undefined') taskEditor.show();
         });
 

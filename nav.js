@@ -355,6 +355,72 @@
         resume.hidden = bouton.hidden = bouts.length === 0;
     }
 
+    // ── Editeur generique ─────────────────────────────────────────────────────
+    // Pages sans editeur propre (kanban, graphe, import) : nav.js ouvre sa
+    // propre instance de TaskEditor, chargee a la demande. Instanciee une
+    // seule fois, reutilisee a chaque clic -- jamais deux modales a la fois.
+    const NAV_GENERIC_MODAL_ID = 'tw-nav-add-modal';
+    let navEditeurPromise = null;
+
+    function chargerScript(src) {
+        return new Promise((resolve, reject) => {
+            const s = document.createElement('script');
+            s.src = src;
+            s.onload = () => resolve();
+            s.onerror = () => reject(new Error('Echec du chargement de ' + src));
+            document.head.appendChild(s);
+        });
+    }
+
+    function chargerFeuilleDeStyle(href) {
+        if (document.querySelector(`link[href="${href}"]`)) return;
+        const l = document.createElement('link');
+        l.rel = 'stylesheet';
+        l.href = href;
+        document.head.appendChild(l);
+    }
+
+    // TaskEditor.createModal() charge son template par fetch : show() ne
+    // fait rien tant que ce n'est pas termine (task-editor.js, show()). On
+    // attend donc que l'instance ait son modal ET son template avant de
+    // l'afficher.
+    function attendreModalePrete(instance) {
+        return new Promise((resolve) => {
+            (function verifier() {
+                if (instance.modal && instance.template) resolve(instance);
+                else setTimeout(verifier, 20);
+            }());
+        });
+    }
+
+    function editeurGenerique() {
+        if (!navEditeurPromise) {
+            navEditeurPromise = (async () => {
+                // `class TaskEditor {}` en script classique cree un binding
+                // lexical global, mais PAS une propriete de `window` : le
+                // detecter via `window.TaskEditor` le manque toujours, et
+                // rechargerait le script une seconde fois -- erreur de
+                // redeclaration sur les pages qui l'incluent deja (graphe.html).
+                if (typeof TaskEditor === 'undefined') {
+                    chargerFeuilleDeStyle('/task-editor-styles.css');
+                    await chargerScript('/task-editor.js');
+                }
+                const instance = new TaskEditor({
+                    showAllFields: true,
+                    priorityFormat: 'letters',
+                    language: 'fr',
+                    modalId: NAV_GENERIC_MODAL_ID,
+                    onSaveSuccess: (task) => {
+                        document.dispatchEvent(new CustomEvent('tw-task-added', { detail: task }));
+                    },
+                });
+                await attendreModalePrete(instance);
+                return instance;
+            })();
+        }
+        return navEditeurPromise;
+    }
+
     // ── Event wiring ──────────────────────────────────────────────────────────
     function bindEvents() {
         // Brand text → refresh with blink
@@ -367,9 +433,17 @@
                 { detail: { message: 'Refreshed', type: 'success' } }));
         });
 
-        // Count + add area → open add dialog
-        document.getElementById('tw-add-area').addEventListener('click', () =>
-            document.dispatchEvent(new CustomEvent('tw-open-add')));
+        // Count + add area → open add dialog. L'evenement est annulable :
+        // une page qui a deja son propre editeur appelle preventDefault()
+        // et ouvre le sien (main.js, calendar-planner.js). Si personne ne
+        // l'a annule, nav.js ouvre un editeur generique (cf. plus bas).
+        document.getElementById('tw-add-area').addEventListener('click', () => {
+            const evenement = new CustomEvent('tw-open-add', { cancelable: true });
+            const nonAnnule = document.dispatchEvent(evenement);
+            if (nonAnnule) {
+                editeurGenerique().then(instance => instance.show());
+            }
+        });
 
         // Contextes : boutons ou liste deroulante selon leur nombre. Les deux
         // passent par le meme conteneur, et `change` remonte, donc un seul

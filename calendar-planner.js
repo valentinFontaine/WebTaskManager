@@ -678,6 +678,19 @@ function setupEventListeners() {
         });
     }
 
+    // nav.js : le bouton + de la barre ouvre l'editeur. preventDefault()
+    // empeche nav.js d'ouvrir en plus son propre editeur generique. Meme
+    // flux que le bouton #add-task-btn ci-dessus.
+    document.addEventListener('tw-open-add', (event) => {
+        event.preventDefault();
+        if (typeof taskEditor !== 'undefined') {
+            taskEditor.show();
+        } else {
+            console.error('taskEditor is not defined');
+            alert('Task editor is not available.');
+        }
+    });
+
     // Changement de vue
     document.querySelectorAll('.view-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
