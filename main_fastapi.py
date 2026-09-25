@@ -17,10 +17,11 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.responses import HTMLResponse, FileResponse, Response
 from pydantic import BaseModel
 
 import plan_runner
+import import_csv
 from config import (
     DEVELOPER_MODE, DEBUG_FILE, TASK_TIMEOUT, KANBAN_COLUMNS,
     NOTIFICATION_TIMEOUT, CONTEXT_CACHE_TTL,
@@ -601,6 +602,117 @@ async def get_graphe(projet: str = Query(...)):
         raise HTTPException(status_code=500, detail=f"JSON decode error: {str(e)}")
 
     return construire_graphe(taches, projet)
+
+
+class ImportCsvRequest(BaseModel):
+    """Corps attendu par les routes d'import CSV."""
+    csv: str
+
+
+def _existantes_pour_import():
+    """Lit l'export complet (tous statuts), pour la resolution des references
+    de `import_csv.analyser` (prefixes hexadecimaux, fusion). Sans filtre de
+    statut : une tache completed ou deleted doit rester visible a la fusion,
+    sinon `task import` la rouvrirait en pending. Lecture seule."""
+    result = run_task_command("task export")
+    if not result.success:
+        raise HTTPException(status_code=502, detail=f"Erreur Taskwarrior : {result.stderr}")
+    try:
+        return json.loads(result.stdout)
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=500, detail=f"JSON decode error: {str(e)}")
+
+
+@app.post("/api/import/apercu")
+async def import_csv_apercu(requete: ImportCsvRequest):
+    """Analyse un CSV sans rien ecrire : renvoie taches, erreurs et graphe.
+
+    N'appelle jamais `task import` -- seule la lecture de l'existant, via
+    `_existantes_pour_import()`, est effectuee.
+    """
+    existantes = _existantes_pour_import()
+    resultat = import_csv.analyser(requete.csv, existantes)
+
+    uuids_existants = {t["uuid"] for t in existantes if "uuid" in t}
+    taches = []
+    for indice, tache in enumerate(resultat.taches, start=2):
+        taches.append({
+            **tache,
+            "ligne": indice,
+            "nouvelle": tache["uuid"] not in uuids_existants,
+        })
+
+    noeuds = [
+        {"uuid": tache["uuid"], "description": tache.get("description")}
+        for tache in resultat.taches
+    ]
+
+    return {
+        "taches": taches,
+        "erreurs": resultat.erreurs,
+        "graphe": {"noeuds": noeuds, "aretes": resultat.aretes},
+    }
+
+
+@app.post("/api/import")
+async def import_csv_route(requete: ImportCsvRequest):
+    """Importe un CSV : 400 sans ecriture si erreurs d'analyse, sinon UNE
+    commande `task import` sur un fichier temporaire JSON."""
+    existantes = _existantes_pour_import()
+    resultat = import_csv.analyser(requete.csv, existantes)
+
+    if resultat.erreurs:
+        raise HTTPException(status_code=400, detail={"erreurs": resultat.erreurs})
+
+    uuids_existants = {t["uuid"] for t in existantes if "uuid" in t}
+    creees = sum(1 for t in resultat.taches if t["uuid"] not in uuids_existants)
+    mises_a_jour = len(resultat.taches) - creees
+
+    chemin = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".json", encoding="utf-8", delete=False
+        ) as handle:
+            json.dump(resultat.taches, handle, ensure_ascii=False)
+            chemin = handle.name
+
+        resultat_import = run_task_command(f'task import "{chemin}"')
+    finally:
+        if chemin:
+            try:
+                os.unlink(chemin)
+            except OSError:
+                pass
+
+    if not resultat_import.success:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Erreur Taskwarrior : {resultat_import.stderr}",
+        )
+
+    return {"success": True, "creees": creees, "mises_a_jour": mises_a_jour}
+
+
+# Modele telechargeable depuis import.html (#import-modele-lien). Contenu
+# identique a EXEMPLE_CSV de test_import_csv.py -- garde en synchronisation
+# manuelle, verifie par test_modele_import.py (0 erreur, 5 taches via
+# import_csv.analyser). Route dediee plutot que fichier statique servi par le
+# catch-all : garantit le Content-Type text/csv independamment de la table
+# mimetypes de l'OS (voir le catch-all plus bas, qui utiliserait FileResponse
+# et laisserait deviner le type).
+MODELE_IMPORT_CSV = (
+    "ref;description;projet;tags;estTime;due;scheduled;priorite;depend_de\n"
+    "devis;Demander 3 devis;NPD.Orion.achats;pro;2h;;;M;\n"
+    "attente;Reponse fournisseurs;NPD.Orion.achats;externe;10j;;;;devis\n"
+    "choix;Choisir le fournisseur;NPD.Orion.achats;pro;1h;;;;attente\n"
+    "cde;Passer la commande;NPD.Orion.commandes;pro;1h;30/10/2026;;H;choix\n"
+    "plan;Plan de montage;NPD.Orion;pro;4h;;;;devis, choix\n"
+)
+
+
+@app.get("/modele-import.csv")
+async def get_modele_import_csv():
+    return Response(content=MODELE_IMPORT_CSV, media_type="text/csv; charset=utf-8")
 
 
 @app.get("/api/projects")

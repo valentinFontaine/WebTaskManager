@@ -60,6 +60,7 @@
         { id: 'kanban',   href: '/kanban.html',           label: 'Kanban'   },
         { id: 'calendar', href: '/calendar-planner.html', label: 'Calendar' },
         { id: 'graphe',   href: '/graphe.html',           label: 'Graphe'   },
+        { id: 'import',   href: '/import.html',           label: 'Import'   },
     ];
 
     const STATUS_BTNS = [
@@ -118,6 +119,7 @@
         if (p.endsWith('kanban.html'))           return 'kanban';
         if (p.endsWith('calendar-planner.html')) return 'calendar';
         if (p.endsWith('graphe.html'))           return 'graphe';
+        if (p.endsWith('import.html'))           return 'import';
         return 'tasks';
     }
     function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }

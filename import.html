@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Import CSV</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="nav.js"></script>
+    <link rel="stylesheet" href="import.css">
+</head>
+<body>
+<div class="container" id="import-page">
+    <header>
+        <div class="header-content">
+            <h1>Import CSV</h1>
+        </div>
+    </header>
+
+    <div class="import-toolbar">
+        <input type="file" id="import-fichier" accept=".csv">
+        <a id="import-modele-lien" href="/modele-import.csv" download>Télécharger le modèle</a>
+        <button type="button" id="import-bouton-importer" disabled>Importer</button>
+    </div>
+
+    <ul id="import-erreurs" class="import-erreurs"></ul>
+
+    <div class="import-corps">
+        <table id="import-apercu-tableau" class="import-apercu-tableau">
+            <thead>
+                <tr>
+                    <th>Ligne</th>
+                    <th>Description</th>
+                    <th>Projet</th>
+                    <th>Statut</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+
+        <div id="import-graphe" class="import-graphe"></div>
+    </div>
+
+    <div id="import-resultat" class="import-resultat"></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script src="import.js"></script>
+</body>
+</html>

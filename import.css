@@ -1,0 +1,107 @@
+/* Page Import — meme cadre et memes marges que graphe.html (cf. graphe.css) :
+   un seul cadre visuel, ecart fixe entre lui et la nav / le bord de fenetre. */
+
+html, body {
+    height: 100%;
+}
+
+body {
+    display: flex;
+    flex-direction: column;
+    overflow-x: hidden;
+    overflow-y: auto;
+}
+
+#import-page {
+    max-width: none;
+    width: auto;
+    flex: 1 1 auto;
+    min-height: 0;
+    margin: 16px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    box-sizing: border-box;
+    overflow: visible;
+}
+
+#import-page header {
+    flex: 0 0 auto;
+}
+
+.import-toolbar {
+    flex: 0 0 auto;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    margin: 16px 0;
+}
+
+.import-toolbar button {
+    padding: 6px 14px;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+    background: white;
+    color: #333;
+    cursor: pointer;
+    font-size: 0.95rem;
+}
+
+.import-toolbar button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.import-erreurs {
+    flex: 0 0 auto;
+    margin: 0 0 12px 0;
+    padding-left: 20px;
+    color: #c0392b;
+}
+
+.import-corps {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+}
+
+.import-apercu-tableau {
+    flex: 1 1 320px;
+    border-collapse: collapse;
+    align-self: flex-start;
+}
+
+.import-apercu-tableau th,
+.import-apercu-tableau td {
+    border: 1px solid #ddd;
+    padding: 6px 10px;
+    text-align: left;
+    font-size: 0.9rem;
+}
+
+.import-apercu-tableau tr.en-erreur {
+    background: #fdecea;
+}
+
+.import-graphe {
+    flex: 1 1 320px;
+    min-height: 320px;
+    position: relative;
+}
+
+.import-graphe svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.import-resultat {
+    flex: 0 0 auto;
+    margin-top: 16px;
+}
