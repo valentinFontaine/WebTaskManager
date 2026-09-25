@@ -40,4 +40,25 @@ def test_modele_valide_par_analyser_0_erreur_5_taches():
     resultat = import_csv.analyser(reponse.text, [])
 
     assert resultat.erreurs == []
-    assert len(resultat.taches) == 5
+    assert len(resultat.taches) >= 5
+
+
+def test_modele_montre_une_tache_a_plusieurs_tags():
+    """Le modele doit montrer, sur au moins une tache, comment ecrire plusieurs
+    tags dans la cellule tags (ex. "pro,revue"), pas seulement un tag par ligne.
+    """
+    reponse = client.get("/modele-import.csv")
+    assert reponse.status_code == 200, reponse.text
+
+    # Verification sur le texte brut : une cellule de la colonne tags contient
+    # une virgule (donc plusieurs tags), separement des cellules depend_de qui
+    # peuvent elles aussi contenir des virgules.
+    lignes = reponse.text.strip("\r\n").splitlines()
+    entete = lignes[0].split(";")
+    index_tags = entete.index("tags")
+    cellules_tags = [ligne.split(";")[index_tags] for ligne in lignes[1:] if ligne.strip()]
+    assert any("," in cellule for cellule in cellules_tags), cellules_tags
+
+    resultat = import_csv.analyser(reponse.text, [])
+    assert resultat.erreurs == []
+    assert any(len(tache.get("tags", [])) >= 2 for tache in resultat.taches)

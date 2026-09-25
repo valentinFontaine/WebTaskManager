@@ -700,13 +700,14 @@ async def import_csv_route(requete: ImportCsvRequest):
 # catch-all : garantit le Content-Type text/csv independamment de la table
 # mimetypes de l'OS (voir le catch-all plus bas, qui utiliserait FileResponse
 # et laisserait deviner le type).
+# Derive de EXEMPLE_CSV, plus une tache a plusieurs tags pour montrer la syntaxe.
 MODELE_IMPORT_CSV = (
     "ref;description;projet;tags;estTime;due;scheduled;priorite;depend_de\n"
     "devis;Demander 3 devis;NPD.Orion.achats;pro;2h;;;M;\n"
     "attente;Reponse fournisseurs;NPD.Orion.achats;externe;10j;;;;devis\n"
     "choix;Choisir le fournisseur;NPD.Orion.achats;pro;1h;;;;attente\n"
     "cde;Passer la commande;NPD.Orion.commandes;pro;1h;30/10/2026;;H;choix\n"
-    "plan;Plan de montage;NPD.Orion;pro;4h;;;;devis, choix\n"
+    "plan;Plan de montage;NPD.Orion;pro,revue;4h;;;;devis, choix\n"
 )
 
 
