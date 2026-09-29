@@ -307,6 +307,43 @@ class TaskEditor {
     showForTask(task) {
         this.show(task);
     }
+
+    showForCreate(valeurs = {}) {
+        // Mode CREATION avec pre-remplissage : currentTask reste null (donc
+        // handleSave()/saveTask() suit la branche POST /api/task/add), mais
+        // les champs sont pre-remplis depuis `valeurs` (ex: project pris de
+        // l'etat de la nav).
+        this.currentTask = null;
+
+        // Assurer que le modal et le template sont chargés
+        if (!this.modal || !this.template) {
+            if (this.options.inline) {
+                this.createInlineContainer();
+            } else {
+                this.createModal();
+            }
+            return;
+        }
+
+        const title = this.modal.querySelector('#task-editor-title');
+        const texts = this.getTexts();
+
+        if (title) title.textContent = texts.addTask;
+        this.clearForm();
+        this.populateForm(valeurs);
+
+        if (this.options.inline) {
+            this.modal.style.display = 'block';
+        } else {
+            this.modal.style.display = 'block';
+        }
+
+        // Focus sur le premier champ
+        setTimeout(() => {
+            const descField = this.modal.querySelector('#task-editor-description');
+            if (descField) descField.focus();
+        }, 100);
+    }
     
     hide() {
         if (this.options.inline) {

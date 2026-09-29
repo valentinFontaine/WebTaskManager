@@ -441,7 +441,7 @@
             const evenement = new CustomEvent('tw-open-add', { cancelable: true });
             const nonAnnule = document.dispatchEvent(evenement);
             if (nonAnnule) {
-                editeurGenerique().then(instance => instance.show());
+                editeurGenerique().then(instance => instance.showForCreate({ project: getState().project }));
             }
         });
 

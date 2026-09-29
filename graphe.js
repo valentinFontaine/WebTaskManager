@@ -297,12 +297,22 @@
         return elt('graphe-retirer-lien');
     }
 
+    function boutonModifier() {
+        return elt('graphe-modifier');
+    }
+
     function majBoutonRelier() {
         boutonRelier().disabled = liaison.selectionnes.size === 0;
     }
 
     function majBoutonRetirerLien() {
         boutonRetirerLien().hidden = !liaison.lienSelectionne;
+    }
+
+    // Visible seulement pour exactement une selection, et jamais pendant un
+    // geste "Relier" en cours (cf. l'en-tete de tests/graphe-modifier.spec.js).
+    function majBoutonModifier() {
+        boutonModifier().hidden = liaison.modeLiaison || liaison.selectionnes.size !== 1;
     }
 
     // Remise a zero de l'etat d'edition des dependances, appelee en tete de
@@ -316,6 +326,7 @@
         mousedownNoeud = null;
         majBoutonRelier();
         majBoutonRetirerLien();
+        majBoutonModifier();
     }
 
     function basculerSelection(uuid) {
@@ -328,6 +339,7 @@
             if (g) g.classList.add('selectionne');
         }
         majBoutonRelier();
+        majBoutonModifier();
     }
 
     function entrerModeLiaison() {
@@ -337,6 +349,7 @@
             const g = elementNoeud(uuid);
             if (g) g.classList.add('source-liaison');
         }
+        majBoutonModifier();
     }
 
     // Sort du mode liaison sans y toucher a la selection (annulation : Echap
@@ -347,6 +360,7 @@
             const g = elementNoeud(uuid);
             if (g) g.classList.remove('source-liaison');
         }
+        majBoutonModifier();
     }
 
     // Efface entierement selection + mode, apres une tentative de liaison
@@ -359,6 +373,7 @@
         liaison.selectionnes.clear();
         liaison.modeLiaison = false;
         majBoutonRelier();
+        majBoutonModifier();
     }
 
     function gererClicNoeud(uuid) {
@@ -710,6 +725,11 @@
             else entrerModeLiaison();
         });
         boutonRetirerLien().addEventListener('click', retirerLienSelectionne);
+        boutonModifier().addEventListener('click', () => {
+            if (liaison.selectionnes.size !== 1) return;
+            const [uuid] = liaison.selectionnes;
+            ouvrirEdition(uuid);
+        });
     }
 
     // Distingue clic et glisser (cf. note d'en-tete) : le mousedown est pose

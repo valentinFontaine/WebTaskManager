@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Fixture de test -- TaskEditor seul</title>
+    <!--
+      Fixture de test, pas une page applicative : sert uniquement a charger
+      task-editor.js de facon isolee (sans nav.js, sans graphe.js ni main.js)
+      pour un test unitaire Playwright du comportement showForCreate (contrat A).
+      Servie par le catch-all statique de main_fastapi.py (route "/{filename:path}"),
+      comme test_taskcard_autonomy.html.
+
+      A la RACINE du depot, et non dans tests/fixtures/ : TaskEditor.loadTemplate()
+      fait `fetch('task-editor-templates.html')` en chemin RELATIF A LA PAGE
+      (task-editor.js), pas relatif a l'emplacement du script. Une fixture
+      logee dans un sous-dossier resoudrait ce fetch vers un chemin inexistant
+      et le template ne se chargerait jamais (this.template resterait null,
+      sans la moindre erreur visible -- constate en le placant d'abord dans
+      tests/fixtures/).
+
+      Voir tests/task-editor-showforcreate.spec.js.
+    -->
+    <link rel="stylesheet" href="/task-editor-styles.css">
+</head>
+<body>
+<script src="/task-editor.js"></script>
+</body>
+</html>
