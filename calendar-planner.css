@@ -981,3 +981,65 @@ body {
    dupliquer la logique de regime. */
 .bloc--jour {
 }
+
+/* Tache en retard (echeance ratee, voir plan.en_retard) : dominante rouge,
+   quel que soit le regime (contraint ou opportuniste) auquel le bloc
+   appartient par ailleurs -- c'est ce que verifie tests/plan-retard.spec.js. */
+.bloc--retard {
+    background-color: #b71c1c;
+    border-left-color: #7f0000;
+    border-color: #7f0000;
+}
+
+/* ===================================
+   Retards de plan (echeances ratees) -- tests/plan-retard.spec.js
+   =================================== */
+.plan-retard-badge {
+    display: none;
+    padding: 0.35rem 0.75rem;
+    border-radius: 999px;
+    background-color: #b71c1c;
+    color: #fff;
+    font-weight: 600;
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+
+.plan-retard-badge.show {
+    display: inline-flex;
+    align-items: center;
+}
+
+.retard-projet {
+    margin-bottom: 1.25rem;
+}
+
+.retard-projet-nom {
+    font-weight: 700;
+    font-size: 1.05rem;
+    margin-bottom: 0.5rem;
+    color: #b71c1c;
+}
+
+.retard-tache {
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 0.5rem;
+    border-left: 3px solid #b71c1c;
+    background-color: #fdecea;
+}
+
+.retard-tache-description {
+    font-weight: 600;
+}
+
+.retard-tache-echeance,
+.retard-tache-retard {
+    font-size: 0.9rem;
+    color: var(--secondary-color);
+}
+
+.retard-tache-heritage {
+    font-size: 0.85rem;
+    font-style: italic;
+    color: var(--secondary-color);
+}

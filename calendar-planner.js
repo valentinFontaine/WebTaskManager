@@ -139,6 +139,9 @@ function planEstPerime(donnees, maintenant = new Date()) {
  */
 function construireEvenementsPlan(donnees) {
     const evenements = [];
+    // `en_retard` (voir tests/plan-retard.spec.js) : uuids dont l'echeance
+    // n'a pas ete tenue, pour marquer leurs blocs `.bloc--retard`.
+    const enRetard = new Set(Array.isArray(donnees.en_retard) ? donnees.en_retard : []);
     Object.entries(donnees.taches).forEach(([uuid, tache]) => {
         const description = tache.description || '(tache sans description)';
         (tache.blocs || []).forEach(bloc => {
@@ -159,7 +162,10 @@ function construireEvenementsPlan(donnees) {
                 calendarId,
                 title: description,
                 isReadOnly,
-                raw: { uuid, regime, agrege: estJour, projet: tache.projet || null, indice: bloc.indice }
+                raw: {
+                    uuid, regime, agrege: estJour, projet: tache.projet || null,
+                    indice: bloc.indice, enRetard: enRetard.has(uuid)
+                }
             };
 
             if (regime === 'externe') {
@@ -199,6 +205,7 @@ function gabaritBlocPlan(event) {
     const raw = event.raw || {};
     const classes = ['bloc-plan', `bloc--${raw.regime || 'contraint'}`];
     if (raw.agrege) classes.push('bloc--jour');
+    if (raw.enRetard) classes.push('bloc--retard');
     const icone = raw.regime === 'opportuniste' ? '💡' : raw.regime === 'externe' ? '🏭' : '📌';
     return `<div class="${classes.join(' ')}">${icone} ${echapperHtml(event.title)}</div>`;
 }
@@ -247,6 +254,146 @@ async function chargerPlan() {
         console.warn('Impossible de charger le plan, calendrier sans plan:', e.message);
     } finally {
         mettreAJourEtatBoutonValider();
+        // Badge + contenu de la modale des retards : mis a jour a chaque
+        // lecture de plan, y compris au chargement de page (voir tests/
+        // plan-retard.spec.js, cas e). N'ouvre jamais la modale elle-meme.
+        mettreAJourRetard();
+    }
+}
+
+/**
+ * Retards de plan (echeances ratees) -- voir l'en-tete de
+ * tests/plan-retard.spec.js pour le contrat complet. Les donnees viennent de
+ * `plan.taches[uuid].limite` / `retard_minutes` / `limite_heritee_de` :
+ * jamais de `due`, qui est la fin du dernier bloc calcule par le solveur, pas
+ * l'echeance d'origine (piege documente dans le fichier de test).
+ */
+
+/** Vrai seulement quand la modale/le badge ont quelque chose de fiable a
+ * montrer : `en_retard` non vide, et le statut CP-SAT de la passe 1 pas rate
+ * (un plan infaisable ne garantit rien sur les retards qu'il rapporte). */
+function planARetardsAffichables(plan) {
+    return !!plan && Array.isArray(plan.en_retard) && plan.en_retard.length > 0
+        && !planStatutRate(plan);
+}
+
+/** "X j Y h" arrondi a l'heure ; en dessous d'un jour, "Y h" seule. */
+function formaterRetard(minutes) {
+    const heures = Math.round((minutes || 0) / 60);
+    const jours = Math.floor(heures / 24);
+    const resteHeures = heures - jours * 24;
+    return jours > 0 ? `${jours} j ${resteHeures} h` : `${resteHeures} h`;
+}
+
+/** Date+heure locale lisible, meme convention fr-FR que le reste de l'appli
+ * (voir calendar-planner.js:1525 et task-card.js pour les dates de tache). */
+function formaterEcheance(iso) {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleDateString('fr-FR') + ' '
+        + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+}
+
+/** Description d'une tache citee dans une mention d'heritage : d'abord dans
+ * le plan lui-meme (`plan.json` porte description/projet quand le backend
+ * est passe par `serialiser()`), puis dans les taches Taskwarrior connues
+ * (`allTasks`), sinon l'uuid court -- jamais rien laisser vide. */
+function descriptionTache(plan, uuid) {
+    const dansPlan = plan.taches && plan.taches[uuid];
+    if (dansPlan && dansPlan.description) return dansPlan.description;
+    const connue = allTasks.find(t => t.uuid === uuid);
+    if (connue && connue.description) return connue.description;
+    return uuid.slice(0, 8);
+}
+
+/** Groupes projet->taches, tries par plus grand retard_minutes d'abord. */
+function construireGroupesRetard(plan) {
+    const groupes = new Map();
+    plan.en_retard.forEach(uuid => {
+        const tache = plan.taches[uuid];
+        if (!tache) return;
+        const nomProjet = tache.projet || '(sans projet)';
+        if (!groupes.has(nomProjet)) {
+            groupes.set(nomProjet, { nom: nomProjet, retardMax: 0, taches: [] });
+        }
+        const groupe = groupes.get(nomProjet);
+        groupe.taches.push(tache);
+        groupe.retardMax = Math.max(groupe.retardMax, tache.retard_minutes || 0);
+    });
+    return Array.from(groupes.values()).sort((a, b) => b.retardMax - a.retardMax);
+}
+
+/** Reconstruit le contenu de la modale des retards. Chaque texte est pose par
+ * `textContent`, jamais `innerHTML` : une description hostile ne doit jamais
+ * s'interpreter comme balise (voir tests/plan-retard.spec.js, cas f). */
+function construireModaleRetard(plan) {
+    const corps = document.getElementById('plan-retard-body');
+    if (!corps) return;
+    corps.textContent = '';
+    construireGroupesRetard(plan).forEach(groupe => {
+        const divGroupe = document.createElement('div');
+        divGroupe.className = 'retard-projet';
+        const nom = document.createElement('div');
+        nom.className = 'retard-projet-nom';
+        nom.textContent = groupe.nom;
+        divGroupe.appendChild(nom);
+        groupe.taches.forEach(tache => {
+            const divTache = document.createElement('div');
+            divTache.className = 'retard-tache';
+
+            const description = document.createElement('div');
+            description.className = 'retard-tache-description';
+            description.textContent = tache.description || '(tache sans description)';
+            divTache.appendChild(description);
+
+            const echeance = document.createElement('div');
+            echeance.className = 'retard-tache-echeance';
+            echeance.textContent = formaterEcheance(tache.limite);
+            divTache.appendChild(echeance);
+
+            const retard = document.createElement('div');
+            retard.className = 'retard-tache-retard';
+            retard.textContent = formaterRetard(tache.retard_minutes);
+            divTache.appendChild(retard);
+
+            if (tache.limite_heritee_de) {
+                const heritage = document.createElement('div');
+                heritage.className = 'retard-tache-heritage';
+                heritage.textContent = '(échéance héritée de « '
+                    + descriptionTache(plan, tache.limite_heritee_de) + ' »)';
+                divTache.appendChild(heritage);
+            }
+
+            divGroupe.appendChild(divTache);
+        });
+        corps.appendChild(divGroupe);
+    });
+}
+
+function ouvrirModaleRetard() {
+    const modale = document.getElementById('plan-retard-modal');
+    if (modale) modale.classList.add('show');
+}
+
+function fermerModaleRetard() {
+    const modale = document.getElementById('plan-retard-modal');
+    if (modale) modale.classList.remove('show');
+}
+
+/** Met a jour le badge et le contenu de la modale d'apres `planCourant`.
+ * N'ouvre JAMAIS la modale elle-meme : l'ouverture automatique n'a lieu qu'a
+ * la fin d'un calcul (voir `interrogerEtatPlan`), pas a chaque relecture. */
+function mettreAJourRetard() {
+    const badge = document.getElementById('plan-retard-badge');
+    if (planARetardsAffichables(planCourant)) {
+        construireModaleRetard(planCourant);
+        if (badge) {
+            badge.textContent = `⚠ ${planCourant.en_retard.length} tâche(s) en retard`;
+            badge.classList.add('show');
+        }
+    } else {
+        fermerModaleRetard();
+        if (badge) badge.classList.remove('show');
     }
 }
 
@@ -324,6 +471,13 @@ async function interrogerEtatPlan() {
                     + planCourant.statut + ').');
             } else {
                 afficherEtatPlan('Calcul termine.');
+                // Ouverture automatique de la modale des retards : seulement
+                // a la fin d'un calcul reussi, jamais au simple chargement de
+                // page (voir mettreAJourRetard, appelee depuis chargerPlan,
+                // et tests/plan-retard.spec.js, cas a/e).
+                if (planARetardsAffichables(planCourant)) {
+                    ouvrirModaleRetard();
+                }
             }
             processTasksForCalendar();
         } else if (etat.statut === 'echec') {
@@ -721,6 +875,28 @@ function setupEventListeners() {
             validerPlan();
         });
     }
+
+    // Retards de plan : le badge rouvre la modale, le bouton Fermer et Echap
+    // la ferment (voir tests/plan-retard.spec.js, cas b/e).
+    const planRetardBadge = document.getElementById('plan-retard-badge');
+    if (planRetardBadge) {
+        planRetardBadge.addEventListener('click', () => {
+            ouvrirModaleRetard();
+        });
+    }
+    const planRetardFermerBtn = document.getElementById('plan-retard-fermer-btn');
+    if (planRetardFermerBtn) {
+        planRetardFermerBtn.addEventListener('click', () => {
+            fermerModaleRetard();
+        });
+    }
+    document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape') return;
+        const modale = document.getElementById('plan-retard-modal');
+        if (modale && modale.classList.contains('show')) {
+            fermerModaleRetard();
+        }
+    });
 
     // Filtres partages : le contexte et le statut filtrent cote serveur, donc
     // on recharge ; le projet et les tags filtrent cote client, un re-rendu

@@ -44,6 +44,10 @@
                 </button>
                 <span id="plan-etat"></span>
                 <span id="valider-compte-rendu"></span>
+                <!-- Badge des retards de plan (echeances ratees) : voir
+                     tests/plan-retard.spec.js. Toujours present dans le DOM,
+                     cache par CSS quand `en_retard` est vide. -->
+                <span id="plan-retard-badge" class="plan-retard-badge"></span>
             </div>
         </header>
 
@@ -123,6 +127,24 @@
                 <button id="modal-unschedule-btn" class="btn btn-warning">Déplanifier</button>
                 <button id="modal-done-btn" class="btn btn-success">Terminer</button>
                 <button id="modal-cancel-btn" class="btn btn-secondary">Fermer</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modale des retards de plan (echeances ratees) : voir
+         tests/plan-retard.spec.js pour le contrat complet. Toujours presente
+         dans le DOM, cachee par CSS (.modal sans .show) quand `en_retard`
+         est vide ou que le statut du solveur est rate. -->
+    <div id="plan-retard-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Toutes les échéances n'ont pas pu être respectées</h3>
+            </div>
+            <div class="modal-body" id="plan-retard-body">
+                <!-- Contenu dynamique -->
+            </div>
+            <div class="modal-footer">
+                <button id="plan-retard-fermer-btn" class="btn btn-secondary">Fermer</button>
             </div>
         </div>
     </div>
