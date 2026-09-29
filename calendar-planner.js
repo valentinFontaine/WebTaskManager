@@ -277,12 +277,17 @@ function planARetardsAffichables(plan) {
         && !planStatutRate(plan);
 }
 
-/** "X j Y h" arrondi a l'heure ; en dessous d'un jour, "Y h" seule. */
+/** Jamais d'arrondi vers le haut : "N min" sous 1 h, "X h [Y min]" sous 1 j,
+ * "X j Y h" au-dela (heures tronquees, minutes omises). */
 function formaterRetard(minutes) {
-    const heures = Math.round((minutes || 0) / 60);
-    const jours = Math.floor(heures / 24);
-    const resteHeures = heures - jours * 24;
-    return jours > 0 ? `${jours} j ${resteHeures} h` : `${resteHeures} h`;
+    const m = Math.max(0, Math.floor(minutes || 0));
+    if (m < 60) return `${m} min`;
+    if (m < 1440) {
+        const h = Math.floor(m / 60), r = m % 60;
+        return r > 0 ? `${h} h ${r} min` : `${h} h`;
+    }
+    const j = Math.floor(m / 1440);
+    return `${j} j ${Math.floor((m % 1440) / 60)} h`;
 }
 
 /** Date+heure locale lisible, meme convention fr-FR que le reste de l'appli

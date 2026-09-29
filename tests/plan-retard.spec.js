@@ -492,3 +492,58 @@ test.describe('h -- heritage de limite : mention de la tache dont vient l\'echea
     await expect(tacheSucc.locator('.retard-tache-heritage')).toHaveCount(0);
   });
 });
+
+// i -- formatage du retard : jamais gonfle (bug mesure : 30 min s'affichait
+// "1 h" car formaterRetard arrondissait au plus proche).
+// < 60 min -> "N min" ; sinon heures arrondies a l'inferieur ; minutes
+// restantes affichees si le retard fait moins d'un jour ; >= 1 jour ->
+// "X j Y h" (minutes omises).
+const UUID_FORMAT = 'aaaaaaaa-0000-4000-8000-000000000009';
+const CAS_FORMAT = [
+  [30, '30 min'],
+  [60, '1 h'],
+  [150, '2 h 30 min'],
+  [1440, '1 j 0 h'],
+  [6810, '4 j 17 h'],
+  [24270, '16 j 20 h'],
+];
+
+function planUneTacheEnRetard(retardMinutes) {
+  return {
+    version: 1, statut: 'FEASIBLE', retard_total: retardMinutes,
+    en_retard: [UUID_FORMAT],
+    t0: isoLocal(0, 0), granularite_minutes: 30,
+    taches: {
+      [UUID_FORMAT]: {
+        description: 'Tache format retard', projet: 'NPD.Orion.format',
+        debut: isoLocal(1, 11), fin: isoLocal(1, 11), due: isoLocal(1, 11),
+        limite: isoLocal(1, 9), retard_minutes: retardMinutes, limite_heritee_de: null,
+        blocs: [bloc(0, 1, 10, 11)],
+      },
+    },
+  };
+}
+
+test.describe('i -- format du retard : arrondi a l\'inferieur, jamais gonfle', () => {
+  for (const [minutes, attendu] of CAS_FORMAT) {
+    test(`retard_minutes=${minutes} -> "${attendu}"`, async ({ page }) => {
+      const tachesConnues = [{
+        uuid: UUID_FORMAT, description: 'Tache format retard', project: 'NPD.Orion.format',
+        due: isoTW(1, 9), scheduled: isoTW(1, 10), estTime: 'PT1H',
+      }];
+      await preparer(page, { plan: planUneTacheEnRetard(minutes), tachesConnues });
+      await page.goto('/calendar-planner.html');
+      await expect.poll(() => page.locator('.bloc-plan').count(), { timeout: 15000 })
+        .toBeGreaterThan(0);
+
+      await page.locator('#plan-retard-badge').click();
+      const modale = page.locator('#plan-retard-modal');
+      await expect(modale).toBeVisible();
+      const retard = modale.locator('.retard-tache-retard');
+      await expect(retard).toHaveCount(1);
+      // Texte exact (espaces normalises par Playwright) : un simple
+      // toContainText("1 h") laisserait passer "1 h 30 min" ou "11 h".
+      await expect(retard).toHaveText(attendu);
+    });
+  }
+});
