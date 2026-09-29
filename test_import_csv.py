@@ -55,6 +55,7 @@ ce meme fichier, skip si `task` est absent).
 import copy
 import csv
 import io
+import os
 import shutil
 import subprocess
 import tempfile
@@ -640,32 +641,59 @@ class TestIntegrationReelle:
         )
         return str(taskrc_path)
 
-    def _task(self, taskrc, *args):
+    def _env_isole(self, taskrc):
+        # Defaut d'instrument corrige ici : un TASKDATA herite de l'environnement
+        # du processus pytest l'emporte sur data.location du taskrc temporaire.
+        # On retire TASKDATA de l'env transmis au sous-processus, comme
+        # test_nuit3_figer.py le fait pour sa fixture `vraie_base`.
+        env = dict(os.environ)
+        env.pop("TASKDATA", None)
+        env["TASKRC"] = taskrc
+        env["TW_WEB"] = "1"
+        return env
+
+    def _task(self, taskrc, *args, env=None):
         return subprocess.run(
             ["task", "rc:" + taskrc, *args],
             capture_output=True, text=True, encoding="utf-8",
+            env=env,
         )
 
-    def _importer(self, taskrc, taches):
+    def _importer(self, taskrc, taches, env=None):
         with tempfile.NamedTemporaryFile(
             mode="w", suffix=".json", encoding="utf-8", delete=False
         ) as handle:
             import json
             json.dump(taches, handle, ensure_ascii=False)
             chemin = handle.name
-        resultat = self._task(taskrc, "import", chemin)
+        resultat = self._task(taskrc, "import", chemin, env=env)
         return resultat
 
     def test_import_puis_reimport_avec_modification_manuelle(self, taskrc):
         import json
 
+        env = self._env_isole(taskrc)
+
+        # Isolation VERIFIEE avant toute ecriture : si la base resolue n'est
+        # pas sous tmp_path (TASKDATA herite qui l'emporterait sur le taskrc),
+        # on s'arrete sans rien ecrire.
+        data_dir = os.path.dirname(taskrc) + os.sep + "data"
+        resolue = self._task(taskrc, "_get", "rc.data.location", env=env)
+        if data_dir.replace("\\", "/") not in resolue.stdout.replace("\\", "/"):
+            pytest.fail(
+                "isolation Taskwarrior non confirmee : rc.data.location resolu "
+                f"({resolue.stdout.strip()!r}) ne pointe pas sous tmp_path "
+                f"({data_dir!r}) -- TASKDATA herite de l'environnement pytest ? "
+                "aucune ecriture tentee."
+            )
+
         resultat = analyser(EXEMPLE_CSV, [])
         assert resultat.erreurs == []
 
-        proc = self._importer(taskrc, resultat.taches)
+        proc = self._importer(taskrc, resultat.taches, env=env)
         assert proc.returncode == 0, proc.stderr
 
-        export = self._task(taskrc, "export")
+        export = self._task(taskrc, "export", env=env)
         taches_exportees = json.loads(export.stdout)
         assert len(taches_exportees) == 5
         for t in taches_exportees:
@@ -683,23 +711,24 @@ class TestIntegrationReelle:
         mod = self._task(
             taskrc, "rc.confirmation=off", u_devis_uuid, "modify",
             "scheduled:2027-01-01", "+fige",
+            env=env,
         )
         assert mod.returncode == 0, mod.stderr
-        done = self._task(taskrc, "rc.confirmation=off", u_choix, "done")
+        done = self._task(taskrc, "rc.confirmation=off", u_choix, "done", env=env)
         assert done.returncode == 0, done.stderr
 
         # Reimport du meme CSV, description de "devis" changee.
         texte_modifie = EXEMPLE_CSV.replace(
             "Demander 3 devis", "Demander 3 devis (relance)"
         )
-        existantes_apres_maj = json.loads(self._task(taskrc, "export").stdout)
+        existantes_apres_maj = json.loads(self._task(taskrc, "export", env=env).stdout)
         resultat2 = analyser(texte_modifie, existantes_apres_maj)
         assert resultat2.erreurs == []
 
-        proc2 = self._importer(taskrc, resultat2.taches)
+        proc2 = self._importer(taskrc, resultat2.taches, env=env)
         assert proc2.returncode == 0, proc2.stderr
 
-        export2 = json.loads(self._task(taskrc, "export").stdout)
+        export2 = json.loads(self._task(taskrc, "export", env=env).stdout)
         assert len(export2) == 5  # pas de doublon
 
         devis_final = next(t for t in export2 if t["uuid"] == u_devis_uuid)

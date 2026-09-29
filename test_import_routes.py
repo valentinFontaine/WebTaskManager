@@ -323,18 +323,41 @@ class TestFusionTousStatutsReelle:
         )
         return str(taskrc_path)
 
-    def _task(self, taskrc, *args):
+    def _env_isole(self, taskrc):
+        # Defaut d'instrument corrige ici : un TASKDATA herite de l'environnement
+        # du processus pytest l'emporte sur data.location du taskrc temporaire.
+        # On retire TASKDATA de l'env transmis, comme test_nuit3_figer.py le fait
+        # pour sa fixture `vraie_base`.
+        env = dict(os.environ)
+        env.pop("TASKDATA", None)
+        env["TASKRC"] = taskrc
+        env["TW_WEB"] = "1"
+        return env
+
+    def _task(self, taskrc, *args, env=None):
         return subprocess.run(
             ["task", "rc:" + taskrc, *args],
             capture_output=True, text=True, encoding="utf-8",
+            env=env,
         )
 
     def test_done_et_delete_survivent_a_un_reimport_du_meme_csv(self, taskrc, monkeypatch):
         monkeypatch.setattr(main_fastapi, "DEVELOPER_MODE", False)
-        monkeypatch.setattr(
-            main_fastapi, "_TW_ENV",
-            {**os.environ, "TW_WEB": "1", "TASKRC": taskrc},
-        )
+        env = self._env_isole(taskrc)
+        monkeypatch.setattr(main_fastapi, "_TW_ENV", env)
+
+        # Isolation VERIFIEE avant toute ecriture : si la base resolue n'est
+        # pas sous tmp_path (TASKDATA herite qui l'emporterait sur le taskrc),
+        # on s'arrete sans rien ecrire.
+        data_dir = os.path.dirname(taskrc) + os.sep + "data"
+        resolue = self._task(taskrc, "_get", "rc.data.location", env=env)
+        if data_dir.replace("\\", "/") not in resolue.stdout.replace("\\", "/"):
+            pytest.fail(
+                "isolation Taskwarrior non confirmee : rc.data.location resolu "
+                f"({resolue.stdout.strip()!r}) ne pointe pas sous tmp_path "
+                f"({data_dir!r}) -- TASKDATA herite de l'environnement pytest ? "
+                "aucune ecriture tentee."
+            )
 
         premier = client.post("/api/import", json={"csv": EXEMPLE_CSV})
         assert premier.status_code == 200, premier.text
@@ -345,9 +368,9 @@ class TestFusionTousStatutsReelle:
         uuid_choix = _uuid_pour("NPD.Orion.achats", "choix")
         uuid_cde = _uuid_pour("NPD.Orion.commandes", "cde")
 
-        fait = self._task(taskrc, "rc.confirmation=off", uuid_choix, "done")
+        fait = self._task(taskrc, "rc.confirmation=off", uuid_choix, "done", env=env)
         assert fait.returncode == 0, fait.stderr
-        supprime = self._task(taskrc, "rc.confirmation=off", uuid_cde, "delete")
+        supprime = self._task(taskrc, "rc.confirmation=off", uuid_cde, "delete", env=env)
         assert supprime.returncode == 0, supprime.stderr
 
         second = client.post("/api/import", json={"csv": EXEMPLE_CSV})
@@ -356,7 +379,7 @@ class TestFusionTousStatutsReelle:
         assert corps2["creees"] == 0, corps2
         assert corps2["mises_a_jour"] == 5, corps2
 
-        export = json.loads(self._task(taskrc, "export").stdout)
+        export = json.loads(self._task(taskrc, "export", env=env).stdout)
         choix_final = next(t for t in export if t["uuid"] == uuid_choix)
         cde_final = next(t for t in export if t["uuid"] == uuid_cde)
         assert choix_final["status"] == "completed", choix_final
