@@ -23,15 +23,27 @@ porter de nouvelles fonctionnalités.
 
 ## 2. Topologie des environnements
 
-Le déploiement n'est pas un serveur : c'est un téléphone Android sous Termux qui joue le rôle
-de serveur, accessible depuis le PC de travail par un port-forward adb.
+> **Changement du 2026-09-29 : la prod est sur le PC Windows.** Le téléphone est cassé ; le PC
+> sert désormais l'usage quotidien, sur la base `C:\Users\irpaui\taskwarrior-prod`
+> (`taskrc` + `data/`). Ce PC détient donc de **vraies données** : c'est la base à ne jamais
+> toucher depuis ici, au même titre que `~/.task` sur le téléphone.
+>
+> **Cible, une fois le téléphone réparé :** une prod en **binôme** — la prod du PC et une prod
+> remise sur le téléphone, qui partagent la même base synchronisée par **Syncthing**. Voir
+> « Pièges de cette topologie » pour les préalables avant de reconnecter les deux.
+
+Historiquement, le déploiement n'était pas un serveur : c'était un téléphone Android sous
+Termux qui jouait le rôle de serveur, accessible depuis le PC de travail par un port-forward
+adb. Cette description reste valable pour le téléphone quand il reviendra.
 
 | Env | Machine | Taskwarrior | Données | Rôle |
 |---|---|---|---|---|
 | **dev-pc** | PC Windows | 3.5.0.6 (fork wilt00, *nightly*) | `C:\Users\irpaui\taskwarrior-dev` | itération et tests réels |
-| **dev-tel** | Termux | 3.5.0 | base de dev dédiée | dev ponctuel depuis le téléphone |
-| **staging** | Termux | 3.5.0 | `~/.task-staging` | validation avant prod |
-| **prod** | Termux | 3.5.0 | `~/.task` (Syncthing) | usage quotidien réel |
+| **test-pc** | PC Windows | idem | `C:\Users\irpaui\taskwarrior-test` | base rechargée par le planificateur (`outils/recharger-base-test.py`) |
+| **prod-pc** | PC Windows | idem | `C:\Users\irpaui\taskwarrior-prod` | **usage quotidien réel depuis le 2026-09-29** |
+| **dev-tel** | Termux | 3.5.0 | base de dev dédiée | dev ponctuel depuis le téléphone (en panne) |
+| **staging** | Termux | 3.5.0 | `~/.task-staging` | validation avant prod (en panne) |
+| **prod-tel** | Termux | 3.5.0 | `~/.task` (Syncthing) | suspendue ; reviendra en binôme avec prod-pc |
 
 Le code circule par **git**. Les données circulent par **Syncthing**, sur un canal séparé —
 elles ne passent jamais par le dépôt.
@@ -65,11 +77,27 @@ Autres faits constatés le 2026-09-21, à ne pas redécouvrir :
 
 ### Pièges de cette topologie
 
-- **Trois machines partagent la base de prod par Syncthing** : le téléphone (Termux), le PC
-  perso (Arch Linux) et, à terme seulement, le PC de travail. Le PC Windows **ne détient
-  aujourd'hui aucune donnée de prod** : il ne sert que de base de dev isolée. Tant que c'est
-  le cas, son écart de build est sans conséquence sur les vraies données. Faire entrer le PC
-  Windows dans le cercle Syncthing est un changement à instruire, pas à improviser.
+- **Le PC Windows détient la prod depuis le 2026-09-29** (`C:\Users\irpaui\taskwarrior-prod`).
+  Jusque-là il ne servait que de base de dev isolée ; ce n'est plus vrai. Conséquences :
+  - un test, un seed ou une commande exploratoire lancés sans `TASKRC` jetable peuvent
+    tomber sur la prod **locale**, pas seulement sur celle du téléphone ;
+  - le serveur de prod du PC peut tourner pendant qu'on développe : ne jamais tuer un
+    processus qu'on n'a pas lancé (jamais `taskkill /IM python.exe`), et ne pas lancer un
+    serveur de test sur le port qu'il occupe. Le refus du port 1875 dans
+    `playwright.config.js` protège le téléphone, **pas** le PC.
+- **Binôme PC ↔ téléphone par Syncthing, à la réparation du téléphone.** Faire entrer
+  `taskwarrior-prod/data` dans le cercle Syncthing est un changement à instruire, pas à
+  improviser. Préalables :
+  - **aligner les binaires** : le PC tourne sur le fork wilt00 `3.5.0.6` (*nightly*), le
+    téléphone sur l'amont `3.5.0`. Même numéro affiché, pas le même binaire : vérifier sur une
+    **copie** que chacun relit la base écrite par l'autre avant de synchroniser la vraie ;
+  - suivre l'ordre de mise à jour ci-dessous (pause, sauvegarde, tous les pairs, reprise) ;
+  - le `data/` actuel contient déjà trois `taskchampion.sync-conflict-*.sqlite3` (2025) :
+    Syncthing ne fusionne pas une base SQLite, il la double. Deux prods qui écrivent en même
+    temps produiront de nouveaux conflits, et l'un des deux côtés sera perdu à la résolution.
+  - Constaté le 2026-09-29 : Syncthing ne tourne pas sur le PC.
+  - Le PC perso (Arch Linux), cité jusqu'ici comme troisième pair : sa place dans le binôme
+    reste à préciser.
 - **Ne jamais mettre à jour un seul pair Syncthing.** Un binaire plus récent migre le schéma
   SQLite au premier écrit et rend la base illisible par les pairs restés en arrière ; Syncthing
   réplique le fichier migré sans comprendre son contenu, et il n'y a pas de retour arrière
@@ -95,6 +123,12 @@ explicitement positionné sur une base jetable.**
 # PC
 $env:TASKRC = 'C:/Users/irpaui/taskwarrior-dev/taskrc'
 ```
+
+Sur le PC, **`C:/Users/irpaui/taskwarrior-prod` est la vraie base** : aucun test, aucun seed,
+aucune commande exploratoire ne la vise, pas même en lecture. Bases jetables : `taskwarrior-dev`,
+`taskwarrior-test`, ou un répertoire temporaire. Attention : `TASKDATA` hérité l'emporte sur le
+`data.location` du taskrc ; vérifier la base effective avec
+`task rc:<taskrc> _get rc.data.location`.
 
 ```bash
 # Termux, staging
