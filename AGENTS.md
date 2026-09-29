@@ -28,9 +28,11 @@ porter de nouvelles fonctionnalités.
 > (`taskrc` + `data/`). Ce PC détient donc de **vraies données** : c'est la base à ne jamais
 > toucher depuis ici, au même titre que `~/.task` sur le téléphone.
 >
-> **Cible, une fois le téléphone réparé :** une prod en **binôme** — la prod du PC et une prod
-> remise sur le téléphone, qui partagent la même base synchronisée par **Syncthing**. Voir
-> « Pièges de cette topologie » pour les préalables avant de reconnecter les deux.
+> **La prod, ce sont trois pairs sur une même base synchronisée par Syncthing** : ce PC
+> Windows, le PC perso (Arch Linux) et, une fois réparé, le téléphone. L'utilisateur lance
+> l'application **sur la machine où il travaille** : il n'y a pas de serveur central, chaque
+> pair sert sa propre copie de la base. Voir « Pièges de cette topologie » pour les préalables
+> avant de reconnecter le téléphone.
 
 Historiquement, le déploiement n'était pas un serveur : c'était un téléphone Android sous
 Termux qui jouait le rôle de serveur, accessible depuis le PC de travail par un port-forward
@@ -41,9 +43,10 @@ adb. Cette description reste valable pour le téléphone quand il reviendra.
 | **dev-pc** | PC Windows | 3.5.0.6 (fork wilt00, *nightly*) | `C:\Users\irpaui\taskwarrior-dev` | itération et tests réels |
 | **test-pc** | PC Windows | idem | `C:\Users\irpaui\taskwarrior-test` | base rechargée par le planificateur (`outils/recharger-base-test.py`) |
 | **prod-pc** | PC Windows | idem | `C:\Users\irpaui\taskwarrior-prod` | **usage quotidien réel depuis le 2026-09-29** |
+| **prod-arch** | PC perso Arch Linux | à relever | à relever | usage quotidien réel, pair Syncthing |
 | **dev-tel** | Termux | 3.5.0 | base de dev dédiée | dev ponctuel depuis le téléphone (en panne) |
 | **staging** | Termux | 3.5.0 | `~/.task-staging` | validation avant prod (en panne) |
-| **prod-tel** | Termux | 3.5.0 | `~/.task` (Syncthing) | suspendue ; reviendra en binôme avec prod-pc |
+| **prod-tel** | Termux | 3.5.0 | `~/.task` (Syncthing) | suspendue ; reviendra comme troisième pair |
 
 Le code circule par **git**. Les données circulent par **Syncthing**, sur un canal séparé —
 elles ne passent jamais par le dépôt.
@@ -85,19 +88,21 @@ Autres faits constatés le 2026-09-21, à ne pas redécouvrir :
     processus qu'on n'a pas lancé (jamais `taskkill /IM python.exe`), et ne pas lancer un
     serveur de test sur le port qu'il occupe. Le refus du port 1875 dans
     `playwright.config.js` protège le téléphone, **pas** le PC.
-- **Binôme PC ↔ téléphone par Syncthing, à la réparation du téléphone.** Faire entrer
+- **Trois pairs de prod par Syncthing : PC Windows, PC Arch, téléphone à sa réparation.**
+  L'application se lance sur la machine où l'on travaille. Faire entrer (ou revenir)
   `taskwarrior-prod/data` dans le cercle Syncthing est un changement à instruire, pas à
   improviser. Préalables :
-  - **aligner les binaires** : le PC tourne sur le fork wilt00 `3.5.0.6` (*nightly*), le
-    téléphone sur l'amont `3.5.0`. Même numéro affiché, pas le même binaire : vérifier sur une
-    **copie** que chacun relit la base écrite par l'autre avant de synchroniser la vraie ;
+  - **aligner les binaires des trois pairs** : le PC Windows tourne sur le fork wilt00
+    `3.5.0.6` (*nightly*), le téléphone sur l'amont `3.5.0`, la version du PC Arch reste à
+    relever. Même numéro affiché, pas le même binaire : vérifier sur une **copie** que chacun
+    relit la base écrite par les autres avant de synchroniser la vraie ;
   - suivre l'ordre de mise à jour ci-dessous (pause, sauvegarde, tous les pairs, reprise) ;
   - le `data/` actuel contient déjà trois `taskchampion.sync-conflict-*.sqlite3` (2025) :
-    Syncthing ne fusionne pas une base SQLite, il la double. Deux prods qui écrivent en même
-    temps produiront de nouveaux conflits, et l'un des deux côtés sera perdu à la résolution.
+    Syncthing ne fusionne pas une base SQLite, il la double. Deux pairs qui écrivent sans
+    s'être synchronisés produiront de nouveaux conflits, et l'un des côtés sera perdu à la
+    résolution : avant de travailler sur une machine, laisser Syncthing finir de la mettre à
+    jour.
   - Constaté le 2026-09-29 : Syncthing ne tourne pas sur le PC.
-  - Le PC perso (Arch Linux), cité jusqu'ici comme troisième pair : sa place dans le binôme
-    reste à préciser.
 - **Ne jamais mettre à jour un seul pair Syncthing.** Un binaire plus récent migre le schéma
   SQLite au premier écrit et rend la base illisible par les pairs restés en arrière ; Syncthing
   réplique le fichier migré sans comprendre son contenu, et il n'y a pas de retour arrière
