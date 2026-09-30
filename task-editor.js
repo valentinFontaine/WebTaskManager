@@ -483,6 +483,10 @@ class TaskEditor {
         if (preparedData.duration) {
             preparedData.estTime = preparedData.duration;
             delete preparedData.duration;
+        } else if (isEdit) {
+            // Duree videe : chaine vide = effacer l'UDA (comme project/priority).
+            preparedData.estTime = '';
+            delete preparedData.duration;
         }
         
         return preparedData;

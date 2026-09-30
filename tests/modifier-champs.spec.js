@@ -157,6 +157,34 @@ test.describe('Edition de chaque champ depuis la page principale', () => {
     expect((await relire(request, d)).due).toBeUndefined();
   });
 
+  test('planification : effacement', async ({ page, request }) => {
+    const d = `Champ planif vide ${Date.now()}`;
+    await creer(request, d, { scheduled: '2030-05-07T14:00:00' });
+    await ouvrirEditeur(page, d);
+    await page.fill('#task-editor-scheduled', '');
+    await enregistrer(page);
+    expect((await relire(request, d)).scheduled).toBeUndefined();
+  });
+
+  test('duree : effacement', async ({ page, request }) => {
+    const d = `Champ duree vide ${Date.now()}`;
+    await creer(request, d, { estTime: '90min' });
+    await ouvrirEditeur(page, d);
+    await expect(page.locator('#task-editor-duration')).not.toHaveValue('');
+    await page.fill('#task-editor-duration', '');
+    await enregistrer(page);
+    expect((await relire(request, d)).estTime).toBeUndefined();
+  });
+
+  test('tags : effacement de tous les tags', async ({ page, request }) => {
+    const d = `Champ tags vides ${Date.now()}`;
+    await creer(request, d);
+    await ouvrirEditeur(page, d);
+    await page.fill('#task-editor-tags', '');
+    await enregistrer(page);
+    expect((await relire(request, d)).tags ?? []).toEqual([]);
+  });
+
   test('tous les champs a la fois', async ({ page, request }) => {
     const avant = `Champ tous ${Date.now()}`;
     const apres = `${avant} complet`;

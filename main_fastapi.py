@@ -914,8 +914,9 @@ async def modify_task(task_id: str, task_data: TaskModify):
         else:
             modifications.append('project:')
             
-    if task_data.estTime is not None and task_data.estTime:
-        modifications.append(f'estTime:{task_data.estTime}')
+    if task_data.estTime is not None:
+        # Une chaine vide efface l'UDA, comme pour project et priority.
+        modifications.append(f'estTime:{task_data.estTime}' if task_data.estTime else 'estTime:')
 
     if task_data.state is not None:
         # Une chaine vide efface l'UDA, comme pour project et priority.
