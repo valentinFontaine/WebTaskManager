@@ -37,7 +37,7 @@ _TW_ENV = {**os.environ, 'TW_WEB': '1'}
 def log_command(command):
     """Log the command to the debug file with a timestamp"""
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    with open(DEBUG_FILE, 'a') as f:
+    with open(DEBUG_FILE, 'a', encoding='utf-8') as f:
         f.write(f"[{timestamp}] {command}\n")
 
 
