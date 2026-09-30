@@ -463,18 +463,20 @@ class TaskEditor {
         const preparedData = {
             description: taskData.description,
             tags: taskData.tags || [],
-            project: taskData.project || null,
-            priority: taskData.priority || null,
+            // En edition, un champ vide doit etre envoye en chaine vide : c'est
+            // ce que le backend lit comme « effacer » ; null signifie « ne pas toucher ».
+            project: taskData.project || (isEdit ? '' : null),
+            priority: taskData.priority || (isEdit ? '' : null),
             duration: taskData.duration || null
         };
         
         // Formater les dates si elles existent dans taskData (même si vides)
         // Utiliser 'in' pour détecter les champs intentionnellement vidés
         if ('due' in taskData) {
-            preparedData.due = taskData.due ? this.formatDateForTask(taskData.due) : null;
+            preparedData.due = taskData.due ? this.formatDateForTask(taskData.due) : (isEdit ? '' : null);
         }
         if ('scheduled' in taskData) {
-            preparedData.scheduled = taskData.scheduled ? this.formatDateForTask(taskData.scheduled) : null;
+            preparedData.scheduled = taskData.scheduled ? this.formatDateForTask(taskData.scheduled) : (isEdit ? '' : null);
         }
         
         // Pour la modification, utiliser 'est' au lieu de 'duration'
