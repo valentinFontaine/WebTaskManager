@@ -3,6 +3,19 @@
 Instructions opérationnelles pour un agent travaillant sur ce dépôt.
 À lire avant toute modification. Complète `PROJECT_MEMORY.md` (voir l'avertissement en fin de fichier).
 
+## À ne pas découvrir en cours de route
+
+- **Jamais de commande Taskwarrior (`task`, tests, seed, exploration) sans `TASKRC` ou `TASKDATA`
+  sur une base jetable** (`taskwarrior-dev`, `taskwarrior-test`, répertoire temporaire). Le
+  backend écrit dans les vraies tâches. Voir §3.
+- **Depuis le 2026-09-29, ce PC est un pair de prod** : `C:/Users/irpaui/taskwarrior-prod`, base
+  synchronisée par Syncthing (PC Windows, PC Arch, téléphone une fois réparé). Ne jamais la lire
+  ni la viser. Voir §2.
+- **Ne jamais tuer un processus qu'on n'a pas lancé** (pas de `taskkill /IM python.exe`), ni
+  lancer un serveur de test sur le port occupé par la prod.
+- `README.md` et `PROJECT_MEMORY.md` sont **périmés** (ils décrivent Flask sur :5000) ; le backend
+  actuel est **FastAPI sur :8000**. Voir §8.
+
 ---
 
 ## 1. Ce qu'est ce projet
@@ -23,99 +36,17 @@ porter de nouvelles fonctionnalités.
 
 ## 2. Topologie des environnements
 
-> **Changement du 2026-09-29 : la prod est sur le PC Windows.** Le téléphone est cassé ; le PC
-> sert désormais l'usage quotidien, sur la base `C:\Users\irpaui\taskwarrior-prod`
-> (`taskrc` + `data/`). Ce PC détient donc de **vraies données** : c'est la base à ne jamais
-> toucher depuis ici, au même titre que `~/.task` sur le téléphone.
->
-> **La prod, ce sont trois pairs sur une même base synchronisée par Syncthing** : ce PC
-> Windows, le PC perso (Arch Linux) et, une fois réparé, le téléphone. L'utilisateur lance
-> l'application **sur la machine où il travaille** : il n'y a pas de serveur central, chaque
-> pair sert sa propre copie de la base. Voir « Pièges de cette topologie » pour les préalables
-> avant de reconnecter le téléphone.
+- **prod-pc** = `C:/Users/irpaui/taskwarrior-prod`, usage quotidien réel depuis le 2026-09-29 : ne jamais y toucher.
+  La prod est une base Syncthing à trois pairs (PC Windows, PC Arch, téléphone à sa réparation).
+- Bases jetables sur ce PC : **dev-pc** `taskwarrior-dev`, **test-pc** `taskwarrior-test` (rechargée par
+  `outils/recharger-base-test.py`).
+- Le PC tourne sur le fork wilt00 `3.5.0.6` (*nightly*), pas sur l'amont `3.5.0` du téléphone : un test vert
+  ici ne prouve rien sur le binaire de prod.
+- Le code circule par git, les données par Syncthing (jamais par le dépôt). Le serveur de prod du PC peut
+  tourner pendant qu'on développe.
 
-Historiquement, le déploiement n'était pas un serveur : c'était un téléphone Android sous
-Termux qui jouait le rôle de serveur, accessible depuis le PC de travail par un port-forward
-adb. Cette description reste valable pour le téléphone quand il reviendra.
-
-| Env | Machine | Taskwarrior | Données | Rôle |
-|---|---|---|---|---|
-| **dev-pc** | PC Windows | 3.5.0.6 (fork wilt00, *nightly*) | `C:\Users\irpaui\taskwarrior-dev` | itération et tests réels |
-| **test-pc** | PC Windows | idem | `C:\Users\irpaui\taskwarrior-test` | base rechargée par le planificateur (`outils/recharger-base-test.py`) |
-| **prod-pc** | PC Windows | idem | `C:\Users\irpaui\taskwarrior-prod` | **usage quotidien réel depuis le 2026-09-29** |
-| **prod-arch** | PC perso Arch Linux | à relever | à relever | usage quotidien réel, pair Syncthing |
-| **dev-tel** | Termux | 3.5.0 | base de dev dédiée | dev ponctuel depuis le téléphone (en panne) |
-| **staging** | Termux | 3.5.0 | `~/.task-staging` | validation avant prod (en panne) |
-| **prod-tel** | Termux | 3.5.0 | `~/.task` (Syncthing) | suspendue ; reviendra comme troisième pair |
-
-Le code circule par **git**. Les données circulent par **Syncthing**, sur un canal séparé —
-elles ne passent jamais par le dépôt.
-
-### Chemins réels sur le téléphone — vérifiés le 2026-09-21
-
-Le tableau ci-dessus décrit une **cible**. L'état effectif en diffère, et c'est important :
-
-| | Chemin réel | État |
-|---|---|---|
-| clone de prod | `~/phone-sync-projects/WebTaskManager` | existe, sert la prod sur le port 1875 |
-| clone de staging | `~/phone-sync-projects/WebTaskManager-staging` | **n'existe pas encore** — créé par `seed-staging.sh` |
-| taskrc de staging | `~/taskwarrior-staging/taskrc` | existe, UDA complets |
-| données de staging | `~/.task-staging` | existe |
-| données de prod | `~/.task` | **ne jamais y toucher** |
-
-**Il n'y a à ce jour qu'un seul clone sur le téléphone, et c'est celui de la prod.** La
-séparation staging/prod est une cible, pas l'état courant : tant que `seed-staging.sh` n'a
-pas tourné, valider et déployer se feraient au même endroit, ce qui vide l'étage staging de
-son sens.
-
-Autres faits constatés le 2026-09-21, à ne pas redécouvrir :
-
-- `rsync` et `jq` sont **absents** de Termux. `python`, `node`, `npm`, `git`, `curl` sont là.
-- Le remote est en **SSH** côté téléphone, en **HTTPS** côté PC.
-- Aucun service ni `~/.termux/boot` : le lancement de l'application est **manuel**.
-- Les port-forwards adb (`tcp:8022` pour ssh, `tcp:1875` pour la prod) **sautent** à chaque
-  reconnexion du téléphone ou redémarrage du serveur adb. Un téléphone qui semble injoignable
-  est le plus souvent un forward tombé : `adb devices`, `adb forward --list`, puis les
-  remonter.
-
-### Pièges de cette topologie
-
-- **Le PC Windows détient la prod depuis le 2026-09-29** (`C:\Users\irpaui\taskwarrior-prod`).
-  Jusque-là il ne servait que de base de dev isolée ; ce n'est plus vrai. Conséquences :
-  - un test, un seed ou une commande exploratoire lancés sans `TASKRC` jetable peuvent
-    tomber sur la prod **locale**, pas seulement sur celle du téléphone ;
-  - le serveur de prod du PC peut tourner pendant qu'on développe : ne jamais tuer un
-    processus qu'on n'a pas lancé (jamais `taskkill /IM python.exe`), et ne pas lancer un
-    serveur de test sur le port qu'il occupe. Le refus du port 1875 dans
-    `playwright.config.js` protège le téléphone, **pas** le PC.
-- **Trois pairs de prod par Syncthing : PC Windows, PC Arch, téléphone à sa réparation.**
-  L'application se lance sur la machine où l'on travaille. Faire entrer (ou revenir)
-  `taskwarrior-prod/data` dans le cercle Syncthing est un changement à instruire, pas à
-  improviser. Préalables :
-  - **aligner les binaires des trois pairs** : le PC Windows tourne sur le fork wilt00
-    `3.5.0.6` (*nightly*), le téléphone sur l'amont `3.5.0`, la version du PC Arch reste à
-    relever. Même numéro affiché, pas le même binaire : vérifier sur une **copie** que chacun
-    relit la base écrite par les autres avant de synchroniser la vraie ;
-  - suivre l'ordre de mise à jour ci-dessous (pause, sauvegarde, tous les pairs, reprise) ;
-  - le `data/` actuel contient déjà trois `taskchampion.sync-conflict-*.sqlite3` (2025) :
-    Syncthing ne fusionne pas une base SQLite, il la double. Deux pairs qui écrivent sans
-    s'être synchronisés produiront de nouveaux conflits, et l'un des côtés sera perdu à la
-    résolution : avant de travailler sur une machine, laisser Syncthing finir de la mettre à
-    jour.
-  - Constaté le 2026-09-29 : Syncthing ne tourne pas sur le PC.
-- **Ne jamais mettre à jour un seul pair Syncthing.** Un binaire plus récent migre le schéma
-  SQLite au premier écrit et rend la base illisible par les pairs restés en arrière ; Syncthing
-  réplique le fichier migré sans comprendre son contenu, et il n'y a pas de retour arrière
-  automatique. L'ordre est : pause de Syncthing, sauvegarde (`task export` **et** copie du
-  répertoire), mise à jour de toutes les machines, puis reprise.
-- **Le PC tourne sur le fork wilt00, qui se déclare *nightly build*** et numérote à quatre
-  chiffres (`3.5.0.6`). Même aligné sur l'amont `3.5.0`, ce n'est pas le même binaire : un test
-  vert sur le PC ne prouve rien sur le comportement en prod. C'est la raison d'être de l'étage
-  staging. Vérifié le 2026-09-19.
-- **Le PC n'a ni `node_modules` ni `venv`** dans certaines copies (exclus des transferts).
-  Vérifier avant de supposer qu'une commande npm/pytest est exécutable.
-- `pull.ps1` (transfert de fichiers depuis le téléphone) exclut `.git` : une copie obtenue
-  ainsi n'est pas un clone et n'a pas d'historique. Travailler sur un vrai `git clone`.
+Détail : docs/topologie-environnements.md — à lire seulement si on touche à Syncthing, aux chemins du
+téléphone, ou si l'on prépare l'entrée d'un pair dans le cercle de prod.
 
 ---
 
@@ -309,84 +240,14 @@ Sans ces UDA, les requêtes de `twplanner.py` échouent ou renvoient des résult
 
 ## 7. Déployer sur le téléphone
 
-Deux scripts, à exécuter **sur le téléphone** sous Termux. Ils remplacent une procédure écrite
-qui dépendait de la vigilance humaine à chaque passage — le mode de défaillance que le garde-fou
-`TASKRC` élimine côté tests.
+- Deux scripts, à exécuter **sur le téléphone** sous Termux : `seed-staging.sh` (bootstrap du staging, une
+  fois) et `deploy.sh` (valide sur staging :8765 puis avance la prod :1875).
+- `deploy.sh` refuse de tourner si Syncthing tourne, si le clone de staging manque ou s'il est sale.
+- Playwright ne tourne pas sur Termux : le staging valide le binaire Taskwarrior amont, pas le navigateur.
+- Rien de tout cela ne s'exécute depuis le PC.
 
-| Script | Rôle | Fréquence |
-|---|---|---|
-| `seed-staging.sh` | bootstrap : crée le clone de staging, son venv, son taskrc, et sème un jeu de tâches | une fois, puis à chaque évolution du jeu de seed |
-| `deploy.sh` | valide sur staging, puis avance la prod si tout est vert | à chaque déploiement |
-
-```bash
-./seed-staging.sh          # bootstrap
-./deploy.sh --dry-run      # tout sauf l'étape prod
-./deploy.sh                # pipeline complet
-```
-
-### Pourquoi deux scripts et pas un
-
-`deploy.sh` **refuse de tourner** si le clone de staging est absent, et renvoie vers
-`seed-staging.sh`. Un `git clone` est un bootstrap unique, dépendant du réseau, qui peut échouer
-à moitié ; l'intégrer à `deploy.sh` ferait que le tout premier passage — celui qui compte le
-plus — emprunterait un chemin qu'aucun passage suivant n'emprunte jamais.
-
-### Ce que valide réellement l'étage staging
-
-**Playwright ne peut pas tourner sur Termux.** Ce n'est pas une question d'installation :
-`playwright-core` lève `Error: Unsupported platform: android` avant même de chercher un
-navigateur, et il n'y a pas de chromium système. Vérifié le 2026-09-21.
-
-L'étage staging valide donc ce que lui seul peut valider — **le binaire Taskwarrior 3.5.0 amont
-à travers la vraie API** — et non la couche navigateur, qui est identique sur PC et téléphone et
-reste couverte par l'étage dev-pc. Concrètement, `deploy.sh` enchaîne :
-
-1. refus si Syncthing tourne ;
-2. refus si le clone de staging manque, ou si son arbre de travail est sale ;
-3. mise à jour du clone de staging sur `master` ;
-4. `pytest` (mocké) dans le venv de staging ;
-5. un uvicorn de staging sur **:8765** avec `TASKRC` sur `~/taskwarrior-staging/taskrc`, puis
-   `tools/staging-smoke.py` — appels HTTP réels contre la base de staging, y compris une
-   description accentuée relue après écriture et un `estTime` invalide qui doit être refusé
-   proprement plutôt que de produire un 500. Le serveur est arrêté par un `trap`, y compris en
-   cas d'échec ;
-6. seulement si tout est vert : `git pull` dans le clone de prod, redémarrage sur **:1875**,
-   et vérification que la prod répond.
-
-Pour lancer Playwright contre ce serveur de staging depuis le PC :
-
-```bash
-adb forward tcp:8765 tcp:8765
-PW_NO_SERVER=1 PW_BASE_URL=http://localhost:8765 npm test
-```
-
-### Pièges du téléphone, vérifiés le 2026-09-21
-
-- **Pas de credential GitHub utilisable sans interaction.** `~/.ssh/id_ed25519` est protégé par
-  une phrase de passe et aucun agent ne tourne : `git clone git@github.com:…` échoue en
-  `Permission denied (publickey)`. Le dépôt étant public et le déploiement en **lecture seule**,
-  les deux scripts passent par l'URL **HTTPS anonyme** (`WTM_REPO_URL` pour la surcharger), avec
-  `GIT_TERMINAL_PROMPT=0` pour qu'aucune invite ne puisse les bloquer. Si le dépôt devient privé,
-  il faudra un credential non interactif.
-- **`rc.confirmation=off` ne suffit pas pour une modification en lot.** Taskwarrior redemande
-  alors tâche par tâche, ne lit rien sur une entrée non interactive, et annonce
-  « Deleted 0 tasks » avec un code de retour **nul**. `rc.bulk=0` est obligatoire — sans lui, la
-  purge de `seed-staging.sh` ne purgeait rien et le script accumulait des doublons à chaque
-  passage.
-- **`pgrep -x` ne suffit pas à détecter Syncthing.** Vérifié le 2026-09-21 : un processus dont
-  `/proc/<pid>/comm` vaut exactement `syncthing` n'est trouvé ni par `pgrep -x syncthing` ni par
-  `pgrep syncthing`, alors que `pidof syncthing` et `pgrep -f syncthing` le trouvent tous les
-  deux — et que `pgrep -x bash` ou `pgrep -x sleep` fonctionnent normalement sur la même machine.
-  La cause n'est pas établie. Les deux scripts combinent donc `pidof`, `pgrep -x` et
-  `pgrep -f '[s]yncthing'` : on ne fait pas reposer la protection des données de prod sur une
-  seule commande dont on a constaté qu'elle pouvait manquer sa cible.
-
-- **`pydantic-core` n'a pas de roue pour Android/aarch64** : pip le compile, et maturin s'arrête
-  sur « Failed to determine Android API level ». D'où `ANDROID_API_LEVEL=24` posé par
-  `seed-staging.sh`. La compilation est longue.
-- **Fins de ligne.** `core.autocrlf=true` sur le PC : les copies sur disque ont des CR, les blobs
-  git sont propres. `.gitattributes` fixe `*.sh text eol=lf` pour que la garantie ne dépende plus
-  de la configuration git locale — un `.sh` en CRLF échoue sous Termux en `bad interpreter`.
+Détail : docs/deploiement-telephone.md — à lire seulement si on modifie `deploy.sh` / `seed-staging.sh`
+ou si l'on diagnostique un déploiement sur le téléphone.
 
 ---
 
@@ -402,51 +263,21 @@ présent fichier, **AGENTS.md fait foi**.
 
 ## 9. Historique des décisions
 
-### 2026-09-18 — Taskwarrior natif sur le PC de travail
+- 2026-09-18 : Taskwarrior natif sur le PC (fork wilt00 via Scoop), réécriture d'un backend Windows abandonnée.
+- 2026-09-18 : modèle deux clones git + Syncthing pour les données ; `pull.ps1` abandonné.
+- Reste à faire : lancer `seed-staging.sh` sur le téléphone (le clone de staging n'existe pas encore).
 
-Le problème : l'app ne tournait que sur le téléphone, donc impossible de coder et tester sur le
-PC (pas de droits admin, pas de WSL). Deux options avaient été envisagées — réécrire un backend
-Windows imitant Taskwarrior, ou pousser le code vers le téléphone à chaque itération.
+Détail : docs/decisions.md — à lire seulement avant de proposer une refonte de l'architecture de
+déploiement ou de revenir sur le choix du fork natif.
 
-Résolu par l'installation de **Taskwarrior 3.5.0 natif sur Windows** :
-fork [wilt00/taskwarrior](https://github.com/wilt00/taskwarrior), via Scoop, sans droits admin.
+---
 
-```powershell
-scoop bucket add wilt00 https://github.com/wilt00/scoop-bucket
-scoop install wilt00/taskwarrior
-```
+## Où trouver quoi
 
-Validé sur base isolée : UDA, urgency avec coefficients personnalisés, `export`, `_projects`,
-`+LATEST`, `add` via `shell=True` avec apostrophes/parenthèses, et le filtre composé de
-`twplanner.py`. La réécriture d'un backend Windows est donc **abandonnée** : son vrai coût
-n'était pas les ~10 commandes appelées, mais le DSL de filtre, le calcul d'urgency, les
-dépendances, la récurrence et les contextes — avec un risque de divergence silencieuse sur des
-données réelles synchronisées.
-
-**Correction du 2026-09-18** : cette validation ne comportait en réalité **aucun caractère
-accentué**, et la mention « avec accents » ci-dessus était fausse. Deux défauts distincts et
-cumulés ont été trouvés depuis, puis corrigés — voir
-`openspec/changes/fix-nonascii-argv-windows/` et §5.
-
-### 2026-09-18 — Passage au modèle deux clones + git
-
-Le transfert de fichiers (`pull.ps1`) est abandonné au profit de deux clones git (PC et
-téléphone) avec un remote commun. Sûr ici parce que git ne transporte que du code : les données
-restent sur le canal Syncthing.
-
-Correctif associé : `playwright.config.js` pointait sur `python3 app.py` / port 5000 (l'ancien
-backend Flask) et `tests/task-manager.spec.js` codait `http://localhost:5000` en dur,
-court-circuitant `baseURL`. Les deux ont été corrigés, la cible est paramétrable par
-environnement, et le garde-fou `TASKRC` a été ajouté.
-
-### Fait
-
-- créer le remote git et cloner proprement sur le PC
-- aligner les versions de Taskwarrior entre PC et téléphone (les deux sont en 3.5.0 ; seule
-  la différence fork/amont subsiste)
-- étendre `.gitignore` pour un `taskrc` local
-- `seed-staging.sh` et `deploy.sh` (cf. §7)
-
-### Reste à faire
-
-- faire tourner `seed-staging.sh` sur le téléphone : le clone de staging n'existe pas encore
+| Fichier | Quand le lire |
+|---|---|
+| `docs/topologie-environnements.md` | Syncthing, chemins réels du téléphone, entrée d'un pair dans la prod, pièges de topologie |
+| `docs/deploiement-telephone.md` | modifier ou diagnostiquer `deploy.sh` / `seed-staging.sh` |
+| `docs/decisions.md` | avant de proposer une refonte ou de revenir sur une décision passée |
+| `docs/metadata-taches-reference.md` | (préexistant) référence des métadonnées de tâches |
+| `docs/fix_port_5000_in_use.md` | (préexistant) port 5000 déjà occupé (ancien backend Flask) |

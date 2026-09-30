@@ -69,3 +69,6 @@ _*
 
 # Plan produit par ../TaskWarriorPlanner : une sortie, jamais une source.
 plan.json
+
+# Config locale de Claude Code
+.claude/
