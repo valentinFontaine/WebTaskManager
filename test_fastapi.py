@@ -952,3 +952,29 @@ class TestFiltrageDesTaches:
 
         commande = mock_command.call_args_list[-1][0][0]
         assert 'r.any:' in commande
+
+
+class TestArgvForTaskExe:
+    """task.exe lit argv en ANSI puis en UTF-8 : voir argv_for_task_exe."""
+
+    def test_ascii_inchange(self):
+        import main_fastapi
+        assert main_fastapi.argv_for_task_exe('task add "abc"', acp='cp1252') == 'task add "abc"'
+
+    def test_accent_devient_octets_utf8_lus_en_cp1252(self):
+        import main_fastapi
+        out = main_fastapi.argv_for_task_exe('task add "integré"', acp='cp1252')
+        assert out == 'task add "integrÃ©"'
+        # ce que task.exe recevra apres conversion ANSI doit etre l'UTF-8 d'origine
+        assert out.encode('cp1252').decode('utf-8') == 'task add "integré"'
+
+    def test_emoji_et_euro(self):
+        import main_fastapi
+        for texte in ('😀', '€ °'):
+            out = main_fastapi.argv_for_task_exe(texte, acp='cp1252')
+            assert out.encode('cp1252').decode('utf-8') == texte
+
+    def test_octet_non_defini_conserve(self):
+        import main_fastapi
+        # U+00C1 -> C3 81 ; 0x81 n'existe pas en cp1252 : on garde U+0081
+        assert main_fastapi.argv_for_task_exe('Á', acp='cp1252') == 'Ã'

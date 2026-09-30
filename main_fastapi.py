@@ -41,6 +41,40 @@ def log_command(command):
         f.write(f"[{timestamp}] {command}\n")
 
 
+def windows_acp_encoding():
+    """Encodage ANSI (ACP) du processus sous Windows, None ailleurs ou si deja UTF-8."""
+    if os.name != 'nt':
+        return None
+    import ctypes
+    acp = ctypes.windll.kernel32.GetACP()
+    return None if acp == 65001 else f'cp{acp}'
+
+
+def argv_for_task_exe(command, acp=None):
+    """Prepare une ligne de commande pour que task.exe recoive de l'UTF-8 exact.
+
+    task.exe (Windows) lit ses arguments en codepage ANSI puis les traite comme de
+    l'UTF-8 : "e" accentue arrive en 0xE9, octet de tete d'une sequence a 3 octets, qui
+    avale les deux octets suivants (parfois hors du tampon, d'ou un echec selon le
+    texte : "integre" accentue en fin de description -> "Unknown error"). On lui
+    envoie donc les octets UTF-8 reinterpretes dans l'ACP : la conversion du systeme
+    les restitue tels quels a task.exe, qui les lit alors correctement.
+    Sans effet sous Linux, en ACP UTF-8 ou pour une commande ASCII.
+    """
+    if command.isascii():
+        return command
+    acp = acp or windows_acp_encoding()
+    if not acp:
+        return command
+    out = []
+    for byte in command.encode('utf-8'):
+        try:
+            out.append(bytes([byte]).decode(acp))
+        except UnicodeDecodeError:
+            out.append(chr(byte))  # octet non defini dans l'ACP (0x81, 0x8D...)
+    return ''.join(out)
+
+
 def run_task_command(command):
     """Execute a TaskWarrior command and return the result"""
     try:
@@ -65,7 +99,7 @@ def run_task_command(command):
         # seul decoderait avec l'encodage local (cp1252 sous Windows) et rendrait les
         # accents en mojibake -- "Tache" accentuee ressortait en "TA^che".
         result = subprocess.run(
-            command, shell=True, capture_output=True,
+            argv_for_task_exe(command), shell=True, capture_output=True,
             encoding='utf-8', errors='replace',
             env=_TW_ENV, timeout=TASK_TIMEOUT
         )
