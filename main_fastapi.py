@@ -842,7 +842,20 @@ async def modify_task(task_id: str, task_data: TaskModify):
     modifications = []
 
     if task_data.description and task_data.description.strip():
-        modifications.append(f'description:"{task_data.description}"')
+        # L'editeur renvoie toujours la description, meme inchangee. La passer
+        # en argument a task.exe echoue des qu'elle contient du non-ASCII
+        # ("12°") : on ne la renvoie que si elle a reellement change.
+        description_actuelle = None
+        export_desc = run_task_command(f'task {task_id} export')
+        if export_desc.success and export_desc.stdout.strip():
+            try:
+                existante = json.loads(export_desc.stdout)
+                if existante:
+                    description_actuelle = existante[0].get('description')
+            except (json.JSONDecodeError, IndexError):
+                pass
+        if task_data.description != description_actuelle:
+            modifications.append(f'description:"{task_data.description}"')
 
     if task_data.tags is not None:
         # Validation stricte avant toute commande : shell=True interdit de

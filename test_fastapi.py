@@ -730,6 +730,8 @@ class TestKanban:
     def test_state_absent_ne_touche_pas_l_uda(self, mock_command):
         """Non-regression : une modification sans `state` ne doit rien ecrire dessus."""
         mock_command.side_effect = [
+            CommandResult(success=True, stdout='[{"id": 1, "description": "Ancienne"}]',
+                          stderr="", returncode=0),
             CommandResult(success=True, stdout="Task modified", stderr="", returncode=0),
             CommandResult(success=True, stdout='[{"id": 1, "description": "Nouvelle"}]',
                           stderr="", returncode=0),
@@ -738,7 +740,7 @@ class TestKanban:
         response = client.put("/api/task/1/modify", json={"description": "Nouvelle"})
 
         assert response.status_code == 200
-        commande_modify = mock_command.call_args_list[0][0][0]
+        commande_modify = mock_command.call_args_list[1][0][0]
         assert 'state:' not in commande_modify
 
 

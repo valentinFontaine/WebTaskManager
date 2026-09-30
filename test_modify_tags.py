@@ -67,7 +67,8 @@ def _tokens_tag(commande):
     return set(re.findall(r'(?:(?<=\s)|^)[+-][\w.-]+(?=\s|$)', commande))
 
 
-def _repondeur_lecture_puis_ecriture(tags_avant, tags_apres, description_apres="Tache"):
+def _repondeur_lecture_puis_ecriture(tags_avant, tags_apres, description_apres="Tache",
+                                     description_avant=None):
     """Construit un side_effect pour le mock de run_task_command : toute
     commande contenant 'modify' repond par un succes ; toute AUTRE commande
     (un export, forcement) repond avec les tags d'avant tant que la
@@ -83,7 +84,7 @@ def _repondeur_lecture_puis_ecriture(tags_avant, tags_apres, description_apres="
         tache = {
             "id": 1,
             "uuid": "11111111-1111-1111-1111-111111111111",
-            "description": description_apres,
+            "description": description_apres if etat["modifiee"] or description_avant is None else description_avant,
             "status": "pending",
             "tags": tags,
         }
@@ -159,6 +160,7 @@ class TestS2TagsNonTouches:
                 tags_avant=["fige"],
                 tags_apres=["fige"],
                 description_apres="Nouvelle description",
+                description_avant="Ancienne description",
             )
             reponse = client.put(
                 "/api/task/1/modify",
