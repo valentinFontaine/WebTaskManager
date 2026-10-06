@@ -40,12 +40,12 @@ Fusion avec l'existant -- regle generale et exception `scheduled` :
 Pour toute colonne presente dans l'en-tete, une cellule vide vaut "champ
 omis" et efface le champ existant ; une cellule renseignee le remplace.
 Exception : `scheduled` n'est pas un contenu du fichier mais un etat du
-planning (pose par le planificateur ou par +fige). Dans une colonne
+planning (pose par le planificateur ou par +fixed). Dans une colonne
 `scheduled` presente, une cellule VIDE ne l'efface JAMAIS -- le `scheduled`
 existant est conserve ; une cellule renseignee le remplace comme les autres
 champs. Raison : le modele de fichier porte une colonne `scheduled` le plus
 souvent vide ; sans cette exception, chaque reimport effacerait le planning,
-y compris celui des taches +fige.
+y compris celui des taches +fixed.
 
 Ce fichier ne teste PAS les routes HTTP (voir test_import_routes.py) ni
 l'integration reelle avec le binaire `task` (test d'integration a la fin de
@@ -75,7 +75,7 @@ HEADER = "ref;description;projet;tags;estTime;due;scheduled;priorite;depend_de"
 EXEMPLE_CSV = (
     "ref;description;projet;tags;estTime;due;scheduled;priorite;depend_de\n"
     "devis;Demander 3 devis;NPD.Orion.achats;pro;2h;;;M;\n"
-    "attente;Reponse fournisseurs;NPD.Orion.achats;externe;10j;;;;devis\n"
+    "attente;Reponse fournisseurs;NPD.Orion.achats;external;10j;;;;devis\n"
     "choix;Choisir le fournisseur;NPD.Orion.achats;pro;1h;;;;attente\n"
     "cde;Passer la commande;NPD.Orion.commandes;pro;1h;30/10/2026;;H;choix\n"
     "plan;Plan de montage;NPD.Orion;pro;4h;;;;devis, choix\n"
@@ -401,10 +401,10 @@ class TestTagInvalide:
         assert len(resultat.erreurs) == 1
 
     def test_plus_initial_tolere_et_retire(self):
-        texte = HEADER + "\n" + "a;Tache A;Proj;+externe;;;;;\n"
+        texte = HEADER + "\n" + "a;Tache A;Proj;+external;;;;;\n"
         resultat = analyser(texte, [])
         assert resultat.erreurs == []
-        assert resultat.taches[0]["tags"] == ["externe"]
+        assert resultat.taches[0]["tags"] == ["external"]
 
     def test_tags_separes_par_espace_ou_virgule(self):
         texte = HEADER + "\n" + 'a;Tache A;Proj;"pro perso";;;;;\n'
@@ -434,7 +434,7 @@ class TestFusionAvecExistant:
             project="Proj",
             status="pending",
             entry="20260101T000000Z",
-            tags=["fige", "pro"],
+            tags=["fixed", "pro"],
             estTime="PT3H",
             due="20261001T000000Z",
             scheduled="20260915T080000Z",
@@ -511,7 +511,7 @@ class TestFusionAvecExistant:
         resultat = analyser(texte, [existante])
         assert resultat.erreurs == []
         fusion = resultat.taches[0]
-        assert "fige" in fusion["tags"]
+        assert "fixed" in fusion["tags"]
         assert "urgent" in fusion["tags"]
 
     def test_ref_jamais_produite_meme_en_fusion(self):
@@ -710,7 +710,7 @@ class TestIntegrationReelle:
         u_devis_uuid = u_devis
         mod = self._task(
             taskrc, "rc.confirmation=off", u_devis_uuid, "modify",
-            "scheduled:2027-01-01", "+fige",
+            "scheduled:2027-01-01", "+fixed",
             env=env,
         )
         assert mod.returncode == 0, mod.stderr
@@ -736,7 +736,7 @@ class TestIntegrationReelle:
         # Valeur posee a la main (minuit local du 01/01/2027, converti en UTC
         # par task) : le reimport doit la laisser intacte.
         assert devis_final.get("scheduled") == _utc_attendu(datetime(2027, 1, 1))
-        assert "fige" in devis_final.get("tags", [])
+        assert "fixed" in devis_final.get("tags", [])
 
         choix_final = next(t for t in export2 if t["uuid"] == u_choix)
         assert choix_final["status"] == "completed"

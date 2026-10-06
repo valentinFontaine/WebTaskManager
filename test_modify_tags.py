@@ -97,12 +97,12 @@ def _repondeur_lecture_puis_ecriture(tags_avant, tags_apres, description_apres="
 
 class TestS1RetraitDeTag:
     def test_une_seule_commande_modify_porte_le_bon_diff_de_tags(self):
-        """Tags actuels : fige, garde. Tags demandes : garde, neuf.
-        Attendu : une seule commande modify, contenant -fige et +neuf,
+        """Tags actuels : fixed, garde. Tags demandes : garde, neuf.
+        Attendu : une seule commande modify, contenant -fixed et +neuf,
         ni +garde ni -garde (tag inchange), et jamais -TAGS."""
         with patch('main_fastapi.run_task_command') as mock_cmd:
             mock_cmd.side_effect = _repondeur_lecture_puis_ecriture(
-                tags_avant=["fige", "garde"],
+                tags_avant=["fixed", "garde"],
                 tags_apres=["garde", "neuf"],
             )
             reponse = client.put(
@@ -126,7 +126,7 @@ class TestS1RetraitDeTag:
         )
 
         tokens = _tokens_tag(commandes_modify_avec_tags[0])
-        assert "-fige" in tokens, f"le tag retire doit apparaitre en -fige, tokens={tokens}"
+        assert "-fixed" in tokens, f"le tag retire doit apparaitre en -fixed, tokens={tokens}"
         assert "+neuf" in tokens, f"le tag ajoute doit apparaitre en +neuf, tokens={tokens}"
         assert "-garde" not in tokens, f"tag inchange, ne doit pas ressortir : {tokens}"
         assert "+garde" not in tokens, f"tag inchange, ne doit pas ressortir : {tokens}"
@@ -137,7 +137,7 @@ class TestS1RetraitDeTag:
         pas seulement que la commande a la bonne forme)."""
         with patch('main_fastapi.run_task_command') as mock_cmd:
             mock_cmd.side_effect = _repondeur_lecture_puis_ecriture(
-                tags_avant=["fige"],
+                tags_avant=["fixed"],
                 tags_apres=[],
             )
             reponse = client.put("/api/task/1/modify", json={"tags": []})
@@ -157,8 +157,8 @@ class TestS2TagsNonTouches:
         apparaitre."""
         with patch('main_fastapi.run_task_command') as mock_cmd:
             mock_cmd.side_effect = _repondeur_lecture_puis_ecriture(
-                tags_avant=["fige"],
-                tags_apres=["fige"],
+                tags_avant=["fixed"],
+                tags_apres=["fixed"],
                 description_apres="Nouvelle description",
                 description_avant="Ancienne description",
             )
@@ -273,7 +273,7 @@ class TestIntegrationRetraitTagReel:
         }
 
         creation = subprocess.run(
-            'task rc.confirmation=off add "Test retrait tag reel" +fige +garde',
+            'task rc.confirmation=off add "Test retrait tag reel" +fixed +garde',
             shell=True, capture_output=True, text=True, encoding="utf-8", env=env_reel,
         )
         assert creation.returncode == 0, creation.stderr
@@ -284,7 +284,7 @@ class TestIntegrationRetraitTagReel:
             shell=True, capture_output=True, text=True, encoding="utf-8", env=env_reel,
         )
         tache_avant = json.loads(avant.stdout)[0]
-        assert sorted(tache_avant.get("tags", [])) == ["fige", "garde"]
+        assert sorted(tache_avant.get("tags", [])) == ["fixed", "garde"]
 
         with patch.dict(main_fastapi._TW_ENV, {"TASKRC": str(taskrc), "TASKDATA": str(taskdata)}), \
                 patch.object(main_fastapi, "DEVELOPER_MODE", False):
@@ -299,8 +299,8 @@ class TestIntegrationRetraitTagReel:
             shell=True, capture_output=True, text=True, encoding="utf-8", env=env_reel,
         )
         tache_apres = json.loads(apres.stdout)[0]
-        # Le point du bug : "fige" doit avoir vraiment disparu, "garde" rester.
+        # Le point du bug : "fixed" doit avoir vraiment disparu, "garde" rester.
         assert tache_apres.get("tags", []) == ["garde"], (
             f"tags apres modification : {tache_apres.get('tags')!r} -- "
-            "'fige' aurait du etre retire (task modify -TAGS est un NO-OP en 3.5)"
+            "'fixed' aurait du etre retire (task modify -TAGS est un NO-OP en 3.5)"
         )

@@ -151,7 +151,7 @@ function construireEvenementsPlan(donnees) {
                 : CAL_PLAN_CONTRAINT;
             const estJour = bloc.precision === 'jour';
             // Seul le bloc 0 d'une tache non externe, a l'heure pres, est
-            // deplacable : c'est le seul dont `+fige` peut imposer le debut.
+            // deplacable : c'est le seul dont `+fixed` peut imposer le debut.
             // Les blocs agreges ('jour') restent en lecture seule : leur
             // heure n'est pas garantie, et un depot en journee entiere
             // donnerait minuit.
@@ -1094,7 +1094,7 @@ async function handleBeforeCreateEvent(eventObj) {
  * etre appele directement (tests), d'ou cette meme garde ici.
  *
  * Un redimensionnement (`changes.start` absent, seule la fin bouge) n'ecrit
- * rien : `+fige` n'impose que le DEBUT du bloc, une duree ne se fige pas.
+ * rien : `+fixed` n'impose que le DEBUT du bloc, une duree ne se fige pas.
  */
 async function deplacerBlocPlan(event, changes) {
     const raw = event.raw || {};

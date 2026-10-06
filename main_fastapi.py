@@ -643,8 +643,8 @@ def construire_graphe(taches, projet):
             "project": t.get("project"),
             "estTime": t.get("estTime"),
             "due": t.get("due"),
-            "externe": "externe" in tags,
-            "fige": "fige" in tags,
+            "externe": "external" in tags,
+            "fige": "fixed" in tags,
             "dans_projet": uuid in uuids_projet,
         })
     noeuds.sort(key=lambda n: ((n["project"] or "").lower(), (n["description"] or "").lower()))
@@ -786,7 +786,7 @@ async def import_csv_route(requete: ImportCsvRequest):
 MODELE_IMPORT_CSV = (
     "ref;description;projet;tags;estTime;due;scheduled;priorite;depend_de\n"
     "devis;Demander 3 devis;NPD.Orion.achats;pro;2h;;;M;\n"
-    "attente;Reponse fournisseurs;NPD.Orion.achats;externe;10j;;;;devis\n"
+    "attente;Reponse fournisseurs;NPD.Orion.achats;external;10j;;;;devis\n"
     "choix;Choisir le fournisseur;NPD.Orion.achats;pro;1h;;;;attente\n"
     "cde;Passer la commande;NPD.Orion.commandes;pro;1h;30/10/2026;;H;choix\n"
     "plan;Plan de montage;NPD.Orion;pro,revue;4h;;;;devis, choix\n"
@@ -1137,7 +1137,7 @@ class TaskFiger(BaseModel):
 async def figer_task(task_id: str, corps: TaskFiger):
     """Fige une tache a l'instant ou son bloc propose est depose.
 
-    Ecrit uniquement `+fige` et `scheduled` en une seule commande, pour ne
+    Ecrit uniquement `+fixed` et `scheduled` en une seule commande, pour ne
     jamais effacer les autres tags (contrairement a PUT /modify).
     """
     if not _est_uuid_canonique(task_id):
@@ -1146,7 +1146,7 @@ async def figer_task(task_id: str, corps: TaskFiger):
     if not DATE_COMPACTE_RE.fullmatch(corps.scheduled):
         raise HTTPException(status_code=400, detail="Date de début invalide : format attendu AAAAMMJJTHHMMSSZ")
 
-    result = run_task_command(f'task {task_id} modify +fige scheduled:{corps.scheduled}')
+    result = run_task_command(f'task {task_id} modify +fixed scheduled:{corps.scheduled}')
 
     if not result.success:
         raise HTTPException(status_code=400, detail=result.stderr)

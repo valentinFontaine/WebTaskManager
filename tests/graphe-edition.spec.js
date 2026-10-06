@@ -174,7 +174,7 @@ function tacheComplete(uuid, overrides = {}) {
     description: 'Description venue de /api/tasks (pas du graphe)',
     project: 'NPD.Orion',
     priority: 'H',
-    tags: ['pro', 'externe'],
+    tags: ['pro', 'external'],
     due: '20260901T103000Z',
     scheduled: '20260815T090000Z',
     estTime: 'PT2H30M',
@@ -345,7 +345,7 @@ test.describe('graphe.html — edition d\'une tache depuis un noeud (H3)', () =>
     const { noeuds, aretes } = donneesOrion();
     const cible = noeuds[0];
     const tache = tacheComplete(cible.uuid, {
-      tags: ['pro', 'externe'],
+      tags: ['pro', 'external'],
       priority: 'H',
       project: 'NPD.Orion',
       due: '20260901T103000Z',

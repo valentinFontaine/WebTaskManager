@@ -59,7 +59,7 @@ def _taches_pending():
             "project": "NPD.Orion",
             "estTime": "PT1H",
             "due": None,
-            "tags": ["externe"],
+            "tags": ["external"],
             # Taskwarrior 2 : chaine separee par des virgules, une des deux
             # cibles (u99) n'existe pas dans l'export pending.
             "depends": "u6,u99",
@@ -79,7 +79,7 @@ def _taches_pending():
             "project": "NPD.Orion.achats.devis",
             "estTime": None,
             "due": None,
-            "tags": ["fige"],
+            "tags": ["fixed"],
             "depends": [],
         },
         {

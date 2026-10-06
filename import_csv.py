@@ -11,7 +11,7 @@ regle generale, une cellule vide = champ omis = efface (le champ n'est pas
 recopie depuis la tache existante). Exception : `scheduled` n'est pas un
 contenu du fichier mais un etat du planning ; une cellule VIDE conserve le
 scheduled existant, une cellule renseignee le remplace. Sans cette exception,
-chaque reimport effacerait le planning, y compris celui des taches +fige.
+chaque reimport effacerait le planning, y compris celui des taches +fixed.
 
 Ce module ne fait aucun appel a `task` : il ne fait que construire les
 objets destines a `task import`. L'ecriture reelle est du ressort des
@@ -363,7 +363,7 @@ def analyser(texte_csv, taches_existantes):
                     erreurs_ligne.append({"ligne": enr["ligne"], "colonne": exc.colonne, "message": exc.message})
 
         # scheduled -- cellule vide = etat du planning conserve (pas de pop),
-        # sinon chaque reimport effacerait le planning (y compris les +fige).
+        # sinon chaque reimport effacerait le planning (y compris les +fixed).
         if "scheduled" in champs_presents:
             cellule = valeurs.get("scheduled", "").strip()
             if cellule:
@@ -372,12 +372,12 @@ def analyser(texte_csv, taches_existantes):
                 except _ErreurCellule as exc:
                     erreurs_ligne.append({"ligne": enr["ligne"], "colonne": exc.colonne, "message": exc.message})
 
-        # tags -- le tag "fige" est toujours conserve s'il etait present.
-        fige_avant = "fige" in (existante.get("tags", []) if existante else [])
+        # tags -- le tag "fixed" est toujours conserve s'il etait present.
+        fige_avant = "fixed" in (existante.get("tags", []) if existante else [])
         if "tags" in champs_presents:
             cellule = valeurs.get("tags", "").strip()
             if not cellule:
-                fusion["tags"] = ["fige"] if fige_avant else []
+                fusion["tags"] = ["fixed"] if fige_avant else []
                 if not fusion["tags"]:
                     fusion.pop("tags", None)
             else:
@@ -389,8 +389,8 @@ def analyser(texte_csv, taches_existantes):
                         "message": f"Tag invalide : {jeton!r}",
                     })
                 tags_finaux = list(dict.fromkeys(valides))  # dedoublonne, ordre conserve
-                if fige_avant and "fige" not in tags_finaux:
-                    tags_finaux.append("fige")
+                if fige_avant and "fixed" not in tags_finaux:
+                    tags_finaux.append("fixed")
                 fusion["tags"] = tags_finaux
 
         # depend_de.

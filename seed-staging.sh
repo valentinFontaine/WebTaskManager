@@ -227,7 +227,7 @@ log "Injection du jeu de taches +seed."
 #  - avec scheduled et sans scheduled
 #  - avec due
 #  - une paire avec depends:
-#  - tags d'urgency perso : committed, commit, rapide
+#  - tags d'urgency perso : committed, quick
 #  - tags de contexte : +pro, +perso
 #  - un projet hierarchique (Maison.Cuisine)
 #  - une description accentuee
@@ -242,11 +242,11 @@ task rc.confirmation=off add +seed +pro +committed \
     scheduled:tomorrow+14h \
     "Réparer le robinet de la cuisine" >/dev/null
 
-task rc.confirmation=off add +seed +perso +rapide \
+task rc.confirmation=off add +seed +perso +quick \
     project:Perso \
     "Appeler le dentiste" >/dev/null
 
-task rc.confirmation=off add +seed +perso +commit \
+task rc.confirmation=off add +seed +perso +committed \
     project:Perso estTime:45min \
     "Préparer le sac de sport" >/dev/null
 

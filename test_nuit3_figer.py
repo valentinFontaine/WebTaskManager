@@ -4,16 +4,16 @@
     POST /api/task/{uuid}/figer      corps : {"scheduled": "YYYYMMDDTHHMMSSZ"}
 
 Decision de l'utilisateur (23/09) : deplacer un bloc propose ecrit TOUT DE
-SUITE `+fige` et `scheduled` = nouveau debut. Le solveur ne bouge plus une
-tache `+fige` (contrainte 8 : debut du bloc 0 impose).
+SUITE `+fixed` et `scheduled` = nouveau debut. Le solveur ne bouge plus une
+tache `+fixed` (contrainte 8 : debut du bloc 0 impose).
 
 ## Ce qui est sous contrat
 
-- **rien d'autre que `+fige` et `scheduled`** : une seule commande
-  `task <uuid> modify +fige scheduled:<valeur>`. Surtout pas le chemin de
+- **rien d'autre que `+fixed` et `scheduled`** : une seule commande
+  `task <uuid> modify +fixed scheduled:<valeur>`. Surtout pas le chemin de
   `PUT /api/task/{id}/modify`, qui EFFACE les tags (`-TAGS`) avant de les
   reecrire. Le test qui compte le plus est le dernier : sur une vraie base
-  Taskwarrior jetable, les tags `pro`, `externe` et un tag d'acteur survivent.
+  Taskwarrior jetable, les tags `pro`, `external` et un tag d'acteur survivent.
 - **tout ce qui entre dans la commande est valide avant** :
   `run_task_command` passe par `shell=True`. L'uuid doit etre un uuid
   canonique (`fullmatch`, comme `/depends`), la date une date UTC compacte
@@ -66,7 +66,7 @@ def _figer(uuid, corps, enregistreur):
 
 
 # --------------------------------------------------------------------------
-# 1. la commande : +fige et scheduled, rien d'autre
+# 1. la commande : +fixed et scheduled, rien d'autre
 # --------------------------------------------------------------------------
 
 def test_une_seule_ecriture_qui_ne_pose_que_fige_et_scheduled():
@@ -76,7 +76,7 @@ def test_une_seule_ecriture_qui_ne_pose_que_fige_et_scheduled():
     assert reponse.json()["success"] is True
     assert len(enr.ecritures) == 1
     mots = [m for m in enr.ecritures[0].split() if not m.startswith("rc.")]
-    assert mots == ["task", UUID, "modify", "+fige", "scheduled:" + QUAND]
+    assert mots == ["task", UUID, "modify", "+fixed", "scheduled:" + QUAND]
 
 
 def test_aucun_tag_n_est_efface():
@@ -168,7 +168,7 @@ def vraie_base(tmp_path, monkeypatch):
     graine.write_text(json.dumps([{
         "uuid": UUID, "description": "Plan de detail carter", "status": "pending",
         "entry": "20260901T080000Z", "project": "NPD.Orion.plans",
-        "tags": ["pro", "externe", "acteurDupont"], "estTime": "PT6H"}]),
+        "tags": ["pro", "external", "acteurDupont"], "estTime": "PT6H"}]),
         encoding="utf-8")
     res = subprocess.run(["task", "import", str(graine)], capture_output=True,
                          text=True, encoding="utf-8", env=env, check=False)
@@ -187,8 +187,8 @@ def test_sur_une_vraie_base_les_tags_existants_survivent(vraie_base):
                           json={"scheduled": QUAND})
     assert reponse.status_code == 200, reponse.text
     apres = vraie_base()
-    assert set(apres["tags"]) == set(avant["tags"]) | {"fige"}
-    assert {"pro", "externe", "acteurDupont"} <= set(apres["tags"])
+    assert set(apres["tags"]) == set(avant["tags"]) | {"fixed"}
+    assert {"pro", "external", "acteurDupont"} <= set(apres["tags"])
     assert apres["scheduled"] == QUAND
     for champ in ("description", "project", "estTime", "status"):
         assert apres[champ] == avant[champ], champ

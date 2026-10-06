@@ -90,7 +90,7 @@ client = TestClient(app)
 EXEMPLE_CSV = (
     "ref;description;projet;tags;estTime;due;scheduled;priorite;depend_de\n"
     "devis;Demander 3 devis;NPD.Orion.achats;pro;2h;;;M;\n"
-    "attente;Reponse fournisseurs;NPD.Orion.achats;externe;10j;;;;devis\n"
+    "attente;Reponse fournisseurs;NPD.Orion.achats;external;10j;;;;devis\n"
     "choix;Choisir le fournisseur;NPD.Orion.achats;pro;1h;;;;attente\n"
     "cde;Passer la commande;NPD.Orion.commandes;pro;1h;30/10/2026;;H;choix\n"
     "plan;Plan de montage;NPD.Orion;pro;4h;;;;devis, choix\n"

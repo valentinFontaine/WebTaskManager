@@ -54,7 +54,7 @@ const CSV_SIMPLE =
 const CSV_ACCENTS =
   'ref;description;projet;tags;estTime;due;scheduled;priorite;depend_de\n' +
   'devis;Demander 3 devis;NPD.Orion.achats;pro;2h;;;M;\n' +
-  'attente;Reponse fournisseurs;NPD.Orion.achats;externe;10j;;;;devis\n';
+  'attente;Reponse fournisseurs;NPD.Orion.achats;external;10j;;;;devis\n';
 
 const CSV_EN_ERREUR =
   'ref;description;projet;bidule\n' +

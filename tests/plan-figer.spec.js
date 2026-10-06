@@ -3,11 +3,11 @@
  * Nuit 3 -- E3 : deplacer un bloc propose fige la tache, puis relance le calcul.
  *
  * Decisions (23/09) et defauts declares :
- * - deplacer un bloc propose ECRIT TOUT DE SUITE `+fige` et `scheduled` =
+ * - deplacer un bloc propose ECRIT TOUT DE SUITE `+fixed` et `scheduled` =
  *   nouveau debut, par `POST /api/task/{uuid}/figer` avec
  *   `{scheduled: "YYYYMMDDTHHMMSSZ"}` (UTC compact) -- jamais par
  *   `PUT /api/task/{id}/modify`, qui efface les tags ;
- * - seul le bloc d'indice 0 d'une tache non `+externe` est deplacable (`+fige`
+ * - seul le bloc d'indice 0 d'une tache non `+external` est deplacable (`+fixed`
  *   n'impose que le debut du bloc 0, et Taskwarrior n'a qu'un `scheduled`) ;
  *   les autres blocs et les blocs externes restent en lecture seule ;
  * - un deplacement ne change pas la duree : un redimensionnement (seule la fin
@@ -75,7 +75,7 @@ async function preparer(page, { figer = null } = {}) {
   await page.route('**/api/task/*/figer', async route => {
     vus.figer.push({ url: route.request().url(), corps: route.request().postDataJSON() });
     const r = figer || { status: 200, corps: { success: true, message: null, error: null,
-      data: null, tasks: null, task: { uuid: U_A, tags: ['pro', 'fige'] } } };
+      data: null, tasks: null, task: { uuid: U_A, tags: ['pro', 'fixed'] } } };
     await route.fulfill({ status: r.status, contentType: 'application/json',
       body: JSON.stringify(r.corps) });
   });

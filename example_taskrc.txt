@@ -17,8 +17,7 @@ urgency.blocking.coefficient=1
 
 #Custom urgency
 urgency.user.tag.committed=2
-urgency.user.tag.commit=2
-urgency.user.tag.rapide=2
+urgency.user.tag.quick=2
 
 #Definition des UDA
 uda.estTime.type=duration

@@ -19,7 +19,7 @@
  *
  * Autrement dit, a la date de ce fichier, TaskEditor n'a PAS de notion de
  * "tag cache" : il affiche et renvoie l'integralite de task.tags. Un tag
- * comme +fige, present dans les tags de la tache, apparait dans le champ
+ * comme +fixed, present dans les tags de la tache, apparait dans le champ
  * et repart donc dans le corps du PUT, meme si l'utilisateur n'a touche que
  * la description. CE TEST EST DONC ATTENDU VERT des son ecriture : il
  * documente et verrouille ce comportement, pas un defaut a corriger. Si un
@@ -78,8 +78,8 @@ function donneesUnNoeud() {
 }
 
 /**
- * Tache complete (forme export TaskWarrior), portant +fige et un autre tag
- * -- exactement le cas du defaut mesure : +fige que -TAGS effacerait puis
+ * Tache complete (forme export TaskWarrior), portant +fixed et un autre tag
+ * -- exactement le cas du defaut mesure : +fixed que -TAGS effacerait puis
  * ne recreerait jamais.
  */
 function tacheAvecFigeEtAutreTag(uuid) {
@@ -88,7 +88,7 @@ function tacheAvecFigeEtAutreTag(uuid) {
     description: 'Deplacer le carter avant',
     project: 'NPD.Orion',
     priority: 'H',
-    tags: ['fige', 'autre'],
+    tags: ['fixed', 'autre'],
     due: null,
     scheduled: '20260901T090000Z',
     estTime: 'PT1H',
@@ -141,7 +141,7 @@ async function choisirProjet(page, nom) {
 
 test.describe('TaskEditor -- ne retire pas un tag qu\'il n\'affiche pas (S4)', () => {
 
-  test('editer seulement la description conserve +fige dans le corps du PUT', async ({ page }) => {
+  test('editer seulement la description conserve +fixed dans le corps du PUT', async ({ page }) => {
     const erreurs = [];
     page.on('pageerror', e => erreurs.push(e));
 
@@ -164,7 +164,7 @@ test.describe('TaskEditor -- ne retire pas un tag qu\'il n\'affiche pas (S4)', (
     // avant de ne toucher que la description : sinon un champ tags vide
     // ferait passer ce test au vert pour la mauvaise raison.
     const champTags = page.locator('#task-editor-tags');
-    await expect(champTags).toHaveValue(/fige/);
+    await expect(champTags).toHaveValue(/fixed/);
     await expect(champTags).toHaveValue(/autre/);
 
     // Seule modification : la description.
@@ -175,9 +175,9 @@ test.describe('TaskEditor -- ne retire pas un tag qu\'il n\'affiche pas (S4)', (
     const corps = requetes[0];
 
     // Le point du contrat : le corps envoye ne doit jamais faire disparaitre
-    // +fige. Soit l'editeur envoie tags et il contient toujours "fige", soit
+    // +fixed. Soit l'editeur envoie tags et il contient toujours "fixed", soit
     // il n'envoie pas du tout tags (les deux sont acceptables ici).
-    const neTouchePasFige = !('tags' in corps) || (Array.isArray(corps.tags) && corps.tags.includes('fige'));
+    const neTouchePasFige = !('tags' in corps) || (Array.isArray(corps.tags) && corps.tags.includes('fixed'));
     expect(neTouchePasFige, `corps envoye : ${JSON.stringify(corps)}`).toBeTruthy();
 
     expect(erreurs, `erreurs page : ${erreurs.map(e => e.message).join(', ')}`).toEqual([]);

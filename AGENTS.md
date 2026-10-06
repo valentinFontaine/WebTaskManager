@@ -208,7 +208,7 @@ Pour les retirer d'un `taskrc` existant, il suffit d'en effacer les lignes `uda.
 et `uda.proposed_scheduled.*` : aucune tâche ne portant ces attributs, il n'y a rien à
 migrer.
 Également nécessaires : `urgency.inherit=on`, `urgency.blocked/blocking.coefficient`,
-`urgency.user.tag.{committed,commit,rapide}=2`, contextes `pro`/`perso`.
+`urgency.user.tag.{committed,quick}=2`, contextes `pro`/`perso`.
 Sans ces UDA, les requêtes de `twplanner.py` échouent ou renvoient des résultats faux.
 
 ### Points de fragilité vérifiés
@@ -290,5 +290,6 @@ déploiement ou de revenir sur le choix du fork natif.
 | `docs/topologie-environnements.md` | Syncthing, chemins réels du téléphone, entrée d'un pair dans la prod, pièges de topologie |
 | `docs/deploiement-telephone.md` | modifier ou diagnostiquer `deploy.sh` / `seed-staging.sh` |
 | `docs/decisions.md` | avant de proposer une refonte ou de revenir sur une décision passée |
+| `docs/tags.md` | sens de chaque tag fonctionnel (`+fixed`, `+external`…), avant de lire ou d'écrire un tag dans le code |
 | `docs/metadata-taches-reference.md` | (préexistant) référence des métadonnées de tâches |
 | `docs/fix_port_5000_in_use.md` | (préexistant) port 5000 déjà occupé (ancien backend Flask) |
