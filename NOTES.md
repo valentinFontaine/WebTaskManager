@@ -31,12 +31,24 @@
    `TaskWarriorPlanner/tests/test_retard_par_tache.py` (non suivi) : 3 rouges, déjà avant le renommage.
    `openspec/.../design.md` du planificateur emploie encore les anciens noms (historique).
 
+4. **Projets et tags de la prod fusionnés** (2026-10-06, sur validation de l'utilisateur) :
+   158 -> 137 projets, 145 -> 115 tags, 445 tâches modifiées (toutes statuts), total 2462
+   inchangé, aucun autre champ touché (comparaison d'exports). Répété d'abord sur une copie.
+   Casse/frappe (NPD.heliside -> NPD.Heliside, taskwarrior, comitted -> committed…) et
+   regroupements : deleg -> delegation, plans -> plan, consult/verif/compet (forme courte),
+   Helisem -> NPD.Helisem, CDCO/CDCO77 -> CO.CDCO77, sport -> Sport, toutes les variantes
+   balise -> CO.Balise77 (tag balise -> balise77). Sauvegarde juste avant :
+   `C:/Users/irpaui/taskwarrior-prod-backup-20261006-avant-fusion`.
+   Piège : `+3D` (initiale non alphabétique) n'est pas lu comme un tag, `modify -3d +3D` écrase
+   la description ; passer par `tags:liste,complete`.
+   Non traité (pas tranché) : projet `rapide` (1 tâche terminée), `info`/`informatique`,
+   `NX`/`NX_drafting_suite`, `NPD.suivi`/`NPD.suiviProduits`.
+
 ## Plus tard (pas les prochaines sessions)
 - Stratégie planificateur `+delegation` → `+monitoring` : la tâche `+monitoring` dépend de la
   `+delegation`, mais sa due date dépend de la tâche externe. À concevoir avec l'utilisateur.
 
 ## Reste
-- **Prochaine session** : projets en doublon dans la prod (casse, fautes de frappe) à fusionner.
 - Correctif accents **non validé sur staging** : téléphone toujours en panne (2026-10-06).
 - `plan.json` dans le worktree de prod : pas encore tout à fait réglé selon l'utilisateur.
 - Lot E (boucle planifier / ajuster / valider) : l'utilisateur le teste lui-même, hors session.
