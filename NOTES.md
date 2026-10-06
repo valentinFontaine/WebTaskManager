@@ -41,8 +41,9 @@
    `C:/Users/irpaui/taskwarrior-prod-backup-20261006-avant-fusion`.
    Piège : `+3D` (initiale non alphabétique) n'est pas lu comme un tag, `modify -3d +3D` écrase
    la description ; passer par `tags:liste,complete`.
-   Non traité (pas tranché) : projet `rapide` (1 tâche terminée), `info`/`informatique`,
-   `NX`/`NX_drafting_suite`, `NPD.suivi`/`NPD.suiviProduits`.
+   Puis `NPD.suivi` + `NPD.suiviProduits` -> `NPD.Suivi` (6 tâches). `NX` et
+   `NX_drafting_suite` sont distincts : à garder. Non tranché : projet `rapide` (1 tâche
+   terminée), `info` / `info.arch` / `informatique` (liste montrée à l'utilisateur).
 
 ## Plus tard (pas les prochaines sessions)
 - Stratégie planificateur `+delegation` → `+monitoring` : la tâche `+monitoring` dépend de la
