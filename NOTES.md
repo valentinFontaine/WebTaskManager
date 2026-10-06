@@ -74,9 +74,13 @@
   - Achat : commande gardé (travail lié à une commande client) ; fournisseur gardé (lié à
     external : le fournisseur fait l'action) ; achat -> serviceAchat (comme ServiceBE) ;
     expediting -> monitoring ; budget supprimé ; costly = bidouille de priorité (supprimé ?).
-  - En suspens : casse des sigles (CAO/cao, ServiceBE/serviceAchat), nom de ville en vélo,
-    compet / training / entrainement / Athle, costly, costing, sourcing, et les ~90 autres
-    tags de l'inventaire pas encore passés en revue.
+  - Tranché ensuite : minuscules partout -> `cao`, `jde`, `serviceBE`, `serviceAchat` ;
+    vélo en ville -> `commute` ; compet -> `race` ; training, entrainement -> `sport` ;
+    Athle -> `running` ; costly supprimé ; costing -> `sourcing`.
+  - Reste : passer en revue les ~90 autres tags de `docs/inventaire-tags.md` (JDE fait ;
+    programmation, support, telephone, habit, pointage…), puis documenter dans `docs/tags.md`,
+    migrer la prod (sauvegarde, essai sur copie, `tags:` complet via Python, pas PowerShell),
+    et enfin la liste de tags à la saisie dans l'éditeur.
 - Piège d'instrument : lire l'export Taskwarrior en Python avec `PYTHONUTF8=1`, sinon les
   accents s'affichent en `Ã©` (cp1252) alors que la base est saine.
 
