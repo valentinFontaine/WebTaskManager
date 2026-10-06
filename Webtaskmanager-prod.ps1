@@ -1,8 +1,7 @@
 # Lance le serveur de PROD du PC sur http://localhost:1875 et ouvre le navigateur.
 #
-# A executer depuis le worktree de prod (..\WebTaskManager-prod), jamais depuis
-# le dossier de dev : le backend refuse alors de demarrer sur la vraie base.
-# Raccourci bureau :
+# Sert toujours le worktree de prod (..\WebTaskManager-prod), quelle que soit la
+# copie du script lancee. Raccourci bureau :
 #   powershell.exe -ExecutionPolicy Bypass -File "<chemin>\WebTaskManager-prod\Webtaskmanager-prod.ps1"
 #
 # Les variables ne valent que pour ce processus : rien n'est pose globalement.
@@ -26,15 +25,19 @@ if (Test-Serveur) {
     exit 0
 }
 
-Set-Location $PSScriptRoot
+# Toujours le worktree de prod, ou que soit la copie du script lancee (le
+# raccourci peut viser celle du dossier de dev : sans cela, le verrou refuse).
+$dossierProd = Join-Path (Split-Path $PSScriptRoot -Parent) 'WebTaskManager-prod'
+Set-Location $dossierProd
 Remove-Item Env:TASKDATA -ErrorAction SilentlyContinue      # l'emporterait sur le taskrc
 Remove-Item Env:DEVELOPER_MODE -ErrorAction SilentlyContinue
 $env:TASKRC = 'C:/Users/irpaui/taskwarrior-prod/taskrc'
 $env:WTM_PORT = "$port"
 
 $host.UI.RawUI.WindowTitle = "WebTaskManager PROD - $url"
-$python = Join-Path $PSScriptRoot 'venv\Scripts\python.exe'
+$python = Join-Path $dossierProd 'venv\Scripts\python.exe'
 $serveur = Start-Process $python -ArgumentList 'main_fastapi.py' -NoNewWindow -PassThru
+$null = $serveur.Handle   # sans lecture du Handle, ExitCode reste vide une fois le processus fini
 
 for ($i = 0; $i -lt 30 -and -not $serveur.HasExited; $i++) {
     if (Test-Serveur) { Start-Process $url; break }
