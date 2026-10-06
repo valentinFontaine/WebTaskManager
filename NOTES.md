@@ -21,7 +21,11 @@
    `+rapide`) ; base test resemée. Migration mesurée sur base test (pending, completed,
    deleted ; double `commit`+`committed` -> un seul `committed`).
    Identifiants internes français (clés `externe`/`fige` du plan, régime, CSS, `/figer`) gardés.
-   **Prod : migration et taskrc à faire par l'utilisateur** (commandes données en session).
+   **Prod migrée le 2026-10-06** (sur autorisation explicite) : 1 fixed, 7 external, 625 quick
+   (dont 617 terminées/supprimées), committed 9 ; anciens tags à 0, total 2452 inchangé.
+   Taskrc prod : `tag.commit` supprimé, `tag.rapide` -> `tag.quick`. Sauvegarde avant migration :
+   `C:/Users/irpaui/taskwarrior-prod-backup-20261006-tags` (data + taskrc, hors Syncthing).
+   Pair Arch : son taskrc doit recevoir la même modification des urgences.
    `pro`/`perso` en dur dans TaskWarriorPlanner (`planif/config.py`, `planif/tampon.py`,
    `TWsched_task_to_caldav.py`) : signalé, non corrigé. Rien en dur dans WebTaskManager.
    `TaskWarriorPlanner/tests/test_retard_par_tache.py` (non suivi) : 3 rouges, déjà avant le renommage.
@@ -32,6 +36,7 @@
   `+delegation`, mais sa due date dépend de la tâche externe. À concevoir avec l'utilisateur.
 
 ## Reste
+- **Prochaine session** : projets en doublon dans la prod (casse, fautes de frappe) à fusionner.
 - Correctif accents **non validé sur staging** : téléphone toujours en panne (2026-10-06).
 - `plan.json` dans le worktree de prod : pas encore tout à fait réglé selon l'utilisateur.
 - Lot E (boucle planifier / ajuster / valider) : l'utilisateur le teste lui-même, hors session.
