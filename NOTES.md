@@ -91,7 +91,8 @@
     positions), Taskwarrior réécrit `mask[imask]` avec le statut de l'occurrence modifiée.
     Sans effet sur la génération. Doublons préexistants (probablement plusieurs pairs qui
     génèrent les récurrences) : signalé, non traité.
-  - Prochaine étape : liste de tags proposée à la saisie dans l'éditeur.
+  - **Liste de tags à la saisie faite** (`53cfb70`) : `GET /api/tags` lit `docs/tags.md`, puces +
+    suggestions dans l'éditeur, tag inconnu permis mais signalé. Prod : `git merge master` à faire.
   - (ancien) Reste : passer en revue les ~90 autres tags de `docs/inventaire-tags.md` (JDE fait ;
     programmation, support, telephone, habit, pointage…), puis documenter dans `docs/tags.md`,
     migrer la prod (sauvegarde, essai sur copie, `tags:` complet via Python, pas PowerShell),
