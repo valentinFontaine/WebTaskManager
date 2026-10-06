@@ -217,6 +217,22 @@ def cleaned_tags(tags):
     return [tag.strip() for tag in tags if tag and tag.strip()]
 
 
+def verifier_tags(tags):
+    """Refuse (400) tout tag qu'on ne peut pas passer en `+tag`, avant toute commande.
+
+    shell=True interdit les caracteres de controle shell. Et Taskwarrior ne lit
+    `+xxx` comme un tag que si `xxx` commence par une lettre : `+3D` part dans la
+    description (en modify, il l'ecrase). Un seul tag invalide bloque tout.
+    """
+    for tag in tags:
+        tag = tag or ""
+        if not re.fullmatch(r"[\w.-]+", tag) or not tag[0].isalpha():
+            raise HTTPException(
+                status_code=400,
+                detail=f"Tag invalide : {tag!r} (doit commencer par une lettre)"
+            )
+
+
 def _chemin_normalise(chemin):
     return os.path.normcase(os.path.abspath(os.path.expanduser(chemin.strip())))
 
@@ -940,15 +956,7 @@ async def modify_task(task_id: str, task_data: TaskModify):
             modifications.append(f'description:"{task_data.description}"')
 
     if task_data.tags is not None:
-        # Validation stricte avant toute commande : shell=True interdit de
-        # laisser passer un tag qui contiendrait un caractere de controle
-        # shell. Un seul tag invalide bloque toute la modification.
-        for tag in task_data.tags:
-            if (tag or "").startswith(('+', '-')) or not re.fullmatch(r"[\w.-]+", tag or ""):
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Tag invalide : {tag!r}"
-                )
+        verifier_tags(task_data.tags)
 
         # `task modify -TAGS` est un NO-OP sous Taskwarrior 3.5 : on calcule
         # donc le diff entre les tags actuels (export) et les tags demandes,
@@ -1059,8 +1067,9 @@ async def add_task(task_data: TaskCreate):
         raise HTTPException(status_code=400, detail="Description is required")
     
     command_parts = [f'add "{task_data.description}"']
-    
+
     if task_data.tags:
+        verifier_tags([t.strip() for t in task_data.tags if t and t.strip()])
         for tag in task_data.tags:
             if tag and tag.strip():
                 command_parts.append(f'+{tag.strip()}')

@@ -328,6 +328,17 @@ class TestTaskModify:
         assert data["success"] is True
     
     @patch('main_fastapi.run_task_command')
+    def test_modify_rejects_tag_starting_with_digit(self, mock_command):
+        """`+3D` n'est pas lu comme un tag par Taskwarrior : en modify, il
+        devient la nouvelle description et ecrase l'ancienne. Refus avant
+        toute commande."""
+        response = client.put("/api/task/1/modify", json=TaskModify(tags=["pro", "3D"]).model_dump())
+
+        assert response.status_code == 400
+        assert "3D" in response.json()["detail"]
+        mock_command.assert_not_called()
+
+    @patch('main_fastapi.run_task_command')
     def test_modify_task_no_changes(self, mock_command):
         """Test modifying task with no changes"""
         task_data = TaskModify()  # Empty modification
@@ -403,6 +414,24 @@ class TestTaskAdd:
         assert response.status_code == 200
         assert response.json()["success"] is True
         assert mock_command.call_count == 2
+
+    @patch('main_fastapi.run_task_command')
+    def test_add_rejects_tag_starting_with_digit(self, mock_command):
+        """`task add "x" +3D` cree une tache sans tag, de description `x +3D`.
+        Refus avant toute commande."""
+        response = client.post("/api/task/add", json=TaskCreate(description="Piece", tags=["3D"]).model_dump())
+
+        assert response.status_code == 400
+        assert "3D" in response.json()["detail"]
+        mock_command.assert_not_called()
+
+    @patch('main_fastapi.run_task_command')
+    def test_add_rejects_tag_with_shell_character(self, mock_command):
+        """La creation n'avait aucune validation des tags, contrairement a modify."""
+        response = client.post("/api/task/add", json=TaskCreate(description="Piece", tags=["a&b"]).model_dump())
+
+        assert response.status_code == 400
+        mock_command.assert_not_called()
 
     def test_add_task_no_description(self):
         """Test adding a task without description (should fail)"""
