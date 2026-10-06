@@ -82,6 +82,16 @@
     (« Tags descriptifs »). À la migration : `trail` reçoit aussi `+running +sport` ; `offre` ->
     `devis` ou `sourcing` tâche par tâche (3 tâches) ; vérifier que les tâches des tags supprimés
     (NPD, SRMix…) ont un projet.
+  - **Prod migrée le 2026-10-06** (`tools/migrer-tags-descriptifs.py`, lancé par l'utilisateur) :
+    1096 tâches modifiées, 2463 inchangé, 51 tags distincts, tous dans `docs/tags.md`, aucun
+    ancien restant. `offre` -> devis pour les 3. Sauvegarde :
+    `C:/Users/irpaui/taskwarrior-prod-backup-20261006-tags-descriptifs`. La vérification a
+    signalé 4 `mask` modifiés (modèles récurrents appeler mamy/maman, message ondine/Riri) :
+    ces modèles ont des **occurrences en double sur le même `imask`** (40 enfants pour 30
+    positions), Taskwarrior réécrit `mask[imask]` avec le statut de l'occurrence modifiée.
+    Sans effet sur la génération. Doublons préexistants (probablement plusieurs pairs qui
+    génèrent les récurrences) : signalé, non traité.
+  - Prochaine étape : liste de tags proposée à la saisie dans l'éditeur.
   - (ancien) Reste : passer en revue les ~90 autres tags de `docs/inventaire-tags.md` (JDE fait ;
     programmation, support, telephone, habit, pointage…), puis documenter dans `docs/tags.md`,
     migrer la prod (sauvegarde, essai sur copie, `tags:` complet via Python, pas PowerShell),
