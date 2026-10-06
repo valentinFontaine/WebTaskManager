@@ -14,7 +14,7 @@ Les autres tags (personnes, services, thèmes) sont descriptifs : voir « Tags d
 | `+nosplit` | un seul bloc, pas de fractionnement | diagnostic si plus long que le plus grand créneau disponible |
 | `+fixed` | début imposé : le `scheduled` courant est un fait | le planificateur ne le déplace pas. Posé par WebTaskManager quand on déplace un bloc dans le calendrier (`POST /api/task/{uuid}/figer`) et par l'import des réunions |
 | `+asap` | exception au « au plus tard » | traité par une échéance artificielle proche |
-| `+meeting` | réunion importée de l'agenda | importée en `+meeting +fixed` avec `scheduled` (design.md, décision du 23/09/2026) |
+| `+meeting` | réunion, importée de l'agenda ou saisie à la main | importée de l'agenda : `+meeting +fixed` avec `scheduled` (design.md, décision du 23/09/2026). Saisie sans `scheduled` : à planifier plus tard |
 
 Détail du modèle : `TaskWarriorPlanner/openspec/changes/ordonnanceur-par-contraintes/design.md`
 (rédigé avant le renommage : il emploie encore `fige`, `externe`, `insecable`).
@@ -85,7 +85,7 @@ Liste arrêtée le 2026-10-06 (inventaire de la prod : `docs/inventaire-tags.md`
 | Tag | Sens |
 |---|---|
 | `+fournisseur` | un fournisseur (avec `+external` : c'est lui qui agit) |
-| `+serviceAchat`, `+serviceBE`, `+serviceMethode`, `+equipeCPQ` | un service de l'entreprise |
+| `+serviceAchat`, `+serviceBE`, `+serviceMethode`, `+serviceUsinage`, `+serviceProjet`, `+serviceProd`, `+equipeCPQ` | un service de l'entreprise |
 | `+kevin`, `+russel`, `+christina` | une personne. L'UDA `assignee` n'est pas utilisée. |
 
 ### Perso
