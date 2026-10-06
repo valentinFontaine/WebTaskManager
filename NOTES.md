@@ -58,6 +58,25 @@
   quelques tags gardés sans doc, non validés.
 - Inventaire : `docs/inventaire-tags.md` (115 tags, 44 en attente), **non suivi par git**
   (contient des descriptions de tâches réelles). L'utilisateur remplit la colonne Décision.
+- Décisions de l'utilisateur (2026-10-06) :
+  - `+sport` général, toujours couplé à une discipline : cap (route, trail, CO), renforcement,
+    natation, vélo (gravel, vtt, ville). Ex. trail = `+trail +cap +sport`. `+compet` en plus.
+    `+intense` (séances intenses) pour de futures règles de planification (pas 2 fractionnés
+    consécutifs, sortie longue à ≥ 2 jours d'un fractionné) : **pas à coder maintenant**.
+  - course/courses -> shopping ; reunion -> meeting ; devis gardé ; suivi -> monitoring ;
+    BE -> ServiceBE ; urgent -> asap ; CAO gardé pour la conception.
+  - Sport en anglais (règles destinées à un outil open source général) : running, road, trail,
+    orienteering (remplace le tag CO ; le projet CO.* reste), strength (renfo, muscu),
+    swimming, cycling (gravel, mtb, ville ?), intense, compet ?.
+  - documentation englobe manuel, instruction, iom (pas de sous-tags, jugé trop lourd).
+  - design, plan -> CAO (pas de distinction plan / modèle).
+  - Minuscules partout (sauf noms propres / sigles : à confirmer pour CAO, JDE, ServiceBE).
+  - Achat : commande gardé (travail lié à une commande client) ; fournisseur gardé (lié à
+    external : le fournisseur fait l'action) ; achat -> serviceAchat (comme ServiceBE) ;
+    expediting -> monitoring ; budget supprimé ; costly = bidouille de priorité (supprimé ?).
+  - En suspens : casse des sigles (CAO/cao, ServiceBE/serviceAchat), nom de ville en vélo,
+    compet / training / entrainement / Athle, costly, costing, sourcing, et les ~90 autres
+    tags de l'inventaire pas encore passés en revue.
 - Piège d'instrument : lire l'export Taskwarrior en Python avec `PYTHONUTF8=1`, sinon les
   accents s'affichent en `Ã©` (cp1252) alors que la base est saine.
 
