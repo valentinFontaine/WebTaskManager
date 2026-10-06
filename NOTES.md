@@ -42,8 +42,17 @@ Doc existante = `TaskWarriorPlanner/openspec/changes/ordonnanceur-par-contrainte
 | `monitoring` | **aucun code, aucune doc** | — | inchangé |
 | `delegation` | nouveau | — | inchangé |
 
-Renommage = code des 2 dépôts + taskrc + tâches de la prod (`task +fige modify -fige +pinned`),
-à mesurer sur base test, et à coordonner avec Syncthing (3 pairs).
+**Noms validés par l'utilisateur le 2026-10-06** (remplacent la colonne « proposition ») :
+`fige` → **`+fixed`** (pas `pinned` : un meeting placé ou un choix utilisateur ne se touche pas),
+`externe` → **`+external`**, `insecable` → **`+nosplit`**, `rapide` → **`+quick`**,
+`commit` fusionné dans **`+committed`**. Inchangés : `asap`, `meeting`, `monitoring`, `delegation`.
+**`pro` / `perso` gardés** : ce sont des contextes, compréhensibles en français et en anglais ;
+ils ne doivent pas être en dur dans le code (à vérifier : l'inventaire signalait un filtre dans
+main_fastapi.py — si c'est le cas, le signaler à l'utilisateur, ne pas corriger d'office).
+
+Renommage = code des 2 dépôts + taskrc (dev, test, example, prod) + tâches de la prod
+(`task +fige modify -fige +fixed`, à exécuter par l'utilisateur), mesuré d'abord sur base test.
+Syncthing : pas un obstacle selon l'utilisateur (téléphone en panne).
 
 ## Plus tard (pas les prochaines sessions)
 - Stratégie planificateur `+delegation` → `+monitoring` : la tâche `+monitoring` dépend de la
