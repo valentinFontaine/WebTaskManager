@@ -25,6 +25,7 @@ import import_csv
 from config import (
     DEVELOPER_MODE, DEBUG_FILE, TASK_TIMEOUT, KANBAN_COLUMNS,
     NOTIFICATION_TIMEOUT, CONTEXT_CACHE_TTL,
+    PORT, BASE_PROD, DOSSIER_PROD,
 )
 from fastapi_models import TaskBase, TaskCreate, TaskModify, ResponseModel, CommandResult
 
@@ -200,11 +201,42 @@ def cleaned_tags(tags):
     return [tag.strip() for tag in tags if tag and tag.strip()]
 
 
+def _chemin_normalise(chemin):
+    return os.path.normcase(os.path.abspath(os.path.expanduser(chemin.strip())))
+
+
+def base_autorisee(data_location, racine, base_prod, dossier_prod):
+    """Vrai sauf si `data_location` est sous la prod et le code hors du dossier de prod."""
+    base = _chemin_normalise(data_location)
+    prod = _chemin_normalise(base_prod)
+    vise_la_prod = base == prod or base.startswith(prod + os.sep)
+    return not vise_la_prod or _chemin_normalise(racine) == _chemin_normalise(dossier_prod)
+
+
+def verifier_isolation_prod(racine=None, base_prod=BASE_PROD, dossier_prod=DOSSIER_PROD):
+    """Refuse de demarrer sur la vraie base depuis un autre dossier que celui de prod.
+
+    TASKDATA herite l'emporte sur le data.location du taskrc : c'est lui qu'on juge.
+    """
+    racine = racine or os.path.dirname(os.path.abspath(__file__))
+    data_location = os.environ.get('TASKDATA')
+    if not data_location:
+        resultat = run_task_command('task _get rc.data.location')
+        data_location = resultat.stdout.strip()
+    if data_location and not base_autorisee(data_location, racine, base_prod, dossier_prod):
+        raise RuntimeError(
+            f"Base de prod ({data_location}) visee depuis {racine} : refus de demarrer. "
+            f"La prod ne se sert que depuis {dossier_prod} (Webtaskmanager-prod.ps1) ; "
+            f"pour developper, TASKRC=C:/Users/irpaui/taskwarrior-dev/taskrc.")
+
+
 # Create FastAPI app with lifespan management
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager"""
     # Startup
+    if not DEVELOPER_MODE:
+        verifier_isolation_prod()
     check_result = run_task_command('task version')
     if not check_result.success:
         print("Warning: TaskWarrior doesn't seem to be installed or accessible")
@@ -213,9 +245,9 @@ async def lifespan(app: FastAPI):
         print("TaskWarrior found:", check_result.stdout.split('\n')[0])
     
     print("Starting TaskWarrior Web UI with FastAPI...")
-    print("Access the interface at: http://localhost:8000")
-    print("FastAPI docs available at: http://localhost:8000/docs")
-    
+    print(f"Access the interface at: http://localhost:{PORT}")
+    print(f"FastAPI docs available at: http://localhost:{PORT}/docs")
+
     yield
     
     # Shutdown
@@ -1178,4 +1210,4 @@ async def read_static_files(filename: str):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=PORT)

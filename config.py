@@ -69,3 +69,18 @@ PLAN_SORTIE = os.path.join(_RACINE, 'plan.json')
 #: une machine chargee peuvent aller plus loin. Au-dela, on interrompt et on le
 #: dit -- le plan precedent reste en place.
 PLAN_TIMEOUT = 600
+
+
+# --- Serveur et isolation de la prod --------------------------------------
+#: Port d'ecoute. 8000 pour le dev (cible par defaut de Playwright) ; la prod
+#: du PC tourne sur 1875, port que playwright.config.js refuse de viser.
+PORT = int(os.environ.get('WTM_PORT', '8000'))
+
+#: La vraie base, synchronisee par Syncthing (AGENTS.md, §2).
+BASE_PROD = os.environ.get('WTM_BASE_PROD', 'C:/Users/irpaui/taskwarrior-prod')
+
+#: Le seul dossier de code autorise a ouvrir BASE_PROD : le worktree de prod.
+#: Depuis tout autre dossier, le backend refuse de demarrer sur la vraie base.
+DOSSIER_PROD = os.environ.get(
+    'WTM_DOSSIER_PROD',
+    os.path.normpath(os.path.join(_RACINE, '..', 'WebTaskManager-prod')))
