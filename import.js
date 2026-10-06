@@ -30,6 +30,8 @@
     let compteurRequete = 0;
     let csvCourant = null;       // texte du dernier fichier choisi, envoye tel quel a /api/import
     let apercuValide = false;    // dernier apercu recu, sans erreur
+    let importables = 0;         // nombre de lignes que l'import partiel ecrirait
+    let modePartiel = false;     // apercu avec erreurs mais lignes importables
     let projetPourGraphe = '';   // pris sur la premiere tache de l'apercu, pour le lien vers graphe.html
 
     function elt(id) {
@@ -58,13 +60,24 @@
     }
 
     function majBouton() {
-        elt('import-bouton-importer').disabled = !apercuValide;
+        const bouton = elt('import-bouton-importer');
+        if (modePartiel) {
+            bouton.textContent = importables === 1
+                ? 'Ajouter 1 ligne valide'
+                : `Ajouter les ${importables} lignes valides`;
+            bouton.disabled = false;
+        } else {
+            bouton.textContent = 'Importer';
+            bouton.disabled = !apercuValide;
+        }
     }
 
     // Remet la page a plat avant un nouvel apercu : desactive Importer,
     // efface l'ancien tableau, les anciennes erreurs et l'ancien graphe.
     function reinitialiserAvantApercu() {
         apercuValide = false;
+        modePartiel = false;
+        importables = 0;
         majBouton();
         viderEnfants(elt('import-apercu-tableau').querySelector('tbody'));
         viderEnfants(elt('import-erreurs'));
@@ -72,10 +85,11 @@
         viderEnfants(elt('import-resultat'));
     }
 
-    function construireLigneTableau(tache, enErreur) {
+    function construireLigneTableau(tache, enErreur, ecartee) {
         const tr = document.createElement('tr');
         tr.dataset.ligne = String(tache.ligne);
         if (enErreur) tr.classList.add('en-erreur');
+        else if (ecartee) tr.classList.add('ecartee');
 
         const tdLigne = document.createElement('td');
         tdLigne.textContent = String(tache.ligne);
@@ -90,7 +104,7 @@
         return tr;
     }
 
-    function remplirTableau(taches, erreurs) {
+    function remplirTableau(taches, erreurs, ecartees) {
         const corps = elt('import-apercu-tableau').querySelector('tbody');
         viderEnfants(corps);
 
@@ -102,9 +116,11 @@
         // affecte tout le fichier : toutes les lignes sont alors marquees.
         const erreurGlobale = erreurs.some(e => !lignesAvecDonnee.has(e.ligne));
 
+        const lignesEcartees = new Set((ecartees || []).map(e => e.ligne));
+
         for (const tache of taches) {
             const enErreur = erreurGlobale || lignesErreurDirectes.has(tache.ligne);
-            corps.appendChild(construireLigneTableau(tache, enErreur));
+            corps.appendChild(construireLigneTableau(tache, enErreur, lignesEcartees.has(tache.ligne)));
         }
     }
 
@@ -164,7 +180,7 @@
 
             const taches = corps.taches || [];
             const erreurs = corps.erreurs || [];
-            remplirTableau(taches, erreurs);
+            remplirTableau(taches, erreurs, corps.ecartees);
             remplirErreurs(erreurs);
             await dessinerGraphe(
                 (corps.graphe && corps.graphe.noeuds) || [],
@@ -172,6 +188,8 @@
             );
 
             apercuValide = r.ok && erreurs.length === 0;
+            importables = Number(corps.importables) || 0;
+            modePartiel = r.ok && erreurs.length > 0 && importables > 0;
             projetPourGraphe = taches.length ? (taches[0].project || '') : '';
             majBouton();
         } catch (e) {
@@ -201,7 +219,18 @@
         const lien = document.createElement('a');
         lien.href = 'graphe.html?projet=' + encodeURIComponent(projetPourGraphe);
         lien.textContent = 'Voir le graphe';
-        zone.append(p, lien);
+        zone.append(p);
+        if (Array.isArray(corps.ecartees) && corps.ecartees.length) {
+            const ul = document.createElement('ul');
+            ul.className = 'import-ecartees';
+            for (const e of corps.ecartees) {
+                const li = document.createElement('li');
+                li.textContent = `Ligne ${e.ligne} (${e.description}) : ${e.raison}`;
+                ul.appendChild(li);
+            }
+            zone.append(ul);
+        }
+        zone.append(lien);
     }
 
     function afficherResultatEchec(messages) {
@@ -222,7 +251,7 @@
             const r = await fetch('/api/import', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ csv: csvCourant }),
+                body: JSON.stringify(modePartiel ? { csv: csvCourant, partiel: true } : { csv: csvCourant }),
             });
             const corps = await r.json().catch(() => ({}));
             if (r.ok) {
@@ -243,12 +272,21 @@
         }
     }
 
+    function surClicAnnuler() {
+        compteurRequete++; // invalide un apercu en vol
+        reinitialiserAvantApercu();
+        csvCourant = null;
+        projetPourGraphe = '';
+        elt('import-fichier').value = '';
+    }
+
     function init() {
         if (window.mermaid) {
             window.mermaid.initialize({ startOnLoad: false, securityLevel: 'loose' });
         }
         elt('import-fichier').addEventListener('change', surChoixFichier);
         elt('import-bouton-importer').addEventListener('click', surClicImporter);
+        elt('import-bouton-annuler').addEventListener('click', surClicAnnuler);
     }
 
     if (document.readyState === 'loading') {

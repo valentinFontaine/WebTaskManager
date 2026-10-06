@@ -378,3 +378,119 @@ test.describe('import.html — import CSV en masse', () => {
     await expect(tableau.locator('tr[data-ligne="2"]')).toContainText(projetHtml);
   });
 });
+
+// --- Import partiel et Annuler (decision du 2026-10-06) ----------------------
+//
+// L'apercu annonce `importables` et `ecartees` ([{ligne, description, raison}]).
+// Avec des erreurs et au moins une ligne importable, le bouton Importer devient
+// « Ajouter les N lignes valides » et envoie { csv, partiel: true }. Les lignes
+// ecartees en cascade portent la classe `ecartee`. Les boutons Importer et
+// Annuler sont sous l'apercu, dans #import-actions.
+
+const CSV_PARTIEL =
+  'ref;description;projet;estTime;depend_de\n' +
+  'a;Tache A;Proj;2h;\n' +
+  'b;Tache B;Proj;2zz;\n' +
+  'c;Tache C;Proj;1h;b\n';
+
+function reponseApercuPartielle() {
+  return {
+    taches: [
+      { uuid: 'u-a', description: 'Tache A', project: 'Proj', ligne: 2, nouvelle: true },
+      { uuid: 'u-b', description: 'Tache B', project: 'Proj', ligne: 3, nouvelle: true },
+      { uuid: 'u-c', description: 'Tache C', project: 'Proj', ligne: 4, nouvelle: true, depends: ['u-b'] },
+    ],
+    erreurs: [{ ligne: 3, colonne: 'estTime', message: "Unite de duree inconnue : '2zz'" }],
+    graphe: {
+      noeuds: [
+        { uuid: 'u-a', description: 'Tache A' },
+        { uuid: 'u-b', description: 'Tache B' },
+        { uuid: 'u-c', description: 'Tache C' },
+      ],
+      aretes: [{ de: 'u-b', vers: 'u-c' }],
+    },
+    importables: 1,
+    ecartees: [
+      { ligne: 3, description: 'Tache B', raison: 'ligne en erreur' },
+      { ligne: 4, description: 'Tache C', raison: 'depend de la ligne 3, ecartee' },
+    ],
+  };
+}
+
+test.describe('import.html — import partiel et annulation', () => {
+
+  test('les boutons Importer et Annuler sont sous l\'apercu', async ({ page }) => {
+    await preparer(page);
+    await page.goto('/import.html');
+    const actions = page.locator('#import-actions');
+    await expect(actions.locator('#import-bouton-importer')).toHaveCount(1);
+    await expect(actions.locator('#import-bouton-annuler')).toHaveCount(1);
+    const apresTableau = await page.evaluate(() => {
+      const tableau = document.getElementById('import-apercu-tableau');
+      const actions = document.getElementById('import-actions');
+      return Boolean(tableau.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING);
+    });
+    expect(apresTableau).toBe(true);
+  });
+
+  test('erreurs avec lignes importables : bouton Ajouter, lignes ecartees marquees', async ({ page }) => {
+    await preparer(page, { apercu: reponseApercuPartielle() });
+    await page.goto('/import.html');
+    await choisirFichier(page, CSV_PARTIEL);
+
+    const bouton = page.locator('#import-bouton-importer');
+    await expect(bouton).toBeEnabled();
+    await expect(bouton).toHaveText(/Ajouter.*1/);
+
+    const tableau = page.locator('#import-apercu-tableau');
+    await expect(tableau.locator('tr[data-ligne="3"]')).toHaveClass(/en-erreur/);
+    await expect(tableau.locator('tr[data-ligne="4"]')).toHaveClass(/ecartee/);
+    await expect(tableau.locator('tr[data-ligne="2"]')).not.toHaveClass(/en-erreur|ecartee/);
+  });
+
+  test('Ajouter envoie partiel: true et affiche les lignes ecartees', async ({ page }) => {
+    const { corpsImport } = await preparer(page, {
+      apercu: reponseApercuPartielle(),
+      reponseImport: {
+        success: true, creees: 1, mises_a_jour: 0,
+        ecartees: reponseApercuPartielle().ecartees,
+      },
+    });
+    await page.goto('/import.html');
+    await choisirFichier(page, CSV_PARTIEL);
+    await page.locator('#import-bouton-importer').click();
+
+    const resultat = page.locator('#import-resultat');
+    await expect(resultat).toContainText(/1.*cr[ée][ée]s?/i);
+    await expect(resultat).toContainText('Tache C');
+    await expect(resultat).toContainText('4');
+    expect(corpsImport.length).toBe(1);
+    expect(corpsImport[0].partiel).toBe(true);
+    expect(corpsImport[0].csv).toBe(CSV_PARTIEL);
+  });
+
+  test('sans erreur, Importer n\'envoie pas partiel', async ({ page }) => {
+    const { corpsImport } = await preparer(page, { apercu: reponseApercuValide() });
+    await page.goto('/import.html');
+    await choisirFichier(page, CSV_ACCENTS);
+    await expect(page.locator('#import-bouton-importer')).toHaveText(/^\s*Importer\s*$/);
+    await page.locator('#import-bouton-importer').click();
+    await expect(page.locator('#import-resultat')).toContainText(/cr[ée][ée]/i);
+    expect(corpsImport[0].partiel).not.toBe(true);
+  });
+
+  test('Annuler remet la page a zero, sans rien importer', async ({ page }) => {
+    const { corpsImport } = await preparer(page, { apercu: reponseApercuPartielle() });
+    await page.goto('/import.html');
+    await choisirFichier(page, CSV_PARTIEL);
+    await expect(page.locator('#import-apercu-tableau tr[data-ligne="2"]')).toBeVisible();
+
+    await page.locator('#import-bouton-annuler').click();
+
+    await expect(page.locator('#import-apercu-tableau tbody tr')).toHaveCount(0);
+    await expect(page.locator('#import-erreurs li')).toHaveCount(0);
+    await expect(page.locator('#import-bouton-importer')).toBeDisabled();
+    await expect(page.locator('#import-fichier')).toHaveValue('');
+    expect(corpsImport.length).toBe(0);
+  });
+});

@@ -271,6 +271,71 @@ class TestEchecTaskImport:
         assert "Erreur Taskwarrior" in reponse.text
 
 
+# --- 4 bis. Import partiel (decision du 2026-10-06) ---------------------------
+#
+# POST /api/import/apercu ajoute "importables" (nombre d'objets que l'import
+# partiel ecrirait) et "ecartees" ([{ligne, description, raison}]).
+# POST /api/import {"csv", "partiel": true} : si l'analyse a des erreurs,
+# importe seulement les lignes retenues par import_csv.selection_partielle
+# et renvoie aussi "ecartees". Rien d'importable -> 400 sans ecriture.
+# Sans "partiel", le comportement reste celui du §2 (400 sur toute erreur).
+
+CSV_PARTIEL = (
+    "ref;description;projet;tags;estTime;due;scheduled;priorite;depend_de\n"
+    "a;Tache A;Proj;;2h;;;;\n"      # 2 : valide
+    "b;Tache B;Proj;;2zz;;;;\n"     # 3 : erreur
+    "c;Tache C;Proj;;1h;;;;b\n"     # 4 : ecartee en cascade
+    "e;Tache E;Proj;;1h;;;;a\n"     # 5 : valide
+)
+
+
+class TestImportPartiel:
+    def test_apercu_numero_de_ligne_exact_apres_une_ligne_vide(self):
+        """BUG : l'apercu numerotait les taches par leur rang (2, 3...) au
+        lieu de leur ligne reelle ; une ligne vide ou un doublon decalait
+        tout le marquage d'erreurs du tableau."""
+        csv_texte = "ref;description;projet\n" + "a;Tache A;Proj\n" + ";;\n" + "b;Tache B;Proj\n"
+        with patch("main_fastapi.run_task_command") as mock:
+            mock.return_value = _reponse_export_vide()
+            corps = client.post("/api/import/apercu", json={"csv": csv_texte}).json()
+        ligne_b = [t["ligne"] for t in corps["taches"] if t["description"] == "Tache B"]
+        assert ligne_b == [4]
+
+    def test_apercu_annonce_importables_et_ecartees(self):
+        with patch("main_fastapi.run_task_command") as mock:
+            mock.return_value = _reponse_export_vide()
+            corps = client.post("/api/import/apercu", json={"csv": CSV_PARTIEL}).json()
+        assert corps["importables"] == 2
+        assert [e["ligne"] for e in corps["ecartees"]] == [3, 4]
+
+    def test_import_partiel_n_ecrit_que_les_lignes_retenues(self):
+        capture = {}
+        with patch("main_fastapi.run_task_command") as mock:
+            mock.side_effect = TestImportReussi()._mock_avec_capture(capture)
+            reponse = client.post("/api/import", json={"csv": CSV_PARTIEL, "partiel": True})
+
+        assert reponse.status_code == 200, reponse.text
+        assert len(_appel_import(mock)) == 1
+        assert {t["description"] for t in capture["contenu"]} == {"Tache A", "Tache E"}
+        corps = reponse.json()
+        assert corps["creees"] == 2
+        assert [e["ligne"] for e in corps["ecartees"]] == [3, 4]
+
+    def test_import_partiel_sans_rien_d_importable_400_sans_ecriture(self):
+        with patch("main_fastapi.run_task_command") as mock:
+            mock.return_value = _reponse_export_vide()
+            reponse = client.post("/api/import", json={"csv": CSV_EN_ERREUR, "partiel": True})
+        assert reponse.status_code == 400, reponse.text
+        assert _appel_import(mock) == []
+
+    def test_sans_partiel_une_erreur_bloque_toujours_tout(self):
+        with patch("main_fastapi.run_task_command") as mock:
+            mock.return_value = _reponse_export_vide()
+            reponse = client.post("/api/import", json={"csv": CSV_PARTIEL})
+        assert reponse.status_code == 400, reponse.text
+        assert _appel_import(mock) == []
+
+
 # --- 5. BUG mesure bout en bout : fusion limitee aux taches pending ----------
 #
 # Voir la docstring de tete de ce fichier pour la spec complete. Les deux

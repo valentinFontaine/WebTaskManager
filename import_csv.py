@@ -107,10 +107,14 @@ _SECONDES_PAR_UNITE = {"s": 1, "min": 60, "h": 3600, "j": 86400,
 class ResultatAnalyse:
     """Conteneur simple pour le resultat de `analyser()`."""
 
-    def __init__(self, taches, erreurs, aretes):
+    def __init__(self, taches, erreurs, aretes, lignes=None, descriptions=None):
         self.taches = taches
         self.erreurs = erreurs
         self.aretes = aretes
+        # uuid -> numero de ligne reel (premiere occurrence en cas de doublon)
+        self.lignes = lignes if lignes is not None else {}
+        # numero de ligne -> description lue (y compris lignes dupliquees)
+        self.descriptions = descriptions if descriptions is not None else {}
 
 
 class _ErreurCellule(Exception):
@@ -482,7 +486,14 @@ def analyser(texte_csv, taches_existantes):
 
     erreurs.extend(_detecter_cycles(aretes_pour_cycles, ligne_par_uuid))
 
-    return ResultatAnalyse(taches, erreurs, aretes)
+    lignes_taches = {}
+    descriptions = {}
+    for enr in enregistrements:
+        descriptions[enr["ligne"]] = enr["description"]
+        if not enr["duplique"]:
+            lignes_taches[enr["uuid"]] = enr["ligne"]
+
+    return ResultatAnalyse(taches, erreurs, aretes, lignes_taches, descriptions)
 
 
 def _deps_existantes(tache):
@@ -532,6 +543,7 @@ def _detecter_cycles(aretes, ligne_par_uuid):
                         "ligne": lignes[0] if lignes else 0,
                         "colonne": "depend_de",
                         "message": message,
+                        "lignes": lignes,
                     })
         pile.pop()
         couleur[noeud] = 2
@@ -541,3 +553,60 @@ def _detecter_cycles(aretes, ligne_par_uuid):
             dfs(noeud, [])
 
     return erreurs
+
+
+class SelectionPartielle:
+    """Resultat de `selection_partielle` : taches retenues et lignes ecartees."""
+
+    def __init__(self, taches, ecartees):
+        self.taches = taches
+        self.ecartees = ecartees
+
+
+def selection_partielle(resultat):
+    """Retient les lignes importables d'un `ResultatAnalyse` avec erreurs.
+
+    Une ligne en erreur est ecartee, et en cascade toute ligne dont `depends`
+    contient l'uuid d'une ligne ecartee. Une erreur sans ligne de donnees
+    (en-tete, ligne <= 1) rend tout le fichier inimportable. Tous les membres
+    d'un cycle sont ecartes. Une ligne dupliquee est ecartee, la premiere
+    occurrence reste retenue.
+    """
+    if any(e.get("ligne", 0) <= 1 for e in resultat.erreurs):
+        return SelectionPartielle([], [])
+
+    ligne_par_uuid = resultat.lignes
+    uuid_par_ligne = {l: u for u, l in ligne_par_uuid.items()}
+    descriptions = resultat.descriptions
+
+    raisons = {}  # numero de ligne -> raison
+    for erreur in resultat.erreurs:
+        concernees = erreur.get("lignes") or [erreur["ligne"]]
+        for ligne in concernees:
+            raisons.setdefault(ligne, f"ligne en erreur : {erreur['message']}")
+
+    # Les doublons ne sont dans aucune tache : ils sont deja marques en erreur.
+    ecartes_uuid = {uuid_par_ligne[l] for l in raisons if l in uuid_par_ligne}
+
+    changement = True
+    while changement:
+        changement = False
+        for tache in resultat.taches:
+            u = tache["uuid"]
+            if u in ecartes_uuid or u not in ligne_par_uuid:
+                continue
+            for dep in tache.get("depends") or []:
+                if dep in ecartes_uuid:
+                    ligne_dep = ligne_par_uuid[dep]
+                    raisons[ligne_par_uuid[u]] = f"depend de la ligne {ligne_dep}, ecartee"
+                    ecartes_uuid.add(u)
+                    changement = True
+                    break
+
+    retenues = [t for t in resultat.taches
+                if t["uuid"] in ligne_par_uuid and t["uuid"] not in ecartes_uuid]
+    ecartees = [
+        {"ligne": ligne, "description": descriptions.get(ligne, ""), "raison": raison}
+        for ligne, raison in sorted(raisons.items())
+    ]
+    return SelectionPartielle(retenues, ecartees)

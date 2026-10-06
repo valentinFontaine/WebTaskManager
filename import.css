@@ -41,7 +41,8 @@ body {
     margin: 16px 0;
 }
 
-.import-toolbar button {
+.import-toolbar button,
+.import-actions button {
     padding: 6px 14px;
     border-radius: 6px;
     border: 1px solid #ccc;
@@ -51,7 +52,8 @@ body {
     font-size: 0.95rem;
 }
 
-.import-toolbar button:disabled {
+.import-toolbar button:disabled,
+.import-actions button:disabled {
     opacity: 0.5;
     cursor: not-allowed;
 }
@@ -87,6 +89,18 @@ body {
 
 .import-apercu-tableau tr.en-erreur {
     background: #fdecea;
+}
+
+.import-apercu-tableau tr.ecartee {
+    background: #f1f1f1;
+    color: #888;
+    text-decoration: line-through;
+}
+
+.import-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin: 1rem 0;
 }
 
 .import-graphe {

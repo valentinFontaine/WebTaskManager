@@ -705,6 +705,7 @@ async def get_graphe(projet: str = Query(...)):
 class ImportCsvRequest(BaseModel):
     """Corps attendu par les routes d'import CSV."""
     csv: str
+    partiel: bool = False
 
 
 def _existantes_pour_import():
@@ -733,10 +734,10 @@ async def import_csv_apercu(requete: ImportCsvRequest):
 
     uuids_existants = {t["uuid"] for t in existantes if "uuid" in t}
     taches = []
-    for indice, tache in enumerate(resultat.taches, start=2):
+    for tache in resultat.taches:
         taches.append({
             **tache,
-            "ligne": indice,
+            "ligne": resultat.lignes.get(tache["uuid"]),
             "nouvelle": tache["uuid"] not in uuids_existants,
         })
 
@@ -745,10 +746,17 @@ async def import_csv_apercu(requete: ImportCsvRequest):
         for tache in resultat.taches
     ]
 
+    if resultat.erreurs:
+        selection = import_csv.selection_partielle(resultat)
+    else:
+        selection = import_csv.SelectionPartielle(resultat.taches, [])
+
     return {
         "taches": taches,
         "erreurs": resultat.erreurs,
         "graphe": {"noeuds": noeuds, "aretes": resultat.aretes},
+        "importables": len(selection.taches),
+        "ecartees": selection.ecartees,
     }
 
 
@@ -759,19 +767,27 @@ async def import_csv_route(requete: ImportCsvRequest):
     existantes = _existantes_pour_import()
     resultat = import_csv.analyser(requete.csv, existantes)
 
+    a_importer = resultat.taches
+    ecartees = []
     if resultat.erreurs:
-        raise HTTPException(status_code=400, detail={"erreurs": resultat.erreurs})
+        if not requete.partiel:
+            raise HTTPException(status_code=400, detail={"erreurs": resultat.erreurs})
+        selection = import_csv.selection_partielle(resultat)
+        if not selection.taches:
+            raise HTTPException(status_code=400, detail={"erreurs": resultat.erreurs})
+        a_importer = selection.taches
+        ecartees = selection.ecartees
 
     uuids_existants = {t["uuid"] for t in existantes if "uuid" in t}
-    creees = sum(1 for t in resultat.taches if t["uuid"] not in uuids_existants)
-    mises_a_jour = len(resultat.taches) - creees
+    creees = sum(1 for t in a_importer if t["uuid"] not in uuids_existants)
+    mises_a_jour = len(a_importer) - creees
 
     chemin = None
     try:
         with tempfile.NamedTemporaryFile(
             mode="w", suffix=".json", encoding="utf-8", delete=False
         ) as handle:
-            json.dump(resultat.taches, handle, ensure_ascii=False)
+            json.dump(a_importer, handle, ensure_ascii=False)
             chemin = handle.name
 
         resultat_import = run_task_command(f'task import "{chemin}"')
@@ -788,7 +804,8 @@ async def import_csv_route(requete: ImportCsvRequest):
             detail=f"Erreur Taskwarrior : {resultat_import.stderr}",
         )
 
-    return {"success": True, "creees": creees, "mises_a_jour": mises_a_jour}
+    return {"success": True, "creees": creees, "mises_a_jour": mises_a_jour,
+            "ecartees": ecartees}
 
 
 # Modele telechargeable depuis import.html (#import-modele-lien). Contenu

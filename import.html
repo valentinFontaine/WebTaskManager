@@ -19,7 +19,6 @@
     <div class="import-toolbar">
         <input type="file" id="import-fichier" accept=".csv">
         <a id="import-modele-lien" href="/modele-import.csv" download>Télécharger le modèle</a>
-        <button type="button" id="import-bouton-importer" disabled>Importer</button>
     </div>
 
     <ul id="import-erreurs" class="import-erreurs"></ul>
@@ -38,6 +37,11 @@
         </table>
 
         <div id="import-graphe" class="import-graphe"></div>
+    </div>
+
+    <div id="import-actions" class="import-actions">
+        <button type="button" id="import-bouton-importer" disabled>Importer</button>
+        <button type="button" id="import-bouton-annuler">Annuler</button>
     </div>
 
     <div id="import-resultat" class="import-resultat"></div>

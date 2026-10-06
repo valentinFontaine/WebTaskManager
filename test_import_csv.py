@@ -327,6 +327,81 @@ class TestDureesTaskwarrior:
         assert resultat.taches[0]["estTime"] == attendu
 
 
+class TestSelectionPartielle:
+    """Import partiel (decision du 2026-10-06) : une ligne en erreur est
+    ecartee, et en cascade toute ligne qui en depend, directement ou non.
+    Une erreur d'en-tete rend tout le fichier inimportable.
+
+    Contrat : `import_csv.selection_partielle(resultat)` renvoie un objet
+    `.taches` (objets a importer, meme forme que `resultat.taches`) et
+    `.ecartees` (liste de {"ligne", "description", "raison"}, triee par
+    ligne). `resultat.lignes` donne le numero de ligne de chaque uuid produit.
+    """
+
+    CSV = HEADER + "\n" + (
+        "a;Tache A;Proj;;2h;;;;\n"      # 2 : valide
+        "b;Tache B;Proj;;2zz;;;;\n"     # 3 : erreur (unite inconnue)
+        "c;Tache C;Proj;;1h;;;;b\n"     # 4 : depend de 3 -> ecartee
+        "d;Tache D;Proj;;1h;;;;c\n"     # 5 : depend de 4 -> ecartee
+        "e;Tache E;Proj;;1h;;;;a\n"     # 6 : depend de 2 -> retenue
+    )
+
+    def _selection(self, texte):
+        return import_csv.selection_partielle(analyser(texte, []))
+
+    def test_lignes_valides_retenues(self):
+        sel = self._selection(self.CSV)
+        assert {t["description"] for t in sel.taches} == {"Tache A", "Tache E"}
+
+    def test_ligne_en_erreur_et_dependantes_ecartees_en_cascade(self):
+        sel = self._selection(self.CSV)
+        assert [e["ligne"] for e in sel.ecartees] == [3, 4, 5]
+        par_ligne = {e["ligne"]: e for e in sel.ecartees}
+        assert par_ligne[4]["description"] == "Tache C"
+        assert "3" in par_ligne[4]["raison"]
+        assert "4" in par_ligne[5]["raison"]
+
+    def test_objets_retenus_sans_champ_technique(self):
+        sel = self._selection(self.CSV)
+        for t in sel.taches:
+            assert "ligne" not in t and "ref" not in t
+
+    def test_sans_erreur_tout_est_retenu(self):
+        sel = self._selection(EXEMPLE_CSV)
+        assert len(sel.taches) == 5
+        assert sel.ecartees == []
+
+    def test_erreur_d_entete_rien_n_est_importable(self):
+        texte = "ref;description;projet;bidule\n" + "a;Tache A;Proj;x\n"
+        sel = self._selection(texte)
+        assert sel.taches == []
+
+    def test_cycle_ecarte_toutes_ses_lignes(self):
+        texte = HEADER + "\n" + (
+            "x;Tache X;Proj;;;;;;y\n"
+            "y;Tache Y;Proj;;;;;;x\n"
+            "z;Tache Z;Proj;;;;;;\n"
+        )
+        sel = self._selection(texte)
+        assert {t["description"] for t in sel.taches} == {"Tache Z"}
+        assert [e["ligne"] for e in sel.ecartees] == [2, 3]
+
+    def test_doublon_ecarte_la_premiere_occurrence_retenue(self):
+        texte = HEADER + "\n" + (
+            "a;Tache A;Proj;;;;;;\n"
+            "a;Tache A bis;Proj;;;;;;\n"
+        )
+        sel = self._selection(texte)
+        assert [t["description"] for t in sel.taches] == ["Tache A"]
+        assert [e["ligne"] for e in sel.ecartees] == [3]
+
+    def test_numero_de_ligne_exact_malgre_une_ligne_vide(self):
+        texte = HEADER + "\n" + "a;Tache A;Proj;;;;;;\n" + ";;;;;;;;\n" + "b;Tache B;Proj;;;;;;\n"
+        resultat = analyser(texte, [])
+        tache_b = _par_description(resultat.taches, "Tache B")
+        assert resultat.lignes[tache_b["uuid"]] == 4
+
+
 # --- 10. Separateur ',' vs ';' --------------------------------------------------
 
 class TestSeparateur:
