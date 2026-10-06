@@ -74,10 +74,11 @@ _DATE_UTC_DEJA = re.compile(r"^\d{8}T\d{6}Z$")
 
 # Duree deja en ISO-8601 : acceptee telle quelle (mise en majuscules).
 _ISO_DUREE = re.compile(r"^P(\d+D)?(T(\d+H)?(\d+M)?(\d+S)?)?$", re.IGNORECASE)
+_ISO_SEMAINES = re.compile(r"^P(\d+)W$", re.IGNORECASE)
 
 # Unites de duree reconnues, du plus grand au plus petit -- sert a inferer
 # l'unite d'un nombre isole dans une forme composee ("1h30" = 1h + 30min).
-_ORDRE_UNITES = ["j", "h", "min", "s"]
+_ORDRE_UNITES = ["an", "trim", "mois", "sem", "j", "h", "min", "s"]
 
 _ALIAS_UNITE = {
     "s": "s", "sec": "s", "secs": "s", "seconde": "s", "secondes": "s",
@@ -86,9 +87,21 @@ _ALIAS_UNITE = {
     "h": "h", "hr": "h", "hrs": "h", "heure": "h", "heures": "h",
     "hour": "h", "hours": "h",
     "j": "j", "jour": "j", "jours": "j", "d": "j", "day": "j", "days": "j",
+    # Unites longues de Taskwarrior (mesurees avec `task calc`) : `m` seul
+    # y vaut un mois, pas une minute.
+    "w": "sem", "wk": "sem", "wks": "sem", "week": "sem", "weeks": "sem",
+    "semaine": "sem", "semaines": "sem", "fortnight": "quinz",
+    "m": "mois", "mo": "mois", "mos": "mois", "mth": "mois", "mths": "mois",
+    "month": "mois", "months": "mois", "mois": "mois",
+    "q": "trim", "qtr": "trim", "qtrs": "trim", "quarter": "trim",
+    "quarters": "trim", "trimestre": "trim", "trimestres": "trim",
+    "y": "an", "yr": "an", "yrs": "an", "year": "an", "years": "an",
+    "an": "an", "ans": "an", "annee": "an", "annees": "an",
 }
 
-_SECONDES_PAR_UNITE = {"s": 1, "min": 60, "h": 3600, "j": 86400}
+_SECONDES_PAR_UNITE = {"s": 1, "min": 60, "h": 3600, "j": 86400,
+                       "sem": 7 * 86400, "quinz": 14 * 86400,
+                       "mois": 30 * 86400, "trim": 91 * 86400, "an": 365 * 86400}
 
 
 class ResultatAnalyse:
@@ -135,6 +148,9 @@ def _normaliser_duree(valeur):
     brut = valeur.strip()
     if _ISO_DUREE.match(brut):
         return brut.upper()
+    semaines = _ISO_SEMAINES.match(brut)
+    if semaines:
+        return f"P{int(semaines.group(1)) * 7}D"
 
     motifs = re.findall(r"(\d+(?:[.,]\d+)?)\s*([a-zA-Zéèêà]*)", brut)
     motifs = [(n, u) for n, u in motifs if n]

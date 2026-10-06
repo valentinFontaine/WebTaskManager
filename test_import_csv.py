@@ -306,6 +306,27 @@ class TestDateIllisible:
         assert resultat.erreurs[0]["colonne"].lower() in ("due", "echeance")
 
 
+class TestDureesTaskwarrior:
+    """Unites de duree de Taskwarrior, mesurees le 2026-10-06 avec
+    `task calc` (fork 3.5.0.6) : semaine 7 j, mois 30 j, trimestre 91 j,
+    an 365 j, et `m` seul vaut un MOIS, pas une minute."""
+
+    @pytest.mark.parametrize("brut, attendu", [
+        ("1w", "P7D"), ("1wk", "P7D"), ("2wks", "P14D"),
+        ("1week", "P7D"), ("2weeks", "P14D"), ("1fortnight", "P14D"),
+        ("1mo", "P30D"), ("1mth", "P30D"), ("2months", "P60D"), ("1m", "P30D"),
+        ("1q", "P91D"), ("1qtr", "P91D"), ("1quarter", "P91D"),
+        ("1y", "P365D"), ("1yr", "P365D"), ("2years", "P730D"),
+        ("P2W", "P14D"),
+        ("2semaines", "P14D"), ("1mois", "P30D"), ("1an", "P365D"),
+    ])
+    def test_unite_taskwarrior_acceptee(self, brut, attendu):
+        texte = HEADER + "\n" + f"a;Tache A;Proj;;{brut};;;;\n"
+        resultat = analyser(texte, [])
+        assert resultat.erreurs == []
+        assert resultat.taches[0]["estTime"] == attendu
+
+
 # --- 10. Separateur ',' vs ';' --------------------------------------------------
 
 class TestSeparateur:
