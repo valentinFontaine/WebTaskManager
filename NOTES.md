@@ -50,6 +50,17 @@
    refusée à l'agent, script validé sur taskwarrior-test et confié à l'utilisateur.
    Piège PowerShell : `tags:pro,3D` y devient `pro,3` (`3D` = littéral décimal) ; utiliser Bash.
 
+6. **Renommage `3D` -> `CAO` appliqué par l'utilisateur**, vérifié : 9 tâches `CAO`, 0 `3D`/`3`,
+   total 2462. Sauvegarde `C:/Users/irpaui/taskwarrior-prod-backup-20261006-120401-tag-3D`.
+
+## Prochaine session : liste des tags
+- But : liste de tags proposée à la saisie (on tape dedans). Tags documentés = validés ;
+  quelques tags gardés sans doc, non validés.
+- Inventaire : `docs/inventaire-tags.md` (115 tags, 44 en attente), **non suivi par git**
+  (contient des descriptions de tâches réelles). L'utilisateur remplit la colonne Décision.
+- Piège d'instrument : lire l'export Taskwarrior en Python avec `PYTHONUTF8=1`, sinon les
+  accents s'affichent en `Ã©` (cp1252) alors que la base est saine.
+
 ## Plus tard (pas les prochaines sessions)
 - Stratégie planificateur `+delegation` → `+monitoring` : la tâche `+monitoring` dépend de la
   `+delegation`, mais sa due date dépend de la tâche externe. À concevoir avec l'utilisateur.
