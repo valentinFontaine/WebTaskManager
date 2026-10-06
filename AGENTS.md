@@ -12,7 +12,9 @@ Instructions opérationnelles pour un agent travaillant sur ce dépôt.
   synchronisée par Syncthing (PC Windows, PC Arch, téléphone une fois réparé). Ne jamais la lire
   ni la viser. Voir §2.
 - **Ne jamais tuer un processus qu'on n'a pas lancé** (pas de `taskkill /IM python.exe`), ni
-  lancer un serveur de test sur le port occupé par la prod.
+  lancer un serveur de test sur le port occupé par la prod (**1875** sur le PC comme sur le téléphone).
+- **Ne jamais modifier le worktree `../WebTaskManager-prod`** : on développe ici, la prod reçoit un
+  `git merge master` sur demande de l'utilisateur.
 - `README.md` et `PROJECT_MEMORY.md` sont **périmés** (ils décrivent Flask sur :5000) ; le backend
   actuel est **FastAPI sur :8000**. Voir §8.
 
@@ -44,6 +46,12 @@ porter de nouvelles fonctionnalités.
   ici ne prouve rien sur le binaire de prod.
 - Le code circule par git, les données par Syncthing (jamais par le dépôt). Le serveur de prod du PC peut
   tourner pendant qu'on développe.
+- **Serveur de prod du PC** : worktree `../WebTaskManager-prod` (branche `prod`, son propre venv), lancé par
+  `Webtaskmanager-prod.ps1` sur **:1875**. Mise à jour : `git merge master` dans ce worktree, puis
+  redémarrage. Le dev se lance par `lancer-dev.ps1` (:8000, `taskwarrior-dev`).
+- **Verrou** (`verifier_isolation_prod`, `main_fastapi.py`) : le backend refuse de démarrer sur
+  `taskwarrior-prod` depuis tout autre dossier que `WebTaskManager-prod`. Port et chemins : `WTM_PORT`,
+  `WTM_BASE_PROD`, `WTM_DOSSIER_PROD` (`config.py`).
 
 Détail : docs/topologie-environnements.md — à lire seulement si on touche à Syncthing, aux chemins du
 téléphone, ou si l'on prépare l'entrée d'un pair dans le cercle de prod.
