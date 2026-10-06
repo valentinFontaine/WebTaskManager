@@ -236,6 +236,9 @@ Sans ces UDA, les requêtes de `twplanner.py` échouent ou renvoient des résult
 
 ## 6. Conventions
 
+- **Tags fonctionnels en anglais** (décision du 2026-10-06) : tout tag que le code lit ou écrit
+  avec un sens métier (`+monitoring`, `+delegation`…) est en anglais. Un nouveau tag est
+  documenté avant d'être lu par le code ; les tags français existants seront renommés.
 - Python : PEP 8, pas de linter configuré.
 - JS : ES6+, vanilla, aucune étape de build. Ne pas introduire de bundler sans discussion.
 - Frontend découpé par écran : `main.js` / `calendar-planner.js`, plus les composants

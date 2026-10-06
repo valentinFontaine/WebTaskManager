@@ -13,15 +13,41 @@
 ## Prochaine session (décidé le 2026-10-06), dans cet ordre
 1. **Emoji (😀)** : mesurer sur la base test s'il passe encore mal après `7a8f21a` ; si oui,
    test rouge puis correctif.
-2. **`estTime` : valider l'entrée** (`1h30` rejeté par Taskwarrior, valeur transmise brute par
-   `POST /api/task/add` et `PUT /modify`). Formats valides : `90min`, `1.5h`, `PT1H30M`.
-   À trancher : rejeter avec message clair, ou convertir `1h30` → `90min`.
-3. **Documentation des tags** : vérifier si `+monitoring` et `+externe` sont documentés
-   (ils sont lus par `../TaskWarriorPlanner/planif/` et `graphe.js`), sinon les documenter.
-   **Nouveau tag** demandé : l'action que JE dois faire pour lancer un externe (mail aux achats
-   pour passer commande, expliquer à X ce qu'il doit faire pour les plans de détail…), « l'inverse »
-   de `+monitoring`. Nom à faire choisir à l'utilisateur ; documenter, et décider avec lui si le
-   planificateur / le graphe doivent le traiter.
+2. **`estTime` : corriger** (`1h30` rejeté par Taskwarrior, valeur transmise brute par
+   `POST /api/task/add` et `PUT /modify`). Formats valides connus : `90min`, `1.5h`, `PT1H30M`.
+   Choix de l'utilisateur : normaliser `1h30` en **`1h+30min`** plutôt qu'en minutes.
+   **AVANT d'implémenter : mesurer sur la base test que Taskwarrior (fork 3.5.0.6) accepte
+   `estTime:1h+30min`**, et ce qu'il stocke / réexporte. S'il le refuse, revenir vers l'utilisateur.
+3. **Tags** (règle ajoutée à AGENTS.md §6 : tags fonctionnels en anglais) :
+   - documenter tous les tags fonctionnels (inventaire fait le 2026-10-06, voir plus bas) ;
+   - nouveau tag **`+delegation`** : l'action que je dois faire pour lancer un externe (mail aux
+     achats pour passer commande, expliquer à X les plans de détail…), « l'inverse » de `+monitoring` ;
+   - renommer les tags français en anglais (ex. `+fige`) : noms à valider par l'utilisateur,
+     puis migration de la base (à mesurer sur base test d'abord) et des deux dépôts.
+
+## Inventaire des tags fonctionnels (2026-10-06)
+Doc existante = `TaskWarriorPlanner/openspec/changes/ordonnanceur-par-contraintes/design.md`
+(fige, externe, insecable) et AGENTS.md §5 (coefficients d'urgence). Pas de page de référence.
+
+| actuel | lu par | doc | proposition anglaise |
+|---|---|---|---|
+| `fige` | planif/modele.py:26, main_fastapi.py:631 et :1133 (écrit), calendar-planner.js, graphe.js | design.md | `+pinned` (alt. `+locked`, `+fixed`) |
+| `externe` | planif/modele.py:24, solveur.py, main_fastapi.py:630, calendar-planner.js, graphe.js | design.md | `+external` (design.md:54 le suggérait déjà) |
+| `insecable` | planif/modele.py:25 | design.md (implicite) | `+atomic` (alt. `+nosplit`) |
+| `asap` | planif/modele.py:27 | rapport de nuit seulement | inchangé |
+| `rapide` | taskrc (urgence +2) | AGENTS.md §5 | `+quick` |
+| `committed` / `commit` | taskrc (urgence +2) | AGENTS.md §5 | garder `+committed`, fusionner `+commit` ? |
+| `pro` / `perso` | contextes du taskrc | metadata-taches-reference.md | `+work` / `+personal` ? (coûteux : taskrc des 3 pairs) |
+| `meeting` | aucun code (prévu C1) | design.md:143 | inchangé |
+| `monitoring` | **aucun code, aucune doc** | — | inchangé |
+| `delegation` | nouveau | — | inchangé |
+
+Renommage = code des 2 dépôts + taskrc + tâches de la prod (`task +fige modify -fige +pinned`),
+à mesurer sur base test, et à coordonner avec Syncthing (3 pairs).
+
+## Plus tard (pas les prochaines sessions)
+- Stratégie planificateur `+delegation` → `+monitoring` : la tâche `+monitoring` dépend de la
+  `+delegation`, mais sa due date dépend de la tâche externe. À concevoir avec l'utilisateur.
 
 ## Reste
 - Correctif accents **non validé sur staging** : téléphone toujours en panne (2026-10-06).
