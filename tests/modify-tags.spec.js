@@ -163,9 +163,8 @@ test.describe('TaskEditor -- ne retire pas un tag qu\'il n\'affiche pas (S4)', (
     // Preuve que le formulaire a bien ete pre-rempli avec les DEUX tags,
     // avant de ne toucher que la description : sinon un champ tags vide
     // ferait passer ce test au vert pour la mauvaise raison.
-    const champTags = page.locator('#task-editor-tags');
-    await expect(champTags).toHaveValue(/fixed/);
-    await expect(champTags).toHaveValue(/autre/);
+    await expect(page.locator('.tag-puce[data-tag="fixed"]')).toBeVisible();
+    await expect(page.locator('.tag-puce[data-tag="autre"]')).toBeVisible();
 
     // Seule modification : la description.
     await champDescription.fill('Deplacer le carter avant (revise)');

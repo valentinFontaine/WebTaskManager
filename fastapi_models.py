@@ -61,6 +61,7 @@ class ResponseModel(BaseModel):
     tasks: Optional[List[dict]] = None  # Use dict instead of TaskBase to avoid validation issues
     task: Optional[dict] = None  # Use dict instead of TaskBase to avoid validation issues
     projects: Optional[List[str]] = None
+    tags: Optional[List[str]] = None
     columns: Optional[List[str]] = None
     contexts: Optional[List[str]] = None
     filters: Optional[Dict[str, str]] = None

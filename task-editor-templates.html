@@ -20,7 +20,11 @@
                 <div class="extended-fields" style="display: none;">
                     <div class="form-group">
                         <label for="task-editor-tags"><slot name="tags-label">Tags</slot>:</label>
-                        <input type="text" id="task-editor-tags" placeholder="Comma-separated tags">
+                        <div class="tags-saisie">
+                            <div class="tags-puces"></div>
+                            <input type="text" id="task-editor-tags" placeholder="Comma-separated tags" autocomplete="off">
+                            <ul class="tag-suggestions" hidden></ul>
+                        </div>
                     </div>
                     
                     <div class="form-group">

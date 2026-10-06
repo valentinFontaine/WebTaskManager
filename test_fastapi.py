@@ -1048,3 +1048,52 @@ class TestEstTimeNormalise:
         commandes = self._commandes(mock_command)
         assert any('estTime:1h+30min' in c for c in commandes), commandes
         assert not any('estTime:1h30' in c for c in commandes), commandes
+
+
+class TestTagsValides:
+    """GET /api/tags : liste de saisie de l'editeur, lue dans docs/tags.md.
+
+    Un tag de cette page est valide (docs/tags.md, « Tags descriptifs ») ;
+    la section « Historique des noms » liste d'anciens noms qui ne doivent
+    pas etre proposes.
+    """
+
+    def test_lit_les_tags_de_la_doc(self):
+        response = client.get("/api/tags")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        tags = data["tags"]
+        for attendu in ("cao", "phone", "serviceBE", "external", "fixed", "quick", "pro", "perso"):
+            assert attendu in tags
+        assert tags == sorted(set(tags), key=str.lower)
+
+    def test_ignore_l_historique_des_noms(self):
+        tags = client.get("/api/tags").json()["tags"]
+        for ancien in ("fige", "externe", "insecable", "rapide", "commit"):
+            assert ancien not in tags
+
+    def test_n_appelle_pas_taskwarrior(self):
+        with patch("main_fastapi.run_task_command") as mock_command:
+            client.get("/api/tags")
+        mock_command.assert_not_called()
+
+    def test_doc_absente(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(main_fastapi, "CHEMIN_DOC_TAGS", str(tmp_path / "absent.md"))
+        data = client.get("/api/tags").json()
+        assert data["success"] is False
+        assert data["tags"] is None
+
+    def test_extraction_sur_doc_construite(self, tmp_path, monkeypatch):
+        doc = tmp_path / "tags.md"
+        doc.write_text(
+            "| `+cao` | conception |\n"
+            "`+trail +running +sport`, `context.pro.read=+pro`, `urgency.user.tag.next.coefficient`\n"
+            "a+b n'est pas un tag, `+3D` non plus\n"
+            "## Historique des noms\n"
+            "| `fige` | `+fixed` | `+ancien` |\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(main_fastapi, "CHEMIN_DOC_TAGS", str(doc))
+        tags = client.get("/api/tags").json()["tags"]
+        assert tags == ["cao", "pro", "running", "sport", "trail"]

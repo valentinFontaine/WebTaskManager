@@ -118,7 +118,9 @@ test.describe('TaskEditor.showForCreate (contrat A)', () => {
     }));
 
     await expect(modale(page).locator('#task-editor-description')).toHaveValue('Description pre-remplie');
-    await expect(modale(page).locator('#task-editor-tags')).toHaveValue('pro, urgent');
+    await expect(modale(page).locator('.tag-puce')).toHaveCount(2);
+    await expect(modale(page).locator('.tag-puce[data-tag="pro"]')).toBeVisible();
+    await expect(modale(page).locator('.tag-puce[data-tag="urgent"]')).toBeVisible();
     await expect(modale(page).locator('#task-editor-project')).toHaveValue('NPD.Orion.plans');
   });
 

@@ -861,6 +861,25 @@ def get_context_filters():
     return filters
 
 
+# Liste de saisie des tags : un tag cite dans docs/tags.md (`+nom`) est valide.
+# La section « Historique des noms » liste d'anciens noms : elle est exclue.
+CHEMIN_DOC_TAGS = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'docs', 'tags.md')
+_TAG_DOC_RE = re.compile(r'(?<![\w+])\+([A-Za-z][A-Za-z0-9_]*)')
+
+
+@app.get("/api/tags")
+async def get_tags():
+    """Tags valides (documentes dans docs/tags.md), proposes a la saisie."""
+    try:
+        with open(CHEMIN_DOC_TAGS, encoding='utf-8') as f:
+            texte = f.read()
+    except OSError as e:
+        return ResponseModel(success=False, error=f"docs/tags.md illisible : {e}")
+    texte = texte.split('## Historique', 1)[0]
+    tags = sorted(set(_TAG_DOC_RE.findall(texte)), key=str.lower)
+    return ResponseModel(success=True, tags=tags)
+
+
 @app.get("/api/contexts")
 async def get_contexts():
     """Contextes definis, leurs filtres, et celui qui est actif."""

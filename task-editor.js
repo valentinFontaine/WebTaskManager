@@ -18,6 +18,9 @@ class TaskEditor {
         
         this.currentTask = null;
         this.template = null;
+        this.tags = [];             // puces affichées dans le champ Tags
+        this.tagsValides = null;    // liste de docs/tags.md ; null tant qu'inconnue
+        this.suggestionActive = -1;
         this.onSave = options.onSave || (() => {});
         this.onCancel = options.onCancel || (() => {});
         this.onSaveSuccess = options.onSaveSuccess || (() => {});
@@ -27,6 +30,7 @@ class TaskEditor {
     }
     
     init() {
+        this.chargerTagsValides();
         if (this.options.inline) {
             this.createInlineContainer();
         } else {
@@ -34,7 +38,22 @@ class TaskEditor {
             this.bindEvents();
         }
     }
-    
+
+    async chargerTagsValides() {
+        // En tâche de fond : un échec laisse la liste inconnue, donc aucune
+        // puce n'est signalée comme non valide.
+        try {
+            const response = await fetch('/api/tags');
+            const data = await response.json();
+            if (data && data.success && Array.isArray(data.tags)) {
+                this.tagsValides = data.tags;
+                this.afficherPuces();
+            }
+        } catch (error) {
+            console.warn('Liste des tags indisponible:', error);
+        }
+    }
+
     createModal() {
         // Supprimer le modal existant s'il existe
         const existingModal = document.getElementById(this.options.modalId);
@@ -259,6 +278,8 @@ class TaskEditor {
             });
         }
         
+        this.bindTagsEvents();
+
         // Échap pour fermer
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape' && this.modal.style.display === 'block') {
@@ -267,6 +288,138 @@ class TaskEditor {
         });
     }
     
+    // --- Tags en puces ---
+
+    static normaliserTag(texte) {
+        return (texte || '').trim().replace(/^\+/, '').replace(/\s+/g, '');
+    }
+
+    getTags() {
+        return [...this.tags];
+    }
+
+    ajouterTags(texte) {
+        (texte || '').split(',').forEach(morceau => {
+            const tag = TaskEditor.normaliserTag(morceau);
+            if (tag && !this.tags.includes(tag)) this.tags.push(tag);
+        });
+        this.afficherPuces();
+    }
+
+    retirerTag(tag) {
+        this.tags = this.tags.filter(t => t !== tag);
+        this.afficherPuces();
+    }
+
+    afficherPuces() {
+        const conteneur = this.modal && this.modal.querySelector('.tags-puces');
+        if (!conteneur) return;
+        conteneur.innerHTML = '';
+        this.tags.forEach(tag => {
+            const puce = document.createElement('span');
+            puce.className = 'tag-puce';
+            puce.dataset.tag = tag;
+            if (this.tagsValides && !this.tagsValides.includes(tag)) {
+                puce.classList.add('tag-puce--non-valide');
+                puce.title = 'Tag non documenté dans docs/tags.md';
+            }
+            const nom = document.createElement('span');
+            nom.textContent = tag;
+            const retirer = document.createElement('button');
+            retirer.type = 'button';
+            retirer.className = 'tag-puce-retirer';
+            retirer.textContent = '×';
+            retirer.setAttribute('aria-label', `Retirer ${tag}`);
+            retirer.addEventListener('click', () => this.retirerTag(tag));
+            puce.append(nom, retirer);
+            conteneur.appendChild(puce);
+        });
+        this.afficherSuggestions();
+    }
+
+    suggestionsCourantes() {
+        const champ = this.modal && this.modal.querySelector('#task-editor-tags');
+        const saisie = champ ? champ.value.trim().replace(/^\+/, '').toLowerCase() : '';
+        if (!saisie || !this.tagsValides) return [];
+        return this.tagsValides
+            .filter(t => t.toLowerCase().includes(saisie) && !this.tags.includes(t))
+            .slice(0, 8);
+    }
+
+    afficherSuggestions() {
+        const liste = this.modal && this.modal.querySelector('.tag-suggestions');
+        if (!liste) return;
+        const suggestions = this.suggestionsCourantes();
+        if (this.suggestionActive >= suggestions.length) this.suggestionActive = -1;
+        liste.innerHTML = '';
+        suggestions.forEach((tag, i) => {
+            const li = document.createElement('li');
+            li.className = 'tag-suggestion';
+            if (i === this.suggestionActive) li.classList.add('tag-suggestion--active');
+            li.textContent = tag;
+            // mousedown + preventDefault : le champ garde le focus
+            li.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                this.choisirSuggestion(tag);
+            });
+            liste.appendChild(li);
+        });
+        liste.hidden = suggestions.length === 0;
+    }
+
+    choisirSuggestion(tag) {
+        const champ = this.modal.querySelector('#task-editor-tags');
+        if (champ) champ.value = '';
+        this.suggestionActive = -1;
+        this.ajouterTags(tag);
+    }
+
+    validerTexteEnCours(champ) {
+        this.ajouterTags(champ.value);
+        champ.value = '';
+        this.suggestionActive = -1;
+        this.afficherSuggestions();
+    }
+
+    bindTagsEvents() {
+        const champ = this.modal.querySelector('#task-editor-tags');
+        if (!champ) return;
+
+        champ.addEventListener('input', () => {
+            this.suggestionActive = -1;
+            this.afficherSuggestions();
+        });
+        champ.addEventListener('focus', () => this.afficherSuggestions());
+        champ.addEventListener('blur', () => {
+            const liste = this.modal.querySelector('.tag-suggestions');
+            if (liste) liste.hidden = true;
+        });
+        champ.addEventListener('keydown', (e) => {
+            const suggestions = this.suggestionsCourantes();
+            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                if (!suggestions.length) return;
+                e.preventDefault();
+                this.suggestionActive = e.key === 'ArrowDown'
+                    ? Math.min(this.suggestionActive + 1, suggestions.length - 1)
+                    : Math.max(this.suggestionActive - 1, 0);
+                this.afficherSuggestions();
+            } else if (e.key === 'Enter') {
+                if (this.suggestionActive >= 0 && suggestions[this.suggestionActive]) {
+                    e.preventDefault();
+                    this.choisirSuggestion(suggestions[this.suggestionActive]);
+                } else if (champ.value.trim()) {
+                    e.preventDefault();
+                    this.validerTexteEnCours(champ);
+                }
+            } else if (e.key === ',') {
+                e.preventDefault();
+                this.validerTexteEnCours(champ);
+            } else if (e.key === 'Backspace' && !champ.value && this.tags.length) {
+                this.retirerTag(this.tags[this.tags.length - 1]);
+            }
+        });
+    }
+
     show(task = null) {
         this.currentTask = task;
         
@@ -300,7 +453,8 @@ class TaskEditor {
         // Focus sur le premier champ
         setTimeout(() => {
             const descField = this.modal.querySelector('#task-editor-description');
-            if (descField) descField.focus();
+            // Ne pas voler le focus à un champ déjà en cours de saisie
+            if (descField && !this.modal.contains(document.activeElement)) descField.focus();
         }, 100);
     }
     
@@ -341,7 +495,8 @@ class TaskEditor {
         // Focus sur le premier champ
         setTimeout(() => {
             const descField = this.modal.querySelector('#task-editor-description');
-            if (descField) descField.focus();
+            // Ne pas voler le focus à un champ déjà en cours de saisie
+            if (descField && !this.modal.contains(document.activeElement)) descField.focus();
         }, 100);
     }
     
@@ -378,7 +533,11 @@ class TaskEditor {
             const dueField = form.querySelector('#task-editor-due');
             const scheduledField = form.querySelector('#task-editor-scheduled');
             
-            if (tagsField) tagsField.value = Array.isArray(task.tags) ? task.tags.join(', ') : (task.tags || '');
+            if (tagsField) {
+                tagsField.value = '';
+                this.tags = [];
+                this.ajouterTags(Array.isArray(task.tags) ? task.tags.join(',') : (task.tags || ''));
+            }
             if (projectField) projectField.value = task.project || '';
             if (dueField) dueField.value = this.formatDateForInput(task.due);
             if (scheduledField) scheduledField.value = this.formatDateForInput(task.scheduled);
@@ -388,6 +547,9 @@ class TaskEditor {
     clearForm() {
         const form = this.modal.querySelector('#task-editor-form');
         if (form) form.reset();
+        this.tags = [];
+        this.suggestionActive = -1;
+        this.afficherPuces();
     }
     
     handleSave() {
@@ -409,7 +571,12 @@ class TaskEditor {
             
             // Toujours inclure les champs, même s'ils sont vides, pour permettre la suppression
             if (tagsField) {
-                taskData.tags = tagsField.value.split(',').map(tag => tag.trim()).filter(tag => tag);
+                const tags = [...this.tags];
+                tagsField.value.split(',').forEach(morceau => {
+                    const tag = TaskEditor.normaliserTag(morceau);
+                    if (tag && !tags.includes(tag)) tags.push(tag);
+                });
+                taskData.tags = tags;
             }
             if (projectField) {
                 taskData.project = projectField.value; // Inclure même si vide

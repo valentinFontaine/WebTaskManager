@@ -40,6 +40,14 @@ test.describe('Edition de chaque champ depuis la page principale', () => {
     await expect(page.locator('#task-editor-description')).toHaveValue(description);
   }
 
+  /** Retire toutes les puces de tags de la modale ouverte. */
+  async function retirerToutesLesPuces(page) {
+    const retraits = page.locator('.tag-puce-retirer');
+    while (await retraits.count() > 0) {
+      await retraits.first().click();
+    }
+  }
+
   /**
    * Enregistre et attend la reponse du PUT. Compte les PUT : un test dont le
    * chemin ne declenche plus le PUT passerait sinon au vert en silence.
@@ -101,6 +109,7 @@ test.describe('Edition de chaque champ depuis la page principale', () => {
     const d = `Champ tags ${Date.now()}`;
     await creer(request, d);
     await ouvrirEditeur(page, d);
+    await retirerToutesLesPuces(page);
     await page.fill('#task-editor-tags', 'tstchamps, nouveau');
     await enregistrer(page);
     expect((await relire(request, d)).tags.sort()).toEqual(['nouveau', 'tstchamps']);
@@ -180,7 +189,7 @@ test.describe('Edition de chaque champ depuis la page principale', () => {
     const d = `Champ tags vides ${Date.now()}`;
     await creer(request, d);
     await ouvrirEditeur(page, d);
-    await page.fill('#task-editor-tags', '');
+    await retirerToutesLesPuces(page);
     await enregistrer(page);
     expect((await relire(request, d)).tags ?? []).toEqual([]);
   });
@@ -193,6 +202,7 @@ test.describe('Edition de chaque champ depuis la page principale', () => {
     await page.fill('#task-editor-description', apres);
     await page.selectOption('#task-editor-priority', 'L');
     await page.fill('#task-editor-duration', '2h');
+    await retirerToutesLesPuces(page);
     await page.fill('#task-editor-tags', 'tstchamps, tous');
     await page.fill('#task-editor-project', 'TestChamps.Tous');
     await page.fill('#task-editor-due', '2030-06-01T10:00');
