@@ -29,6 +29,8 @@ DESCRIPTIONS = [
     "integré",
     "avec Test hydro integré",
     "façon très élaborée — œuvre ñ",
+    "réunion 😀",
+    "😀",
 ]
 
 MARQUEURS_JETABLE = ('test', 'dev', 'staging', 'tmp', 'temp')
