@@ -77,7 +77,12 @@
   - Tranché ensuite : minuscules partout -> `cao`, `jde`, `serviceBE`, `serviceAchat` ;
     vélo en ville -> `commute` ; compet -> `race` ; training, entrainement -> `sport` ;
     Athle -> `running` ; costly supprimé ; costing -> `sourcing`.
-  - Reste : passer en revue les ~90 autres tags de `docs/inventaire-tags.md` (JDE fait ;
+  - **Revue terminée le 2026-10-06** : colonne Décision de `docs/inventaire-tags.md` entièrement
+    remplie (115 tags -> 54 retenus, 27 supprimés), liste documentée dans `docs/tags.md`
+    (« Tags descriptifs »). À la migration : `trail` reçoit aussi `+running +sport` ; `offre` ->
+    `devis` ou `sourcing` tâche par tâche (3 tâches) ; vérifier que les tâches des tags supprimés
+    (NPD, SRMix…) ont un projet.
+  - (ancien) Reste : passer en revue les ~90 autres tags de `docs/inventaire-tags.md` (JDE fait ;
     programmation, support, telephone, habit, pointage…), puis documenter dans `docs/tags.md`,
     migrer la prod (sauvegarde, essai sur copie, `tags:` complet via Python, pas PowerShell),
     et enfin la liste de tags à la saisie dans l'éditeur.
