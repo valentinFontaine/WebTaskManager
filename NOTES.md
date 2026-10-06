@@ -44,6 +44,11 @@
    Puis `NPD.suivi` + `NPD.suiviProduits` -> `NPD.Suivi` (6 tâches). `NX` et
    `NX_drafting_suite` sont distincts : à garder. `informatique` -> `education.informatique`
    (1 tâche), projet `rapide` retiré (1 tâche). `info` / `info.arch` gardés. Fusion terminée.
+5. **Tags commençant par un chiffre** : l'API les refuse désormais en add et modify (`933327c`,
+   400 avant toute commande ; en modify `+3D` écrasait la description). Affichage du message
+   d'erreur dans l'éditeur non vérifié. Renommage prod `3D` -> `CAO` : lecture de la prod
+   refusée à l'agent, script validé sur taskwarrior-test et confié à l'utilisateur.
+   Piège PowerShell : `tags:pro,3D` y devient `pro,3` (`3D` = littéral décimal) ; utiliser Bash.
 
 ## Plus tard (pas les prochaines sessions)
 - Stratégie planificateur `+delegation` → `+monitoring` : la tâche `+monitoring` dépend de la
