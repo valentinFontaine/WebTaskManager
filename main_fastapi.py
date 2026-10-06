@@ -194,6 +194,22 @@ def repair_text_fields(task, expected):
     return None
 
 
+_ESTTIME_H_MIN = re.compile(r'^\s*(\d+)\s*h\s*(\d+)\s*(?:min|m)?\s*$', re.IGNORECASE)
+
+
+def normaliser_esttime(valeur):
+    """Reecrit `1h30` (et `1h30min`) en `1h+30min`, seule forme composee que Taskwarrior accepte.
+
+    Mesure du 2026-10-06 (fork 3.5.0.6) : `1h30` et `1h30min` sont refuses (code 2),
+    `1h+30min` est stocke PT1H30M. Toute autre valeur passe telle quelle : Taskwarrior
+    la valide et l'API renvoie son message d'erreur.
+    """
+    m = _ESTTIME_H_MIN.match(valeur or '')
+    if not m:
+        return valeur
+    return f'{int(m.group(1))}h+{int(m.group(2))}min'
+
+
 def cleaned_tags(tags):
     """Normalise une liste de tags comme le font les commandes d'ecriture."""
     if tags is None:
@@ -982,7 +998,7 @@ async def modify_task(task_id: str, task_data: TaskModify):
             
     if task_data.estTime is not None:
         # Une chaine vide efface l'UDA, comme pour project et priority.
-        modifications.append(f'estTime:{task_data.estTime}' if task_data.estTime else 'estTime:')
+        modifications.append(f'estTime:{normaliser_esttime(task_data.estTime)}' if task_data.estTime else 'estTime:')
 
     if task_data.state is not None:
         # Une chaine vide efface l'UDA, comme pour project et priority.
@@ -1062,7 +1078,7 @@ async def add_task(task_data: TaskCreate):
         command_parts.append(f'project:{task_data.project}')
     
     if task_data.estTime:
-        command_parts.append(f'estTime:{task_data.estTime}')
+        command_parts.append(f'estTime:{normaliser_esttime(task_data.estTime)}')
     
     # Create the task without export to avoid export being included in the description
     command = f'task {" ".join(command_parts)}'

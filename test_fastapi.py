@@ -978,3 +978,44 @@ class TestArgvForTaskExe:
         import main_fastapi
         # U+00C1 -> C3 81 ; 0x81 n'existe pas en cp1252 : on garde U+0081
         assert main_fastapi.argv_for_task_exe('Á', acp='cp1252') == 'Ã'
+
+
+class TestEstTimeNormalise:
+    """`1h30` est refuse par Taskwarrior (code 2) ; `1h+30min` est accepte et stocke PT1H30M
+    (mesure du 2026-10-06 sur taskwarrior-test, fork 3.5.0.6). `1h30min` est refuse aussi."""
+
+    @pytest.mark.parametrize('saisie, attendu', [
+        ('1h30', '1h+30min'),
+        ('1h30min', '1h+30min'),
+        ('2H05', '2h+5min'),
+        (' 1 h 30 ', '1h+30min'),
+        ('90min', '90min'),
+        ('1.5h', '1.5h'),
+        ('PT1H30M', 'PT1H30M'),
+        ('1h+30min', '1h+30min'),
+        ('', ''),
+    ])
+    def test_normaliser_esttime(self, saisie, attendu):
+        assert main_fastapi.normaliser_esttime(saisie) == attendu
+
+    @staticmethod
+    def _commandes(mock_command):
+        return [c.args[0] for c in mock_command.call_args_list]
+
+    @patch('main_fastapi.run_task_command')
+    def test_add_normalise(self, mock_command):
+        mock_command.return_value = CommandResult(
+            success=True, stdout='[{"id": 1, "description": "x"}]', stderr="", returncode=0)
+        client.post("/api/task/add", json=TaskCreate(description="x", estTime="1h30").model_dump())
+        commandes = self._commandes(mock_command)
+        assert any('estTime:1h+30min' in c for c in commandes), commandes
+        assert not any('estTime:1h30' in c for c in commandes), commandes
+
+    @patch('main_fastapi.run_task_command')
+    def test_modify_normalise(self, mock_command):
+        mock_command.return_value = CommandResult(
+            success=True, stdout='[{"id": 1, "description": "x"}]', stderr="", returncode=0)
+        client.put("/api/task/1/modify", json=TaskModify(estTime="1h30").model_dump())
+        commandes = self._commandes(mock_command)
+        assert any('estTime:1h+30min' in c for c in commandes), commandes
+        assert not any('estTime:1h30' in c for c in commandes), commandes
