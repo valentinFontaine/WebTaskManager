@@ -5,7 +5,8 @@ description: Lire, auditer et corriger une base Taskwarrior de gestion de projet
 
 # Gestion Taskwarrior et planification
 
-BROUILLON. `copie`, `audit`, `appliquer` (dont l'operation `split`), `planifier` et
+Version installee dans `~/.claude/skills/gestion-taskwarrior/SKILL.md` ; source : `docs/skill-gestion-taskwarrior.md`
+du depot WebTaskManager (modifier la source, puis recopier). `copie`, `audit`, `appliquer` (dont l'operation `split`), `planifier` et
 `faisabilite` (section 3) existent. Il n'y a pas de commande `done` : l'utilisateur termine
 les taches et ferme les jalons lui-meme. Ne pas l'inventer, le dire.
 
@@ -30,10 +31,10 @@ les taches et ferme les jalons lui-meme. Ne pas l'inventer, le dire.
   `task scheduled.not: export`. Projets : `task _projects`.
 - Ne jamais afficher l'export en entier : agreger (comptes, listes d'uuid, ecarts).
 
-## 3. Outils (a creer, wrapper)
+## 3. Outils (wrapper wtm.py)
 
 Script : `C:/Users/irpaui/Documents/Projets/perso/WebTaskManager-prod/tools/wtm.py`
-(version validee ; `python <script> <commande>`). Teste par `test_wtm.py`.
+(version validee ; `python <script> <commande>`).
 
 | Commande | Effet |
 |---|---|
@@ -86,7 +87,7 @@ par `WTM_FERMER_JALONS`, voir NOTES.md.)
 
 Sens detaille : `C:/Users/irpaui/Documents/Projets/perso/WebTaskManager-prod/docs/tags.md`
 (version validee, celle avec laquelle la base a ete creee ; lecture seule, ne jamais la
-modifier ; dossier a ajouter avec `--add-dir`).
+modifier ; l'acces est autorise par les reglages du projet).
 
 - UDA : `estTime` (duree), `assignee` (non utilise ; on tague la personne).
 - Planificateur : `+external` (fait par un tiers ; `estTime` = delai calendaire),
