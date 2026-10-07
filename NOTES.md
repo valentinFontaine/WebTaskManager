@@ -8,7 +8,8 @@
   `../WebTaskManager-prod` (branche `prod`, venv propre), `Webtaskmanager-prod.ps1` sur :1875,
   verrou `verifier_isolation_prod` (refus de démarrer sur la prod hors de ce dossier),
   `lancer-dev.ps1` sur :8000. Mise à jour de la prod : `git merge master` dans le worktree.
-- pytest : 308 verts, 13 ignorés (2026-10-07). Playwright `tests/import.spec.js` : 18/18.
+- pytest : 308 verts, 13 ignorés (2026-10-07). Playwright `tests/import.spec.js` : 19/19,
+  graphe (5 fichiers `tests/graphe*.spec.js`) : 65/65.
 
 ## Fait le 2026-10-06
 1. **Emoji** : mesuré sur taskwarrior-test, 😀 passe (même par argv seul, sans réparation).
@@ -114,19 +115,31 @@
   dépend ; erreur d'en-tête -> rien d'importable. Aperçu : `importables`, `ecartees` ;
   `POST /api/import {csv, partiel: true}`. Bouton « Ajouter les N lignes valides » et
   Annuler, sous l'aperçu. Corrige aussi l'aperçu qui numérotait les tâches par rang
-  (une ligne vide ou un doublon décalait le marquage des erreurs).
+  (une ligne ## Fait le 2026-10-07 (suite) : affichage de l'import, suppression depuis le graphe
+- Bug d'affichage de l'import corrigé (`10f75f3`) : au-delà d'une quarantaine de lignes, les
+  boutons Importer/Annuler tombaient au milieu du tableau et l'ascenseur s'arrêtait avant la fin.
+  Cause : `#import-page` et `.import-corps` en flex avec `min-height: 0`, tassés à la hauteur de
+  la fenêtre ; désormais `flex: 1 0 auto`. Test géométrique (80 lignes), rouge avant, vert après.
+- Bouton « Supprimer la tâche » dans le graphe (`1f345ce`) : visible pour une seule sélection,
+  hors Relier ; grosse confirmation rouge « Êtes-vous sûr ?!? » qui nomme la tâche et ses
+  dépendantes ; Annuler a le focus, Échap / fond annulent. `DELETE /api/task/<uuid>/delete`
+  renvoie 200 même en échec : seul `success` fait foi. Contrat : `tests/graphe-supprimer.spec.js`
+  (5 tests). Suppression par uuid vérifiée sur taskwarrior-dev.
+  Volontairement pas fait : suppression multiple, touche Suppr (déjà prise par « retirer le lien »).
 
-## Prochaine session : bug d'affichage de la page d'import
-- Repéré par l'utilisateur après `a30fe9c` ; il le décrira. Fichiers : `import.html`,
-  `import.js`, `import.css` (classe `ecartee`, bloc `#import-actions` déplacé sous l'aperçu,
-  liste `.import-ecartees` dans le résultat). Test rouge d'abord (`tests/import.spec.js`).
+## Prochaine session : rien d'imposé
 - Défaut connu, non corrigé : après un import réussi, le bouton reste actif (un second clic
   réimporte le même fichier, sans doublon : mise à jour des mêmes tâches).
+- Non vérifié sous Firefox : affichage de l'import, fenêtre de suppression du graphe.
 - Prod : `git merge master` dans `../WebTaskManager-prod` toujours à faire (liste de tags
-  `53cfb70`, durées `25073b4`, import partiel `a30fe9c`), puis redémarrage :1875.
-- Piège d'instrument : Node n'est pas dans le PATH des shells de l'agent. Playwright :
-  `$env:Path='C:\Users\irpaui\AppData\Local\node-v24.17.0-win-x64;'+$env:Path` puis
-  `node node_modules/@playwright/test/cli.js test …`, avec `TASKRC` sur taskwarrior-dev.
+  `53cfb70`, durées `25073b4`, import partiel `a30fe9c`, affichage import `10f75f3`,
+  suppression graphe `1f345ce`), puis redémarrage :1875. Sur demande de l'utilisateur.
+- Piège d'instrument : Node n'est pas dans le PATH des shells de l'agent. Playwright, sous
+  PowerShell : `$env:Path='C:\Users\irpaui\AppData\Local\node-v24.17.0-win-x64;'+$env:Path`
+  puis `npx playwright test …`, avec `TASKRC` sur taskwarrior-dev. Les suites du graphe
+  dépassent 60 s : les lancer en arrière-plan.
+
+st/cli.js test …`, avec `TASKRC` sur taskwarrior-dev.
 
 ## Plus tard (pas les prochaines sessions)
 - Stratégie planificateur `+delegation` → `+monitoring` : la tâche `+monitoring` dépend de la
