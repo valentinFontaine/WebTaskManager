@@ -8,8 +8,8 @@
   `../WebTaskManager-prod` (branche `prod`, venv propre), `Webtaskmanager-prod.ps1` sur :1875,
   verrou `verifier_isolation_prod` (refus de démarrer sur la prod hors de ce dossier),
   `lancer-dev.ps1` sur :8000. Mise à jour de la prod : `git merge master` dans le worktree.
-- pytest : 308 verts, 13 ignorés (2026-10-07). Playwright `tests/import.spec.js` : 19/19,
-  graphe (5 fichiers `tests/graphe*.spec.js`) : 65/65.
+- pytest : 313 verts, 13 ignorés (2026-10-07). Playwright `tests/import.spec.js` : 19/19,
+  graphe (6 fichiers `tests/graphe*.spec.js`) : 77/77.
 
 ## Fait le 2026-10-06
 1. **Emoji** : mesuré sur taskwarrior-test, 😀 passe (même par argv seul, sans réparation).
@@ -127,19 +127,41 @@
   (5 tests). Suppression par uuid vérifiée sur taskwarrior-dev.
   Volontairement pas fait : suppression multiple, touche Suppr (déjà prise par « retirer le lien »).
 
-## Prochaine session : rien d'imposé
+## Fait le 2026-10-07 (fin) : graphe, sélection des projets par bulles (`23716ac`)
+- Champ « Projets » à bulles (recherche floue, sous-séquence) au-dessus de la barre d'outils :
+  c'est LE moyen de choisir le graphe. Plusieurs projets à la fois -> on relie CPQ et JDE sans
+  afficher NPD.MRE. `/api/graphe` accepte `projet` répété (union, champ `projets` en réponse).
+- À partir de deux racines, chaque projet choisi a son cadre (nom complet) ; une seule : règle
+  du 23/09 (pas de cadre). Un projet descendant d'un autre choisi est absorbé.
+- Filtre projet de la nav : ne choisit plus rien, masque côté client (préfixe à frontière de
+  point), sans appel serveur. Sans bulle : rien. Sélection en localStorage (`graphe-projets`).
+- Contrat : `tests/graphe-projets.spec.js` (12 tests, rouges avant). Les `choisirProjet` des 5
+  autres specs passent par le champ et mockent `/api/projects`. Marges de `.graphe-toolbar`
+  réduites (sinon défilement vertical).
+- Point ouvert : le bouton + de la nav préremplit le projet depuis le filtre nav, plus depuis la
+  bulle. À trancher (préremplir avec la bulle quand il n'y en a qu'une ?).
+
+## Prochaine session : graphe, niveau 1 (prompt prêt : `PROMPT-graphe-niveau1.md`)
+- Redessiner sans flash et sans perdre zoom/position. Niveau 2 (mise à jour sans relayout,
+  autre bibliothèque que Mermaid) = chantier séparé de refonte graphique, plus tard.
+- PATH de Node : session dédiée, prompt `PROMPT-node-path.md` (relais `.ps1`/bash seulement
+  dans `~/.local/bin` ; `.bin/playwright.cmd` retombe sur `"node"`, introuvable pour cmd.exe).
+  Les deux `PROMPT-*.md` ne sont pas suivis par git.
+
+## Autres points en attente
 - Défaut connu, non corrigé : après un import réussi, le bouton reste actif (un second clic
   réimporte le même fichier, sans doublon : mise à jour des mêmes tâches).
 - Non vérifié sous Firefox : affichage de l'import, fenêtre de suppression du graphe.
 - Prod : `git merge master` dans `../WebTaskManager-prod` toujours à faire (liste de tags
   `53cfb70`, durées `25073b4`, import partiel `a30fe9c`, affichage import `10f75f3`,
-  suppression graphe `1f345ce`), puis redémarrage :1875. Sur demande de l'utilisateur.
-- Piège d'instrument : Node n'est pas dans le PATH des shells de l'agent. Playwright, sous
-  PowerShell : `$env:Path='C:\Users\irpaui\AppData\Local\node-v24.17.0-win-x64;'+$env:Path`
-  puis `npx playwright test …`, avec `TASKRC` sur taskwarrior-dev. Les suites du graphe
-  dépassent 60 s : les lancer en arrière-plan.
-
-st/cli.js test …`, avec `TASKRC` sur taskwarrior-dev.
+  suppression graphe `1f345ce`, bulles projets `23716ac`), puis redémarrage :1875. Sur demande
+  de l'utilisateur.
+- Piège d'instrument : Node n'est pas dans le PATH des shells de l'agent, et `npx` échoue même
+  sous PowerShell. Playwright :
+  `$env:Path='C:\Users\irpaui\AppData\Local\node-v24.17.0-win-x64;'+$env:Path` puis
+  `node node_modules/@playwright/test/cli.js test …`, avec `TASKRC` sur taskwarrior-dev. Les
+  suites du graphe dépassent 60 s : en arrière-plan, sans modifier les fichiers servis pendant
+  le run (le serveur les sert en direct : run contaminé).
 
 ## Plus tard (pas les prochaines sessions)
 - Stratégie planificateur `+delegation` → `+monitoring` : la tâche `+monitoring` dépend de la
