@@ -345,3 +345,61 @@ body {
 .graphe-projets-suggestion--active {
     background: #e8f1fb;
 }
+
+/* Decoupage d'une tache (cf. graphe.js, ouvrirDecoupage) : meme fond que la
+   confirmation de suppression, boite neutre alignee a gauche. */
+.graphe-decoupage-boite {
+    max-width: 640px;
+    max-height: calc(100vh - 32px);
+    overflow-y: auto;
+    border-color: #2c7be5;
+    text-align: left;
+}
+
+.graphe-decoupage h2 {
+    font-size: 1.5rem;
+    color: #333;
+}
+
+.graphe-decoupage-ligne {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 6px 0;
+}
+
+.graphe-decoupage-desc {
+    flex: 1 1 220px;
+    min-width: 0;
+}
+
+.graphe-decoupage-duree {
+    width: 80px;
+}
+
+.graphe-decoupage-apres {
+    flex: 1 1 100%;
+}
+
+.graphe-decoupage-ligne input,
+.graphe-decoupage-ligne select,
+#graphe-decoupage-nom {
+    padding: 6px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 0.95rem;
+}
+
+.graphe-decoupage-option {
+    margin: 10px 0;
+}
+
+.graphe-decoupage-option[hidden] {
+    display: none;
+}
+
+.graphe-confirmation button.graphe-btn-primaire {
+    background: #2c7be5;
+    border-color: #1a68d1;
+    color: white;
+}

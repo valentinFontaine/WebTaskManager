@@ -34,6 +34,7 @@
         <button type="button" id="graphe-relier" aria-label="Relier" disabled>Relier</button>
         <button type="button" id="graphe-modifier" aria-label="Modifier" hidden>Modifier</button>
         <button type="button" id="graphe-retirer-lien" hidden>Retirer le lien</button>
+        <button type="button" id="graphe-decouper" hidden>Découper</button>
         <button type="button" id="graphe-supprimer" class="graphe-btn-danger" hidden>Supprimer la tâche</button>
     </div>
 
@@ -52,6 +53,31 @@
             <div class="graphe-confirmation-actions">
                 <button type="button" id="graphe-suppression-annuler">Annuler</button>
                 <button type="button" id="graphe-suppression-confirmer" class="graphe-btn-danger">Oui, supprimer définitivement</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="graphe-decoupage" class="graphe-confirmation graphe-decoupage" hidden
+         role="dialog" aria-modal="true" aria-labelledby="graphe-decoupage-titre">
+        <div class="graphe-confirmation-boite graphe-decoupage-boite">
+            <h2 id="graphe-decoupage-titre">Découper la tâche</h2>
+            <p id="graphe-decoupage-description" class="graphe-confirmation-tache"></p>
+            <p class="graphe-confirmation-note">Elle devient un jalon (30 min) qui dépend de ses sous-tâches ; ses successeurs ne changent pas.</p>
+            <div id="graphe-decoupage-apparier-zone" class="graphe-decoupage-option" hidden>
+                <label><input type="checkbox" id="graphe-decoupage-apparier">
+                    Apparier avec les sous-tâches de <span id="graphe-decoupage-jalon"></span></label>
+            </div>
+            <div id="graphe-decoupage-lignes"></div>
+            <button type="button" id="graphe-decoupage-ajouter">+ Ajouter une sous-tâche</button>
+            <p id="graphe-decoupage-total" class="graphe-confirmation-note"></p>
+            <div id="graphe-decoupage-sous-projet-zone" class="graphe-decoupage-option">
+                <label><input type="checkbox" id="graphe-decoupage-sous-projet"> Dans un sous-projet :</label>
+                <span id="graphe-decoupage-projet"></span>.<input type="text" id="graphe-decoupage-nom" aria-label="Nom du sous-projet">
+            </div>
+            <p id="graphe-decoupage-erreur" class="graphe-confirmation-dependantes" hidden></p>
+            <div class="graphe-confirmation-actions">
+                <button type="button" id="graphe-decoupage-annuler">Annuler</button>
+                <button type="button" id="graphe-decoupage-confirmer" class="graphe-btn-primaire">Découper</button>
             </div>
         </div>
     </div>

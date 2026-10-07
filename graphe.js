@@ -356,8 +356,10 @@
     function majBoutonModifier() {
         const cache = liaison.modeLiaison || liaison.selectionnes.size !== 1;
         boutonModifier().hidden = cache;
-        // Meme regle pour Supprimer (cf. tests/graphe-supprimer.spec.js).
+        // Meme regle pour Supprimer (cf. tests/graphe-supprimer.spec.js)
+        // et Decouper (tests/graphe-decouper.spec.js).
         boutonSupprimer().hidden = cache;
+        elt('graphe-decouper').hidden = cache;
     }
 
     // Remise a zero de l'etat d'edition des dependances, appelee a chaque
@@ -646,6 +648,220 @@
         } catch (e) {
             console.error(e);
             definirMessage('Erreur réseau lors de la suppression.', { erreur: true });
+        }
+    }
+
+    // ----- Decoupage d'une tache (POST /api/task/<uuid>/split) -----
+    // La tache devient un jalon qui depend de ses sous-taches. Contrat :
+    // tests/graphe-decouper.spec.js ; modele : NOTES.md, docs/tags.md.
+
+    let uuidADecouper = null;
+    let estTimeOrigine = null;
+    let sousTachesJalon = []; // [{ uuid, description }] des jalons predecesseurs
+
+    function modaleDecoupage() {
+        return elt('graphe-decoupage');
+    }
+
+    // Minutes d'une duree Taskwarrior ou saisie (PT1H30M, 90min, 1.5h, 1h30,
+    // 1h+30min) ; null si illisible. Sert seulement au total indicatif.
+    function dureeMinutes(texte) {
+        const t = (texte || '').trim().toLowerCase();
+        if (!t) return 0;
+        let m = t.match(/^p(?:(\d+)d)?(?:t(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?)?$/);
+        if (m && t !== 'p') {
+            return (+(m[1] || 0)) * 1440 + (+(m[2] || 0)) * 60 + (+(m[3] || 0)) + Math.round((+(m[4] || 0)) / 60);
+        }
+        m = t.match(/^(\d+(?:\.\d+)?)\s*(min|m|h|d)$/);
+        if (m) return Math.round(+m[1] * { min: 1, m: 1, h: 60, d: 1440 }[m[2]]);
+        m = t.match(/^(\d+)\s*h\s*\+?\s*(\d+)\s*(?:min|m)?$/);
+        if (m) return +m[1] * 60 + +m[2];
+        return null;
+    }
+
+    function formaterMinutes(min) {
+        const h = Math.floor(min / 60);
+        const r = min % 60;
+        if (h === 0) return r + 'min';
+        return h + 'h' + (r ? String(r).padStart(2, '0') : '');
+    }
+
+    function lignesDecoupage() {
+        return Array.from(document.querySelectorAll('#graphe-decoupage-lignes .graphe-decoupage-ligne'));
+    }
+
+    function majTotalDecoupage() {
+        let total = 0;
+        let lisible = true;
+        for (const ligne of lignesDecoupage()) {
+            const m = dureeMinutes(ligne.querySelector('.graphe-decoupage-duree').value);
+            if (m === null) lisible = false;
+            else total += m;
+        }
+        const origine = dureeMinutes(estTimeOrigine);
+        elt('graphe-decoupage-total').textContent = 'Total : '
+            + (lisible ? formaterMinutes(total) : '?')
+            + (origine ? ' (tâche d\'origine : ' + formaterMinutes(origine) + ')' : '');
+    }
+
+    // Appariement prerempli dans l'ordre : ligne i -> i-eme sous-tache du jalon.
+    function majChoixApparier() {
+        const actif = elt('graphe-decoupage-apparier').checked;
+        lignesDecoupage().forEach((ligne, i) => {
+            const choix = ligne.querySelector('.graphe-decoupage-apres');
+            choix.hidden = !actif;
+            if (actif && !choix.value && sousTachesJalon[i]) choix.value = sousTachesJalon[i].uuid;
+        });
+    }
+
+    function ajouterLigneDecoupage() {
+        const ligne = document.createElement('div');
+        ligne.className = 'graphe-decoupage-ligne';
+        const desc = document.createElement('input');
+        desc.type = 'text';
+        desc.className = 'graphe-decoupage-desc';
+        desc.placeholder = 'Sous-tâche';
+        desc.setAttribute('aria-label', 'Description de la sous-tâche');
+        const duree = document.createElement('input');
+        duree.type = 'text';
+        duree.className = 'graphe-decoupage-duree';
+        duree.placeholder = 'Durée';
+        duree.setAttribute('aria-label', 'Durée estimée');
+        duree.addEventListener('input', majTotalDecoupage);
+        const choix = document.createElement('select');
+        choix.className = 'graphe-decoupage-apres';
+        choix.setAttribute('aria-label', 'Sous-tâche du jalon à suivre');
+        choix.hidden = true;
+        const aucune = document.createElement('option');
+        aucune.value = '';
+        aucune.textContent = 'Après le jalon (pas d\'appariement)';
+        choix.appendChild(aucune);
+        for (const s of sousTachesJalon) {
+            const o = document.createElement('option');
+            o.value = s.uuid;
+            o.textContent = 'Après : ' + s.description;
+            choix.appendChild(o);
+        }
+        ligne.append(desc, duree, choix);
+        elt('graphe-decoupage-lignes').appendChild(ligne);
+        majChoixApparier();
+        majTotalDecoupage();
+    }
+
+    // Nom de sous-projet propose : la description, reduite aux caracteres
+    // admis par le backend, rendue libre parmi les projets existants.
+    function nomSousProjetPropose(description, projet, existants) {
+        const base = (description || '').trim().replace(/[^\p{L}\p{N}_-]+/gu, '-')
+            .replace(/^-+|-+$/g, '') || 'Etapes';
+        const pris = new Set(existants.map(p => p.toLowerCase()));
+        let nom = base;
+        for (let i = 2; pris.has((projet + '.' + nom).toLowerCase()); i++) nom = base + '-' + i;
+        return nom;
+    }
+
+    function listeDepends(brut) {
+        if (Array.isArray(brut)) return brut;
+        return String(brut || '').split(',').map(u => u.trim()).filter(Boolean);
+    }
+
+    function erreurDecoupage(texte) {
+        const zone = elt('graphe-decoupage-erreur');
+        zone.textContent = texte || '';
+        zone.hidden = !texte;
+    }
+
+    // Lit /api/tasks (tags et depends complets, absents des noeuds du graphe)
+    // pour trouver les jalons predecesseurs, et /api/projects pour le nom libre.
+    async function ouvrirDecoupage(uuid) {
+        const noeud = noeudsCourants.get(uuid);
+        if (!noeud) return;
+        definirMessage('');
+        let taches = [];
+        let projets = [];
+        try {
+            const [rt, rp] = await Promise.all([fetch('/api/tasks'), fetch('/api/projects')]);
+            if (rt.ok) taches = ((await rt.json()) || {}).tasks || [];
+            if (rp.ok) projets = ((await rp.json()) || {}).projects || [];
+        } catch (e) {
+            console.error(e);
+        }
+        const parUuid = new Map(taches.map(t => [t.uuid, t]));
+        const tache = parUuid.get(uuid) || {};
+
+        const jalons = listeDepends(tache.depends).map(u => parUuid.get(u))
+            .filter(t => t && (t.tags || []).includes('milestone'));
+        sousTachesJalon = [];
+        for (const j of jalons) {
+            listeDepends(j.depends).map(u => parUuid.get(u)).filter(Boolean)
+                .sort((a, b) => String(a.entry || '').localeCompare(String(b.entry || '')))
+                .forEach(t => sousTachesJalon.push({ uuid: t.uuid, description: t.description }));
+        }
+
+        uuidADecouper = uuid;
+        estTimeOrigine = tache.estTime || noeud.estTime || null;
+        elt('graphe-decoupage-description').textContent = noeud.description || uuid;
+        elt('graphe-decoupage-jalon').textContent = jalons.map(j => j.description).join(', ');
+        elt('graphe-decoupage-apparier-zone').hidden = sousTachesJalon.length === 0;
+        elt('graphe-decoupage-apparier').checked = false;
+
+        const projet = noeud.project || tache.project || '';
+        elt('graphe-decoupage-sous-projet-zone').hidden = !projet;
+        elt('graphe-decoupage-sous-projet').checked = false;
+        elt('graphe-decoupage-projet').textContent = projet;
+        elt('graphe-decoupage-nom').value = projet
+            ? nomSousProjetPropose(noeud.description, projet, projets) : '';
+
+        elt('graphe-decoupage-lignes').innerHTML = '';
+        ajouterLigneDecoupage();
+        ajouterLigneDecoupage();
+        erreurDecoupage('');
+        modaleDecoupage().hidden = false;
+        lignesDecoupage()[0].querySelector('.graphe-decoupage-desc').focus();
+    }
+
+    function fermerDecoupage() {
+        uuidADecouper = null;
+        modaleDecoupage().hidden = true;
+    }
+
+    async function confirmerDecoupage() {
+        const uuid = uuidADecouper;
+        if (!uuid) return;
+        const apparier = elt('graphe-decoupage-apparier').checked;
+        const corps = {
+            sous_taches: lignesDecoupage().map(ligne => ({
+                description: ligne.querySelector('.graphe-decoupage-desc').value.trim(),
+                estTime: ligne.querySelector('.graphe-decoupage-duree').value.trim() || null,
+                apparier_a: (apparier && ligne.querySelector('.graphe-decoupage-apres').value) || null,
+            })),
+            sous_projet: elt('graphe-decoupage-sous-projet').checked
+                ? elt('graphe-decoupage-nom').value.trim() : null,
+        };
+        const description = (noeudsCourants.get(uuid) || {}).description || uuid;
+        const bouton = elt('graphe-decoupage-confirmer');
+        bouton.disabled = true;
+        erreurDecoupage('');
+        try {
+            const r = await fetch('/api/task/' + encodeURIComponent(uuid) + '/split', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(corps),
+            });
+            const d = await r.json().catch(() => null);
+            if (!r.ok || !d || !d.success) {
+                // 422 (validation pydantic) : detail est une liste.
+                const detail = d && Array.isArray(d.detail) ? 'requête invalide.' : messageServeur(d, 'erreur ' + r.status + '.');
+                erreurDecoupage('Découpage refusé : ' + detail);
+                return;
+            }
+            fermerDecoupage();
+            await chargerEtDessiner(selection.slice());
+            definirMessage('Tâche découpée : ' + description + ' (' + corps.sous_taches.length + ' sous-tâches).');
+        } catch (e) {
+            console.error(e);
+            erreurDecoupage('Erreur réseau lors du découpage.');
+        } finally {
+            bouton.disabled = false;
         }
     }
 
@@ -1067,6 +1283,18 @@
             const [uuid] = liaison.selectionnes;
             demanderSuppression(uuid);
         });
+        elt('graphe-decouper').addEventListener('click', () => {
+            if (liaison.selectionnes.size !== 1) return;
+            const [uuid] = liaison.selectionnes;
+            ouvrirDecoupage(uuid);
+        });
+        elt('graphe-decoupage-ajouter').addEventListener('click', ajouterLigneDecoupage);
+        elt('graphe-decoupage-apparier').addEventListener('change', majChoixApparier);
+        elt('graphe-decoupage-annuler').addEventListener('click', fermerDecoupage);
+        elt('graphe-decoupage-confirmer').addEventListener('click', confirmerDecoupage);
+        modaleDecoupage().addEventListener('click', (e) => {
+            if (e.target === modaleDecoupage()) fermerDecoupage();
+        });
         elt('graphe-suppression-annuler').addEventListener('click', fermerSuppression);
         elt('graphe-suppression-confirmer').addEventListener('click', confirmerSuppression);
         // Clic sur le fond assombri = annuler.
@@ -1090,6 +1318,7 @@
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 if (!modaleSuppression().hidden) fermerSuppression();
+                else if (!modaleDecoupage().hidden) fermerDecoupage();
                 else if (liaison.modeLiaison) annulerModeLiaison();
             } else if (e.key === 'Delete') {
                 if (liaison.lienSelectionne) {
