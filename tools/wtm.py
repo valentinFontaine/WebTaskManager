@@ -6,6 +6,9 @@ valide (apres sauvegarde, sur une base inchangee depuis l'audit).
 
 Toute commande `task` passe par `executer_task`, qui pose TASKRC et retire
 TASKDATA herite (il l'emporterait sur le taskrc).
+
+Deux gestes de planification en lecture seule : `planifier` lance le planificateur
+sans jamais ecrire dans Taskwarrior, `faisabilite` dit si un projet tient une echeance.
 """
 
 import argparse
@@ -15,9 +18,11 @@ import os
 import subprocess
 import sys
 import tempfile
+from datetime import date, datetime, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import config  # noqa: E402
 from config import BASE_PROD  # noqa: E402
 
 
@@ -262,6 +267,140 @@ def appliquer(lot_path, taskrc, cible_prod=False):
     return {'appliquees': faites}
 
 
+def executer_planif(taskrc, args):
+    """Lance le planificateur (liste d'arguments, sans shell) sur le taskrc donne."""
+    env = dict(os.environ)
+    env['TASKRC'] = taskrc
+    env.pop('TASKDATA', None)
+    fini = subprocess.run([config.PLANIFICATEUR_PYTHON, *args], env=env,
+                          cwd=config.PLANIFICATEUR_RACINE,
+                          capture_output=True, text=True, encoding='utf-8',
+                          shell=False)
+    return fini.returncode, fini.stdout, fini.stderr
+
+
+def lire_echeances():
+    """Echeances par projet du planificateur ({} si le fichier est absent)."""
+    chemin = (config.PLANIFICATEUR_ECHEANCES
+              or os.path.join(config.PLANIFICATEUR_RACINE, 'echeances.json'))
+    if not os.path.isfile(chemin):
+        return {}
+    try:
+        with open(chemin, encoding='utf-8') as f:
+            brut = json.load(f)
+    except (OSError, ValueError) as exc:
+        raise WtmErreur('echeances illisibles ({}) : {}'.format(chemin, exc))
+    return {k: v for k, v in brut.items() if not k.startswith('_')}
+
+
+def analyser_plan(plan, taches, projet=None, contextes=('pro', 'perso')):
+    """Resume un plan.json sur le perimetre : retards, taches non placees, verdict."""
+    def dans_perimetre(t):
+        if t.get('status') != 'pending':
+            return False
+        if projet is None:
+            return True
+        p = t.get('project') or ''
+        return p == projet or p.startswith(projet + '.')
+
+    perimetre = [t for t in taches if dans_perimetre(t)]
+    places = plan.get('taches', {})
+    en_retard = [{'uuid': t['uuid'], 'description': t.get('description', ''),
+                  'retard_minutes': places[t['uuid']].get('retard_minutes', 0)}
+                 for t in perimetre
+                 if t['uuid'] in plan.get('en_retard', []) and t['uuid'] in places]
+    non_places = []
+    for t in perimetre:
+        if t['uuid'] in places:
+            continue
+        tags = t.get('tags') or []
+        if 'external' in tags:
+            raison = 'external'
+        elif not t.get('estTime'):
+            raison = 'sans-esttime'
+        elif not any(c in tags for c in contextes):
+            raison = 'sans-contexte'
+        else:
+            raison = 'ecartee'
+        non_places.append({'uuid': t['uuid'], 'description': t.get('description', ''),
+                           'raison': raison})
+    fins = [places[t['uuid']]['fin'] for t in perimetre
+            if t['uuid'] in places and places[t['uuid']].get('fin')]
+    if en_retard:
+        verdict = 'ne-tient-pas'
+    elif (any(x['raison'] != 'external' for x in non_places)
+          or plan.get('statut') != 'OPTIMAL'):
+        verdict = 'indetermine'
+    else:
+        verdict = 'tient'
+    return {'statut': plan.get('statut'), 'retard_total': plan.get('retard_total', 0),
+            'en_retard': en_retard, 'non_places': non_places,
+            'fin': max(fins) if fins else None, 'perimetre': len(perimetre),
+            'verdict': verdict}
+
+
+def planifier(taskrc, sortie_dir, projet=None, echeance=None, cible_prod=False,
+              horizon_jours=120):
+    """Calcule un plan sans rien ecrire dans Taskwarrior ; rend l'analyse du plan."""
+    if echeance and not projet:
+        raise WtmErreur('echeance sans projet')
+    if _normaliser(base_effective(taskrc)) == _normaliser(BASE_PROD) and not cible_prod:
+        raise WtmErreur('base de prod visee sans --cible-prod')
+
+    os.makedirs(sortie_dir, exist_ok=True)
+    echeances = lire_echeances()
+    horizon = horizon_jours
+    if projet:
+        echeances.pop(projet, None)
+    if echeance:
+        echeances[projet] = echeance
+        try:
+            reste = (date.fromisoformat(echeance) - date.today()).days
+        except ValueError:
+            raise WtmErreur('echeance illisible : ' + echeance)
+        horizon = max(horizon_jours, reste + 14)
+    fichier = os.path.join(sortie_dir, 'echeances.json')
+    with open(fichier, 'w', encoding='utf-8') as f:
+        json.dump(echeances, f, ensure_ascii=False, indent=2)
+    chemin_plan = os.path.join(sortie_dir, 'plan.json')
+
+    code, _, err = executer_planif(taskrc, [
+        '-m', 'planif', '--sortie', chemin_plan, '--echeances', fichier,
+        '--horizon', str(horizon), '--horizon-opportuniste', str(horizon)])
+    if code != 0:
+        raise WtmErreur('planificateur en echec : ' + err.strip())
+    try:
+        with open(chemin_plan, encoding='utf-8') as f:
+            plan = json.load(f)
+    except (OSError, ValueError) as exc:
+        raise WtmErreur('plan illisible : {}'.format(exc))
+    res = analyser_plan(plan, _exporter(taskrc), projet=projet)
+    res['plan'] = chemin_plan
+    res['echeances'] = fichier
+    return res
+
+
+def faisabilite(taskrc, sortie_dir, projet, echeance, cible_prod=False):
+    """Un projet tient-il son echeance ? Deux calculs : au plus tot, puis avec le mur."""
+    tot = planifier(taskrc, os.path.join(sortie_dir, 'au-plus-tot'), projet=projet,
+                    cible_prod=cible_prod)
+    avec = planifier(taskrc, os.path.join(sortie_dir, 'avec-echeance'), projet=projet,
+                     echeance=echeance, cible_prod=cible_prod)
+    marge = None
+    if tot['fin']:
+        try:
+            limite = (datetime.combine(date.fromisoformat(echeance), datetime.min.time())
+                      + timedelta(hours=23, minutes=59))
+            marge = (limite - datetime.fromisoformat(tot['fin'])).total_seconds() / 86400
+        except ValueError:
+            raise WtmErreur('date illisible : ' + echeance)
+    verdict = avec['verdict']
+    if marge is not None and marge < 0:
+        verdict = 'ne-tient-pas'
+    return {'au_plus_tot': tot, 'avec_echeance': avec, 'marge_jours': marge,
+            'verdict': verdict}
+
+
 def main(argv=None):
     """Point d'entree CLI ; rend 0, ou 2 sur WtmErreur."""
     p = argparse.ArgumentParser(prog='wtm')
@@ -276,6 +415,18 @@ def main(argv=None):
     ap.add_argument('lot')
     ap.add_argument('--taskrc', required=True)
     ap.add_argument('--cible-prod', action='store_true')
+    pl = sub.add_parser('planifier')
+    pl.add_argument('--taskrc', required=True)
+    pl.add_argument('--sortie', required=True)
+    pl.add_argument('--projet')
+    pl.add_argument('--echeance')
+    pl.add_argument('--cible-prod', action='store_true')
+    fa = sub.add_parser('faisabilite')
+    fa.add_argument('--taskrc', required=True)
+    fa.add_argument('--sortie', required=True)
+    fa.add_argument('--projet', required=True)
+    fa.add_argument('--echeance', required=True)
+    fa.add_argument('--cible-prod', action='store_true')
     args = p.parse_args(argv)
     try:
         if args.cmd == 'copie':
@@ -284,6 +435,14 @@ def main(argv=None):
             res = auditer(args.taskrc, args.sortie)
             print('{} anomalie(s) ; lot : {} ; rapport : {}'.format(
                 len(res['anomalies']), res['lot'], res['rapport']))
+        elif args.cmd == 'planifier':
+            res = planifier(args.taskrc, args.sortie, projet=args.projet,
+                            echeance=args.echeance, cible_prod=args.cible_prod)
+            print(json.dumps(res, ensure_ascii=False, indent=2))
+        elif args.cmd == 'faisabilite':
+            res = faisabilite(args.taskrc, args.sortie, args.projet, args.echeance,
+                              cible_prod=args.cible_prod)
+            print(json.dumps(res, ensure_ascii=False, indent=2))
         else:
             res = appliquer(args.lot, args.taskrc, cible_prod=args.cible_prod)
             print('{} operation(s) appliquee(s)'.format(res['appliquees']))
