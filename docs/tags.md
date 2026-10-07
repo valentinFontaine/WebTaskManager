@@ -19,6 +19,12 @@ Les autres tags (personnes, services, thèmes) sont descriptifs : voir « Tags d
 Détail du modèle : `TaskWarriorPlanner/openspec/changes/ordonnanceur-par-contraintes/design.md`
 (rédigé avant le renommage : il emploie encore `fige`, `externe`, `insecable`).
 
+## Découpage des tâches (conception du 2026-10-07, pas encore lu par le code)
+
+| Tag | Sens |
+|---|---|
+| `+milestone` | jalon de fin d'une tâche découpée : pas de travail propre (pas d'`estTime`), dépend de ses sous-tâches, ses successeurs dépendent de lui. Le planificateur doit l'ignorer. Voir NOTES.md |
+
 ## Suivi des tiers (aucun code ne les lit encore)
 
 | Tag | Sens |
