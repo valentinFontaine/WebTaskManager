@@ -5,8 +5,8 @@ description: Lire, auditer et corriger une base Taskwarrior de gestion de projet
 
 # Gestion Taskwarrior et planification
 
-BROUILLON. `copie`, `audit` et `appliquer` (section 3) existent ; `planifier`, `split` et
-`done` n'existent pas encore : ne pas les inventer, le dire.
+BROUILLON. `copie`, `audit`, `appliquer`, `planifier` et `faisabilite` (section 3) existent ;
+`split` et `done` n'existent pas encore : ne pas les inventer, le dire.
 
 ## 1. Regles absolues
 
@@ -51,9 +51,23 @@ taches, UTF-8 sur). Les anomalies sans correction mecanique (cycle, estTime abse
 figurent au rapport : c'est a l'agent de les resoudre et d'ecrire les operations, puis a
 l'utilisateur de valider.
 
-A creer plus tard (pas encore ecrits) : `planifier` (calcul sur la copie, lecture de
-`plan.json`), `split` et `done` (via l'API : `POST /api/task/{uuid}/split`,
-`POST /api/task/{id}/done`, qui ferme aussi les jalons).
+| `planifier --taskrc <copie> --sortie <dossier> [--projet P] [--echeance AAAA-MM-JJ]` | calcul du planificateur sur la copie, sans ecriture ; rend verdict, fin, retards, taches non placees classees par raison |
+| `faisabilite --taskrc <copie> --sortie <dossier> --projet P --echeance AAAA-MM-JJ` | deux calculs (au plus tot, puis avec l'echeance) ; rend verdict, date au plus tot, marge en jours |
+
+Les echeances de projet ne sont pas des `due` : elles vivent dans `echeances.json` du
+planificateur (une entree par projet). `planifier` en fabrique une copie temporaire ; il ne
+modifie jamais le fichier d'origine ni la base. Il elargit les horizons (defaut du
+planificateur : 90 j, et 21 j pour les taches non datees, qui ecarteraient le reste).
+Format de l'echeance : `AAAA-MM-JJ` seulement.
+
+Resultat de `planifier` : `verdict` = `tient` / `ne-tient-pas` / `indetermine`.
+`indetermine` des qu'une tache du projet n'est pas placee, sauf `external` : raisons
+`sans-esttime`, `sans-contexte`, `ecartee` (capacite), `external` (delai d'un tiers, hors
+plan). Un `tient` ne vaut que si `non_places` ne contient que des `external`, dont les delais
+restent une hypothese a signaler.
+
+A creer plus tard (pas encore ecrits) : `split` et `done` (via l'API :
+`POST /api/task/{uuid}/split`, `POST /api/task/{id}/done`, qui ferme aussi les jalons).
 
 Raison de `wtm-split` et `wtm-done` : `task done` en ligne de commande **ne ferme pas**
 les jalons ; seule la route le fait.
