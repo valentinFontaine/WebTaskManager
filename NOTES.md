@@ -6,46 +6,25 @@ Historique des sessions précédentes : `docs/archive/notes-2026-10-07.md`.
 - Commits locaux uniquement, rien poussé. Prod du PC (`../WebTaskManager-prod`, :1875) à jour
   jusqu'à `4793af0`, redémarrée, graphe multi-projets et redessin sans flash validés par
   l'utilisateur.
-- pytest : 313 verts, 13 ignorés. Playwright `tests/graphe*` : 81/81, `tests/import.spec.js` : 19/19.
+- pytest : 360 verts, 13 ignorés. Playwright `tests/graphe*` : 89/89, `tests/import.spec.js` : 19/19.
 
-## Prochaine session : implémenter le découpage (split) d'une tâche
-Conception arrêtée le 2026-10-07 avec l'utilisateur. Rien d'implémenté.
-
-**Modèle : la tâche découpée devient un jalon de fin.**
-- Elle garde son UUID et son historique, prend `+milestone`, perd son `estTime` et ne dépend
-  plus que de ses sous-tâches. Ses successeurs ne sont **pas modifiés** : ils dépendent
-  toujours du même UUID.
-- Les sous-tâches reprennent les `depends` d'origine, ainsi que le projet, les tags et la
-  `due` ; chacune a son propre `estTime`.
-- Pourquoi pas « supprimer puis recréer » : mesuré le 2026-10-07 (base temporaire, binaire du
-  PC), une tâche dont le prédécesseur est **supprimé** n'est plus `+BLOCKED` et devient
-  `+READY`. Un remplacement non atomique débloquerait la suite sans prévenir.
-- Clôture : fermer le jalon automatiquement quand sa dernière sous-tâche est terminée
-  (préférence exprimée, à confirmer à l'implémentation).
-- Pas de jalon de début (« prepare … ») dans les données : il bloquerait les sous-tâches tant
-  qu'on ne l'a pas fermé, et gênerait l'appariement. Le cadre du sous-projet dans le graphe
-  joue ce rôle visuellement.
-- Pas d'UDA pour le lien parent → enfants : « le jalon et ce dont il dépend » suffit.
-  Ne pas utiliser `parent`, qui est réservé par Taskwarrior à la récurrence.
-- Appariement : quand on découpe le successeur (« Consulter les pièces »), chaque nouvelle
-  sous-tâche dépend par défaut du jalon précédent. Une option « apparier » la relie à la
-  sous-tâche correspondante (Consulter APM → Plan APM).
-- Le découpage peut se répéter : une sous-tâche peut elle-même devenir un jalon.
-
-**Sous-projet optionnel** (case à cocher dans la fenêtre de découpage, nom proposé et modifiable).
-- Les sous-tâches vont dans `Projet.Sous`, mais **le jalon reste dans le projet d'origine**.
-  Choix de l'utilisateur : le jalon doit rester visible quand on consulte le projet lui-même
-  dans Taskwarrior (`project.is:Projet`), en point de sortie vers la suite. À revoir à
-  l'usage : on pourra le ranger dans le sous-projet si cela ne plaît pas.
-- Mesuré le 2026-10-07 : `project:Pre` retient `Pre`, `Pre.Plans` **et `Preparation`**
-  (simple comparaison du début du texte, sans s'arrêter au point). Seul `project.is:Pre` est
-  exact. Le backend (`_dans_projet`) et les filtres JS s'arrêtent au point et ne sont pas
-  concernés. Tout filtre `project:` envoyé à Taskwarrior (planificateur, `twplanner.py`) l'est.
-- Les sous-projets sont déjà gérés : graphe (cadres imbriqués), liste, filtre de navigation.
-  Reste à gérer un nom de sous-projet déjà pris.
-
-**À faire ailleurs** : TaskWarriorPlanner doit ignorer les tâches `+milestone`, qui n'ont pas de
-travail propre. `+milestone` est documenté dans `docs/tags.md`.
+## Découpage (split) d'une tâche : fait le 2026-10-07, pas encore en prod
+Commits `5070bf2` (backend) et `8d72718` (graphe). Modèle : `docs/tags.md` (`+milestone`) et
+docstring de `decoupage.py`.
+- `POST /api/task/{uuid}/split` : sous-tâches créées d'abord, puis **une** commande sur le jalon
+  (`+milestone estTime:30min depends:s1,s2,-anciens`) ; échec en route → sous-tâches supprimées.
+- Décision de l'utilisateur : le jalon garde `estTime:30min` (et non vide) pour que
+  TaskWarriorPlanner n'ait **rien** à changer. Plus rien à faire côté planificateur.
+- Sous-projet : nom pris → 409 (pas de « rejoindre ») ; jalon dans le projet d'origine.
+- Clôture auto dans `POST /done` (en cascade). **Pas** si la sous-tâche est finie par `task done`
+  en ligne de commande : il faudrait un hook sur chaque pair.
+- Bouton « Découper » dans la barre du graphe seulement ; pas encore sur la fiche de tâche.
+- Le graphe ne distingue pas visuellement un jalon (`/api/graphe` n'expose pas les tags).
+- Vérifié : pytest 360 verts ; Playwright `tests/graphe*` 89/89 ; intégration réelle sur
+  taskwarrior-dev (script jetable, 24 contrôles : successeur bloqué tout du long, rollback réel
+  sur durée refusée, appariement, clôture). Non fait : staging téléphone, Firefox.
+- Prochaine étape : `git merge master` dans `../WebTaskManager-prod`, puis redémarrer :1875
+  (sur demande de l'utilisateur).
 
 ## Autres points en attente
 - Défaut connu, non corrigé : après un import réussi, le bouton reste actif (un second clic

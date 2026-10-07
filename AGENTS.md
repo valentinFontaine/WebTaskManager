@@ -195,6 +195,8 @@ Tout passe par `run_task_command()` (`main_fastapi.py`), qui appelle
 | `task rc.confirmation=off <id> delete` | `DELETE /api/task/{id}/delete` |
 | `task rc.confirmation=off <id> modify …` | `PUT /api/task/{id}/modify` |
 | `task add "<desc>" …` puis `task +LATEST export` | `POST /api/task/add` |
+| `task add …` ×n, puis `task rc.confirmation=off <uuid> modify +milestone estTime:30min depends:…` | `POST /api/task/{uuid}/split` (`decoupage.py`) |
+| `task status:pending export` puis `task <jalon> done` | `POST /api/task/{id}/done` (clôture des jalons) |
 
 **UDA requis dans le `taskrc`** (définition de référence : `example_taskrc.txt`) :
 `estTime` (duration), `assignee` (string).
