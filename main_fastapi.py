@@ -22,6 +22,7 @@ from pydantic import BaseModel
 
 import plan_runner
 import import_csv
+import decoupage
 from config import (
     DEVELOPER_MODE, DEBUG_FILE, TASK_TIMEOUT, KANBAN_COLUMNS,
     NOTIFICATION_TIMEOUT, CONTEXT_CACHE_TTL,
@@ -957,11 +958,35 @@ async def stop_task(task_id: str):
 
 @app.post("/api/task/{task_id}/done")
 async def complete_task(task_id: str):
-    """Mark a task as done"""
+    """Mark a task as done, puis ferme les jalons dont c'etait la derniere
+    dependance en attente (decoupage.jalons_a_fermer, en cascade)."""
+    uuid_termine = task_id if _est_uuid_canonique(task_id) else None
+    if uuid_termine is None:
+        uuids = run_task_command(f'task {task_id} _uuids')
+        lignes = uuids.stdout.split() if uuids.success else []
+        if len(lignes) == 1 and _est_uuid_canonique(lignes[0]):
+            uuid_termine = lignes[0]
+
     result = run_task_command(f'task {task_id} done')
+    if not result.success:
+        return ResponseModel(success=False, message=result.stderr)
+
+    fermes = []
+    if uuid_termine:
+        export = run_task_command('task status:pending export')
+        try:
+            pending = json.loads(export.stdout) if export.success else []
+        except json.JSONDecodeError:
+            pending = []
+        if isinstance(pending, list):
+            for jalon in decoupage.jalons_a_fermer(uuid_termine, pending):
+                if run_task_command(f'task {jalon} done').success:
+                    fermes.append(jalon)
+
     return ResponseModel(
-        success=result.success,
-        message=result.stdout if result.success else result.stderr
+        success=True,
+        message=result.stdout,
+        data={"jalons_fermes": fermes} if fermes else None
     )
 
 
@@ -1252,6 +1277,92 @@ async def modify_depends(task_id: str, corps: TaskDepends):
         raise HTTPException(status_code=400, detail=result.stderr)
 
     return ResponseModel(success=True, message=result.stdout)
+
+
+class SousTacheSplit(BaseModel):
+    description: str
+    estTime: Optional[str] = None
+    apparier_a: Optional[str] = None
+
+
+class TaskSplit(BaseModel):
+    """Corps de POST /api/task/{uuid}/split"""
+    sous_taches: List[SousTacheSplit]
+    sous_projet: Optional[str] = None
+
+
+def _exporter(filtre):
+    result = run_task_command(f'task {filtre} export')
+    if not result.success or not result.stdout.strip():
+        return []
+    try:
+        return json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return []
+
+
+@app.post("/api/task/{task_id}/split")
+async def split_task(task_id: str, corps: TaskSplit):
+    """Decoupe une tache : elle devient un jalon (+milestone) qui depend de ses
+    sous-taches (decoupage.py, contrat test_decoupage.py).
+
+    Ordre : sous-taches d'abord (rien n'en depend encore), puis une seule
+    commande sur le jalon. En cas d'echec, les sous-taches deja creees sont
+    supprimees : les successeurs restent bloques a chaque instant.
+    """
+    if not _est_uuid_canonique(task_id):
+        raise HTTPException(status_code=400, detail="Identifiant de tâche invalide")
+
+    exporte = _exporter(task_id)
+    if not exporte:
+        raise HTTPException(status_code=404, detail="Tâche introuvable")
+    tache = exporte[0]
+    anciens_depends = decoupage.parse_depends(tache.get('depends'))
+
+    sous_taches = [s.model_dump() for s in corps.sous_taches]
+    predecesseurs = {}
+    if any(s['apparier_a'] for s in sous_taches) and anciens_depends:
+        valides = [u for u in anciens_depends if _est_uuid_canonique(u)]
+        predecesseurs = {p['uuid']: p for p in _exporter(' '.join(valides))}
+
+    projets = []
+    if corps.sous_projet is not None:
+        result = run_task_command('task _projects')
+        projets = [p.strip() for p in result.stdout.splitlines() if p.strip()] if result.success else []
+
+    try:
+        plan = decoupage.preparer_decoupage(tache, sous_taches, corps.sous_projet, predecesseurs, projets)
+    except decoupage.ErreurDecoupage as e:
+        raise HTTPException(status_code=e.status, detail=e.message)
+
+    crees = []
+
+    def annuler(message):
+        for u in crees:
+            run_task_command(f'task rc.confirmation=off {u["uuid"]} delete')
+        raise HTTPException(status_code=400, detail=message)
+
+    for sous_tache in plan:
+        result = run_task_command(decoupage.commande_ajout(sous_tache))
+        if not result.success:
+            annuler(result.stderr)
+        derniere = _exporter('+LATEST')
+        if not derniere or not _est_uuid_canonique(derniere[0].get('uuid', '')):
+            annuler("Sous-tâche créée mais introuvable : découpage annulé.")
+        creee = derniere[0]
+        crees.append(repair_text_fields(creee, {
+            'description': sous_tache['description'],
+            'project': sous_tache['project'],
+            'tags': sous_tache['tags'] or None,
+        }) or creee)
+
+    result = run_task_command(
+        decoupage.commande_jalon(task_id, anciens_depends, [c['uuid'] for c in crees]))
+    if not result.success:
+        annuler(result.stderr)
+
+    jalon = _exporter(task_id)
+    return ResponseModel(success=True, task=jalon[0] if jalon else None, tasks=crees)
 
 
 # Catch-all route for static files (must be last)
