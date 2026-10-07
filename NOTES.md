@@ -141,9 +141,17 @@
 - Point ouvert : le bouton + de la nav préremplit le projet depuis le filtre nav, plus depuis la
   bulle. À trancher (préremplir avec la bulle quand il n'y en a qu'une ?).
 
-## Prochaine session : graphe, niveau 1 (prompt prêt : `PROMPT-graphe-niveau1.md`)
-- Redessiner sans flash et sans perdre zoom/position. Niveau 2 (mise à jour sans relayout,
-  autre bibliothèque que Mermaid) = chantier séparé de refonte graphique, plus tard.
+## Fait le 2026-10-07 : graphe, niveau 1 (redessin sans flash)
+- `graphe.js` : l'ancien graphe reste affiché pendant rechargement et rendu, remplacé d'un
+  coup ; « Chargement... » seulement sans graphe affiché. Zoom/position repris en absolu
+  (`getSizes().realZoom`, `getPan()`). Ajuster : premier dessin, **changement de la liste
+  des projets (ajout de bulle compris, choix de l'agent, à confirmer)**, bouton. Id Mermaid
+  unique par rendu (`mermaid.render` retire l'élément portant déjà l'id). Erreur HTTP/réseau
+  du rechargement : graphe vidé, comme avant. Contrat : `tests/graphe-redessin.spec.js`.
+- Piège d'instrument : svg-pan-zoom applique le zoom à l'image suivante ; lire la
+  transformation juste après un clic donne une valeur périmée (attendre avec `expect.poll`).
+- Niveau 2 (mise à jour sans relayout, autre bibliothèque que Mermaid) = chantier séparé de
+  refonte graphique, plus tard. Prod : à inclure dans le prochain `git merge master`.
 - PATH de Node : session dédiée, prompt `PROMPT-node-path.md` (relais `.ps1`/bash seulement
   dans `~/.local/bin` ; `.bin/playwright.cmd` retombe sur `"node"`, introuvable pour cmd.exe).
   Les deux `PROMPT-*.md` ne sont pas suivis par git.

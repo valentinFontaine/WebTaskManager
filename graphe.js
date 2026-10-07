@@ -76,6 +76,17 @@
  * CDN) -- plus fiable que de decouper l'id du chemin (`L-<id>-<id>-<n>`),
  * qui suppose implicitement que ni l'id source ni l'id cible ne contiennent
  * eux-memes de tiret.
+ *
+ * Redessin sans flash (cf. tests/graphe-redessin.spec.js) : l'ancien graphe
+ * reste affiche pendant le rechargement et le rendu Mermaid ; le nouveau le
+ * remplace d'un coup. "Chargement..." n'apparait que si rien n'est affiche.
+ * Chaque rendu recoit un id Mermaid unique : mermaid.render retire du
+ * document l'element qui porte deja l'id demande, ce qui effacerait l'ancien
+ * graphe des le debut du rendu. Zoom et position sont repris d'un rendu au
+ * suivant en valeurs absolues (getSizes().realZoom, getPan()) : getZoom() est
+ * relatif a l'ajustement initial de chaque graphe, qui change avec sa taille.
+ * La vue n'est ajustee qu'au premier dessin, quand la liste des projets
+ * choisis change, ou sur le bouton Ajuster.
  */
 (function () {
     'use strict';
@@ -87,11 +98,20 @@
     // Instance svg-pan-zoom courante, recreee a chaque nouveau rendu.
     let panZoom = null;
 
+    // Compteur de rendus : un rendu Mermaid termine apres qu'un plus recent
+    // a ete lance est perime et ne doit pas remplacer l'affichage.
+    let dessinEnCours = 0;
+
+    // Vrai quand le prochain rendu doit ajuster la vue au lieu de reprendre
+    // zoom et position : premier dessin, ou liste des projets choisis changee.
+    let reajusterVue = true;
+    let projetsDessines = null; // liste des projets du dernier chargement (JSON)
+
     // Instance TaskEditor partagee, creee au premier besoin (cf. initTaskEditor).
     let taskEditor = null;
 
     // Etat d'edition des dependances (H2). Remis a zero a chaque redessin,
-    // cf. resetInteractionLiaison() appelee en tete de dessiner().
+    // cf. resetInteractionLiaison() appelee par installerRendu().
     const liaison = {
         selectionnes: new Set(), // uuids selectionnes (hors mode liaison : selection en cours)
         modeLiaison: false,
@@ -340,9 +360,9 @@
         boutonSupprimer().hidden = cache;
     }
 
-    // Remise a zero de l'etat d'edition des dependances, appelee en tete de
-    // chaque redessin (les elements DOM precedents disparaissent de toute
-    // facon avec viderSvg()).
+    // Remise a zero de l'etat d'edition des dependances, appelee a chaque
+    // redessin au moment ou le nouveau graphe remplace l'ancien (les elements
+    // DOM precedents disparaissent de toute facon avec viderSvg()).
     function resetInteractionLiaison() {
         liaison.selectionnes.clear();
         liaison.modeLiaison = false;
@@ -723,25 +743,48 @@
         panZoom.center();
     }
 
-    async function dessiner(racines, noeuds, aretes) {
+    // Vue courante en valeurs absolues, ou null sans graphe affiche.
+    function lireVue() {
+        if (!panZoom) return null;
+        return { realZoom: panZoom.getSizes().realZoom, pan: panZoom.getPan() };
+    }
+
+    function restaurerVue(vue) {
+        panZoom.zoomBy(vue.realZoom / panZoom.getSizes().realZoom);
+        panZoom.pan(vue.pan);
+    }
+
+    // Remplace d'un coup le graphe affiche (svg vide : graphe retire) et
+    // l'etat qui s'y rapporte.
+    function installerRendu(svg, noeuds, aretes) {
         viderSvg();
         resetInteractionLiaison();
         noeudsCourants = new Map(noeuds.map(n => [n.uuid, n]));
         aretesCourantes = aretes;
+        elt('graphe-svg').innerHTML = svg;
+    }
+
+    async function dessiner(racines, noeuds, aretes) {
+        const idDessin = ++dessinEnCours;
         if (noeuds.length === 0) {
+            installerRendu('', noeuds, aretes);
             definirMessage('Aucune tâche trouvée pour ce projet.');
             return;
         }
-        definirMessage('');
+        const ajuster = reajusterVue;
         const aretesUniques = dedupeAretes(aretes);
         const { definition, cadres } = construireDefinitionMermaid(racines, noeuds, aretesUniques);
         try {
-            const { svg } = await window.mermaid.render('graphe-mermaid-svg', definition);
+            const { svg } = await window.mermaid.render('graphe-mermaid-svg-' + idDessin, definition);
+            if (idDessin !== dessinEnCours) return; // rendu perime
+            const vue = ajuster ? null : lireVue();
+            installerRendu(svg, noeuds, aretes);
+            definirMessage('');
             const conteneur = elt('graphe-svg');
-            conteneur.innerHTML = svg;
             appliquerAttributsNoeuds(conteneur, noeuds);
             appliquerAttributsCadres(conteneur, cadres);
             appliquerAttributsAretes(conteneur, aretesUniques);
+            if (ajuster) reajusterVue = false;
             // svg-pan-zoom peut lever ("matrix not invertible") si la zone
             // est de taille nulle au moment du calcul. Le rendu Mermaid a
             // deja reussi a ce stade : une erreur ici ne doit ni l'effacer,
@@ -749,13 +792,15 @@
             // "fenetre basse" de tests/graphe.spec.js).
             try {
                 initPanZoom();
-                ajusterVue();
+                if (vue) restaurerVue(vue);
+                else ajusterVue();
             } catch (e) {
                 console.error(e);
             }
         } catch (e) {
+            if (idDessin !== dessinEnCours) return;
             console.error(e);
-            viderSvg();
+            installerRendu('', [], []);
             definirMessage('Erreur lors du rendu du graphe.', { erreur: true });
         }
     }
@@ -801,13 +846,19 @@
     async function chargerEtDessiner(projets) {
         const idRequete = ++requeteEnCours;
         derniereReponse = null;
-        definirMessage('Chargement...');
-        viderSvg();
+        const cle = JSON.stringify(projets);
+        if (cle !== projetsDessines) {
+            projetsDessines = cle;
+            reajusterVue = true;
+        }
+        // L'ancien graphe reste affiche jusqu'au nouveau rendu.
+        if (!elt('graphe-svg').querySelector('svg')) definirMessage('Chargement...');
         try {
             const requete = projets.map(p => 'projet=' + encodeURIComponent(p)).join('&');
             const r = await fetch('/api/graphe?' + requete);
             if (idRequete !== requeteEnCours) return; // reponse perimee
             if (!r.ok) {
+                installerRendu('', [], []);
                 definirMessage('Erreur : le serveur a renvoyé une erreur (' + r.status + ').', { erreur: true });
                 return;
             }
@@ -818,6 +869,7 @@
         } catch (e) {
             if (idRequete !== requeteEnCours) return;
             console.error(e);
+            installerRendu('', [], []);
             definirMessage('Erreur réseau lors du chargement du graphe.', { erreur: true });
         }
     }
@@ -825,11 +877,10 @@
     function actualiser() {
         if (selection.length === 0) {
             requeteEnCours++; // invalide toute requete deja partie
+            dessinEnCours++; // et tout rendu en cours
             derniereReponse = null;
-            viderSvg();
-            resetInteractionLiaison();
-            noeudsCourants = new Map();
-            aretesCourantes = [];
+            projetsDessines = null;
+            installerRendu('', [], []);
             definirMessage('Choisissez au moins un projet pour afficher son graphe.');
             return;
         }
