@@ -141,6 +141,19 @@
 - Point ouvert : le bouton + de la nav préremplit le projet depuis le filtre nav, plus depuis la
   bulle. À trancher (préremplir avec la bulle quand il n'y en a qu'une ?).
 
+## Prochaine session : graphe multi-projets n'affiche que le dernier projet (prod)
+- Constat de l'utilisateur (2026-10-07, après merge en prod) : avec plusieurs bulles, seul le
+  dernier projet choisi s'affiche. Besoin : tous les projets côte à côte pour relier des
+  tâches de projets différents.
+- **Diagnostic probable (non vérifié en direct)** : backend de prod pas redémarré. Le
+  processus python de :1875 a démarré à 11:48:31, juste après le merge de `a30fe9c`
+  (11:48:13) ; le merge de 14:00 a apporté `23716ac`. À `a30fe9c`, la route est
+  `get_graphe(projet: str = Query(...))` : avec `?projet=A&projet=B`, FastAPI ne garde que
+  la **dernière** valeur, exactement le symptôme. Le frontend, servi en direct, est déjà à jour.
+- À faire : l'utilisateur redémarre la prod (`Webtaskmanager-prod.ps1`, ne pas tuer le
+  processus à sa place), puis reteste. Si le défaut persiste : test rouge d'abord
+  (`/api/graphe` réel avec deux `projet`, cf. `test_graphe.py`), puis enquête.
+
 ## Fait le 2026-10-07 : graphe, niveau 1 (redessin sans flash)
 - `graphe.js` : l'ancien graphe reste affiché pendant rechargement et rendu, remplacé d'un
   coup ; « Chargement... » seulement sans graphe affiché. Zoom/position repris en absolu
@@ -151,19 +164,18 @@
 - Piège d'instrument : svg-pan-zoom applique le zoom à l'image suivante ; lire la
   transformation juste après un clic donne une valeur périmée (attendre avec `expect.poll`).
 - Niveau 2 (mise à jour sans relayout, autre bibliothèque que Mermaid) = chantier séparé de
-  refonte graphique, plus tard. Prod : à inclure dans le prochain `git merge master`.
+  refonte graphique, plus tard. Mergé en prod (`4793af0`, 14:00) ; rafraîchissement
+  validé par l'utilisateur. Prompt archivé : `docs/archive/prompts/`.
 - PATH de Node : session dédiée, prompt `PROMPT-node-path.md` (relais `.ps1`/bash seulement
   dans `~/.local/bin` ; `.bin/playwright.cmd` retombe sur `"node"`, introuvable pour cmd.exe).
-  Les deux `PROMPT-*.md` ne sont pas suivis par git.
+  `PROMPT-node-path.md` n'est pas suivi par git.
 
 ## Autres points en attente
 - Défaut connu, non corrigé : après un import réussi, le bouton reste actif (un second clic
   réimporte le même fichier, sans doublon : mise à jour des mêmes tâches).
 - Non vérifié sous Firefox : affichage de l'import, fenêtre de suppression du graphe.
-- Prod : `git merge master` dans `../WebTaskManager-prod` toujours à faire (liste de tags
-  `53cfb70`, durées `25073b4`, import partiel `a30fe9c`, affichage import `10f75f3`,
-  suppression graphe `1f345ce`, bulles projets `23716ac`), puis redémarrage :1875. Sur demande
-  de l'utilisateur.
+- Prod : `git merge master` fait le 2026-10-07 à 14:00 (jusqu'à `4793af0`) ; **redémarrage
+  :1875 à faire** (cf. Prochaine session).
 - Piège d'instrument : Node n'est pas dans le PATH des shells de l'agent, et `npx` échoue même
   sous PowerShell. Playwright :
   `$env:Path='C:\Users\irpaui\AppData\Local\node-v24.17.0-win-x64;'+$env:Path` puis
