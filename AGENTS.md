@@ -9,8 +9,9 @@ Instructions opérationnelles pour un agent travaillant sur ce dépôt.
   sur une base jetable** (`taskwarrior-dev`, `taskwarrior-test`, répertoire temporaire). Le
   backend écrit dans les vraies tâches. Voir §3.
 - **Depuis le 2026-09-29, ce PC est un pair de prod** : `C:/Users/irpaui/taskwarrior-prod`, base
-  synchronisée par Syncthing (PC Windows, PC Arch, téléphone une fois réparé). Ne jamais la lire
-  ni la viser. Voir §2.
+  synchronisée par Syncthing (PC Windows, PC Arch, téléphone une fois réparé). Ne jamais y écrire
+  ni la viser avec un test, un seed ou un serveur ; seul `task export` y est permis, pour en faire
+  une copie jetable (`tools/wtm.py copie`). Voir §2 et §3.
 - **Ne jamais tuer un processus qu'on n'a pas lancé** (pas de `taskkill /IM python.exe`), ni
   lancer un serveur de test sur le port occupé par la prod (**1875** sur le PC comme sur le téléphone).
 - **Ne jamais modifier le worktree `../WebTaskManager-prod`** : on développe ici, la prod reçoit un
@@ -69,7 +70,11 @@ $env:TASKRC = 'C:/Users/irpaui/taskwarrior-dev/taskrc'
 ```
 
 Sur le PC, **`C:/Users/irpaui/taskwarrior-prod` est la vraie base** : aucun test, aucun seed,
-aucune commande exploratoire ne la vise, pas même en lecture. Bases jetables : `taskwarrior-dev`,
+aucune commande exploratoire ne la vise. **Seule exception : `task export` (lecture seule), avec
+`TASKRC` posé explicitement sur le `taskrc` de prod, pour en tirer une copie jetable** (décision du
+2026-10-07 ; c'est ce que fait `tools/wtm.py copie`). Tout le reste (audit, planification, corrections,
+tests) se fait sur la copie. Aucune autre commande `task` sur la prod : ni `add`, `modify`, `done`,
+`import`, ni `sync`, ni lancement du backend. Bases jetables : `taskwarrior-dev`,
 `taskwarrior-test`, ou un répertoire temporaire. Attention : `TASKDATA` hérité l'emporte sur le
 `data.location` du taskrc ; vérifier la base effective avec
 `task rc:<taskrc> _get rc.data.location`.

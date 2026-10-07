@@ -26,7 +26,7 @@ import decoupage
 from config import (
     DEVELOPER_MODE, DEBUG_FILE, TASK_TIMEOUT, KANBAN_COLUMNS,
     NOTIFICATION_TIMEOUT, CONTEXT_CACHE_TTL,
-    PORT, BASE_PROD, DOSSIER_PROD,
+    PORT, BASE_PROD, DOSSIER_PROD, FERMER_JALONS_AUTO,
 )
 from fastapi_models import TaskBase, TaskCreate, TaskModify, ResponseModel, CommandResult
 
@@ -958,10 +958,11 @@ async def stop_task(task_id: str):
 
 @app.post("/api/task/{task_id}/done")
 async def complete_task(task_id: str):
-    """Mark a task as done, puis ferme les jalons dont c'etait la derniere
-    dependance en attente (decoupage.jalons_a_fermer, en cascade)."""
+    """Mark a task as done. Si FERMER_JALONS_AUTO (desactive par defaut), ferme
+    ensuite les jalons dont c'etait la derniere dependance en attente
+    (decoupage.jalons_a_fermer, en cascade)."""
     uuid_termine = task_id if _est_uuid_canonique(task_id) else None
-    if uuid_termine is None:
+    if uuid_termine is None and FERMER_JALONS_AUTO:
         uuids = run_task_command(f'task {task_id} _uuids')
         lignes = uuids.stdout.split() if uuids.success else []
         if len(lignes) == 1 and _est_uuid_canonique(lignes[0]):
@@ -972,7 +973,7 @@ async def complete_task(task_id: str):
         return ResponseModel(success=False, message=result.stderr)
 
     fermes = []
-    if uuid_termine:
+    if uuid_termine and FERMER_JALONS_AUTO:
         export = run_task_command('task status:pending export')
         try:
             pending = json.loads(export.stdout) if export.success else []

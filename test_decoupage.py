@@ -365,6 +365,13 @@ class TestEndpoint:
         assert r.status_code == 404
 
 
+@pytest.fixture
+def fermeture_auto():
+    with patch("main_fastapi.FERMER_JALONS_AUTO", True):
+        yield
+
+
+@pytest.mark.usefixtures("fermeture_auto")
 class TestClotureViaDone:
     def test_done_ferme_le_jalon(self):
         commandes = []

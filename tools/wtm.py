@@ -18,11 +18,13 @@ import os
 import subprocess
 import sys
 import tempfile
-from datetime import date, datetime, timedelta
+import uuid as _uuid
+from datetime import date, datetime, timedelta, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import config  # noqa: E402
+import decoupage  # noqa: E402
 from config import BASE_PROD  # noqa: E402
 
 
@@ -222,6 +224,54 @@ def auditer(taskrc, sortie_dir):
             'anomalies': trouvees}
 
 
+def _preparer_split(taches, op):
+    """Valide un `split` sur l'etat `taches` ; rend (tache, anciens depends, plan).
+
+    Memes regles que la route /api/task/{uuid}/split (decoupage.preparer_decoupage).
+    """
+    tache = next((t for t in taches if t.get('uuid') == op.get('uuid')), None)
+    if tache is None:
+        raise WtmErreur('split : tache introuvable : {}'.format(op.get('uuid')))
+    anciens = decoupage.parse_depends(tache.get('depends'))
+    predecesseurs = {t['uuid']: t for t in taches if t.get('uuid') in anciens}
+    projets = sorted({t['project'] for t in taches if t.get('project')})
+    try:
+        plan = decoupage.preparer_decoupage(
+            tache, op.get('sous_taches') or [], op.get('sous_projet'),
+            predecesseurs, projets)
+    except decoupage.ErreurDecoupage as exc:
+        raise WtmErreur('split {} refuse : {}'.format(op.get('uuid'), exc.message))
+    return tache, anciens, plan
+
+
+def _split(taskrc, op):
+    """Decoupe une tache : sous-taches importees (UTF-8), puis une seule commande
+    sur le jalon. Si elle echoue, les sous-taches creees sont supprimees."""
+    _, anciens, plan = _preparer_split(_exporter(taskrc), op)
+    maintenant = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
+    crees = []
+    for sous in plan:
+        c = {'uuid': str(_uuid.uuid4()), 'status': 'pending',
+             'entry': maintenant, 'description': sous['description'],
+             'depends': sous['depends']}
+        for cle in ('project', 'due', 'estTime'):
+            if sous.get(cle):
+                c[cle] = sous[cle]
+        if sous['tags']:
+            c['tags'] = sous['tags']
+        crees.append(c)
+    _importer(taskrc, crees)
+    nouveaux = [c['uuid'] for c in crees]
+    termes = nouveaux + ['-' + u for u in anciens]
+    code, _, err = executer_task(taskrc, [
+        'rc.confirmation=off', op['uuid'], 'modify', '+milestone',
+        'estTime:' + decoupage.ESTTIME_JALON, 'depends:' + ','.join(termes)])
+    if code != 0:
+        for u in nouveaux:
+            executer_task(taskrc, ['rc.confirmation=off', u, 'delete'])
+        raise WtmErreur('split echoue, sous-taches supprimees : ' + err.strip())
+
+
 def appliquer(lot_path, taskrc, cible_prod=False):
     """Applique un lot apres controles ; s'arrete a la premiere erreur."""
     try:
@@ -246,6 +296,11 @@ def appliquer(lot_path, taskrc, cible_prod=False):
             for a in [op.get('uuid', '')] + list(op.get('args', [])):
                 if not str(a).isascii():
                     raise WtmErreur('argument non ASCII refuse : {!r}'.format(a))
+    etat = None
+    for op in operations:
+        if op.get('op') == 'split':
+            etat = etat if etat is not None else _exporter(taskrc)
+            _preparer_split(etat, op)
 
     faites = 0
     for op in operations:
@@ -255,6 +310,12 @@ def appliquer(lot_path, taskrc, cible_prod=False):
         elif op.get('op') == 'import':
             try:
                 _importer(taskrc, op.get('taches', []))
+                code, err = 0, ''
+            except WtmErreur as exc:
+                code, err = 1, str(exc)
+        elif op.get('op') == 'split':
+            try:
+                _split(taskrc, op)
                 code, err = 0, ''
             except WtmErreur as exc:
                 code, err = 1, str(exc)

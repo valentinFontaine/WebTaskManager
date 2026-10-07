@@ -36,6 +36,11 @@ NOTIFICATION_TIMEOUT = 3000
 # `task _show` est couteux et la liste des contextes ne bouge quasiment jamais.
 CONTEXT_CACHE_TTL = 30
 
+# Decision du 2026-10-07 : `done` ne ferme pas les jalons tout seul, l'utilisateur
+# les ferme lui-meme (c'est sa verification). Mettre WTM_FERMER_JALONS=1 pour
+# retrouver la cloture automatique (decoupage.jalons_a_fermer, en cascade).
+FERMER_JALONS_AUTO = os.environ.get('WTM_FERMER_JALONS', '') == '1'
+
 
 # --- Ordonnanceur (depot voisin) -----------------------------------------
 # Decision du 23/09/2026 : sous-processus plutot qu'import, avec un chemin

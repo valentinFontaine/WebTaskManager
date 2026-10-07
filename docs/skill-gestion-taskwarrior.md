@@ -5,8 +5,9 @@ description: Lire, auditer et corriger une base Taskwarrior de gestion de projet
 
 # Gestion Taskwarrior et planification
 
-BROUILLON. `copie`, `audit`, `appliquer`, `planifier` et `faisabilite` (section 3) existent ;
-`split` et `done` n'existent pas encore : ne pas les inventer, le dire.
+BROUILLON. `copie`, `audit`, `appliquer` (dont l'operation `split`), `planifier` et
+`faisabilite` (section 3) existent. Il n'y a pas de commande `done` : l'utilisateur termine
+les taches et ferme les jalons lui-meme. Ne pas l'inventer, le dire.
 
 ## 1. Regles absolues
 
@@ -66,11 +67,20 @@ Resultat de `planifier` : `verdict` = `tient` / `ne-tient-pas` / `indetermine`.
 plan). Un `tient` ne vaut que si `non_places` ne contient que des `external`, dont les delais
 restent une hypothese a signaler.
 
-A creer plus tard (pas encore ecrits) : `split` et `done` (via l'API :
-`POST /api/task/{uuid}/split`, `POST /api/task/{id}/done`, qui ferme aussi les jalons).
+**Decouper une tache (`split`)** : operation de lot, donc validee par l'utilisateur comme
+le reste. `{"op":"split","uuid":U,"sous_taches":[{"description":"...","estTime":"2h",
+"apparier_a":null}, ...],"sous_projet":null}`. Au moins deux sous-taches. La tache U devient
+le jalon (`+milestone`, `estTime` 30min, depend de ses sous-taches) ; les sous-taches
+reprennent ses depends, projet, tags (sauf `fixed`) et `due` ; ses successeurs dependent
+toujours du jalon. Memes regles que la route de l'application (`decoupage.py`) ; tout refus
+(tache inconnue ou deja jalon, une seule sous-tache...) est detecte avant la premiere
+ecriture du lot. Les accents sont sans danger (sous-taches importees en UTF-8).
+`estTime` accepte `1h30` (normalise en `1h+30min`).
 
-Raison de `wtm-split` et `wtm-done` : `task done` en ligne de commande **ne ferme pas**
-les jalons ; seule la route le fait.
+**Pas de `done`** : l'utilisateur ferme les taches et les jalons lui-meme, c'est sa
+verification. Un jalon dont toutes les sous-taches sont terminees reste ouvert : le signaler
+dans l'audit, ne pas le fermer. (La cloture automatique existe dans l'application, desactivee
+par `WTM_FERMER_JALONS`, voir NOTES.md.)
 
 ## 4. Vocabulaire du projet
 

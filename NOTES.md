@@ -45,6 +45,12 @@ docstring de `decoupage.py`.
 - PATH de Node : session dédiée, prompt `PROMPT-node-path.md` (non suivi par git).
 
 ## Plus tard (pas les prochaines sessions)
+- Clôture automatique des jalons par `done` : **désactivée le 2026-10-07**, l'utilisateur veut fermer
+  les jalons lui-même (c'est sa vérification). Le code reste : `decoupage.jalons_a_fermer` et la
+  branche de `POST /api/task/{id}/done`, gardée par `config.FERMER_JALONS_AUTO` (variable
+  d'environnement `WTM_FERMER_JALONS=1` pour la réactiver ; tests : `TestClotureViaDone` avec le
+  drapeau levé, `test_done_jalons.py` pour le défaut). Réintégrer = lever le drapeau, ou en faire
+  un réglage de l'interface.
 - Stratégie planificateur `+delegation` → `+monitoring` : la tâche `+monitoring` dépend de la
   `+delegation`, mais sa due date dépend de la tâche externe. À concevoir avec l'utilisateur.
 
