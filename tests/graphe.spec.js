@@ -109,7 +109,14 @@ function donneesOrion() {
 }
 
 /** Prepare la page : mocke /api/graphe, laisse le reste au vrai serveur. */
+const PROJETS_MOCK = ['NPD', 'NPD.Grand', 'NPD.Orion', 'NPD.Triton', 'NPD.Vide', 'NPD.Vulcan'];
+
 async function preparer(page, { reponsesParProjet = {}, statutHttp = null } = {}) {
+  // Le champ Projets du graphe propose les projets de /api/projects.
+  await page.route('**/api/projects', route => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify({ success: true, projects: PROJETS_MOCK }),
+  }));
   const appels = [];
   await page.route('**/api/graphe**', async route => {
     const url = new URL(route.request().url());
@@ -136,9 +143,13 @@ async function preparer(page, { reponsesParProjet = {}, statutHttp = null } = {}
 
 /** Tape dans le filtre projet de nav.js et attend l'anti-rebond. */
 async function choisirProjet(page, nom) {
-  const champ = page.locator('#tw-project');
-  await champ.fill(nom);
-  await page.waitForTimeout(DELAI_SAISIE_NAV + 100);
+  // Retire toutes les bulles, puis ajoute `nom` (si non vide) via le champ Projets.
+  const retirer = page.locator('.graphe-projet-puce-retirer');
+  while (await retirer.count() > 0) await retirer.first().click();
+  if (!nom) return;
+  await page.locator('#graphe-projets').fill(nom);
+  await page.locator('.graphe-projets-suggestions li', { hasText: new RegExp('^' + nom.replace(/\./g, '\\.') + '$') }).click();
+  await page.locator(`.graphe-projet-puce[data-projet="${nom}"]`).waitFor();
 }
 
 test.describe('graphe.html — visualisation des dependances', () => {

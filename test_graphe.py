@@ -361,6 +361,57 @@ class TestGrapheCasVides:
         assert response.status_code in (400, 422)
 
 
+class TestGrapheMultiProjets:
+    """`projet` repete : union des projets demandes (champ a bulles de
+    graphe.html), pour relier des sous-projets freres sans afficher leur
+    parent commun."""
+
+    @patch("main_fastapi.run_task_command")
+    def test_union_des_projets_demandes(self, mock_command):
+        _mock_export(mock_command, _taches_pending())
+
+        response = client.get("/api/graphe?projet=NPD.Orion.plans&projet=Divers")
+
+        assert response.status_code == 200
+        data = response.json()
+        dans = {n["uuid"] for n in data["noeuds"] if n["dans_projet"]}
+        assert dans == {"u2", "u6", "u7", "u8"}
+        assert data["projets"] == ["NPD.Orion.plans", "Divers"]
+
+    @patch("main_fastapi.run_task_command")
+    def test_arete_entre_deux_projets_demandes(self, mock_command):
+        _mock_export(mock_command, _taches_pending())
+
+        data = client.get("/api/graphe?projet=NPD.Orion.plans&projet=Divers").json()
+
+        assert {"de": "u2", "vers": "u7"} in data["aretes"]
+        assert {"de": "u6", "vers": "u8"} in data["aretes"]
+
+    @patch("main_fastapi.run_task_command")
+    def test_voisin_hors_de_tous_les_projets_demandes(self, mock_command):
+        _mock_export(mock_command, _taches_pending())
+
+        data = client.get("/api/graphe?projet=NPD.Orion.plans&projet=Divers").json()
+
+        # u1 (NPD.Orion) depend de u6 (Divers) : voisin direct, hors projet.
+        n1 = _noeud(data, "u1")
+        assert n1 is not None
+        assert n1["dans_projet"] is False
+
+    @patch("main_fastapi.run_task_command")
+    def test_valeurs_vides_ignorees(self, mock_command):
+        _mock_export(mock_command, _taches_pending())
+
+        response = client.get("/api/graphe?projet=&projet=NPD.Orion.plans")
+
+        assert response.status_code == 200
+        assert response.json()["projets"] == ["NPD.Orion.plans"]
+
+    def test_toutes_valeurs_vides_refusees(self):
+        response = client.get("/api/graphe?projet=&projet=%20")
+        assert response.status_code in (400, 422)
+
+
 class TestGrapheOrdreDeterministe:
 
     @patch("main_fastapi.run_task_command")

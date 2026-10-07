@@ -33,7 +33,14 @@ function donneesOrion() {
 }
 
 /** Mocke GET /api/graphe ; `etat.donnees` peut etre remplace en cours de test. */
+const PROJETS_MOCK = ['NPD', 'NPD.Grand', 'NPD.Orion', 'NPD.Triton', 'NPD.Vide', 'NPD.Vulcan'];
+
 async function preparerGraphe(page, etat) {
+  // Le champ Projets du graphe propose les projets de /api/projects.
+  await page.route('**/api/projects', route => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify({ success: true, projects: PROJETS_MOCK }),
+  }));
   const appels = [];
   await page.route('**/api/graphe**', async (route) => {
     const projet = new URL(route.request().url()).searchParams.get('projet');
@@ -56,8 +63,13 @@ async function preparerSuppression(page, { reponse = { success: true, message: '
 }
 
 async function choisirProjet(page, nom) {
-  await page.locator('#tw-project').fill(nom);
-  await page.waitForTimeout(DELAI_SAISIE_NAV + 100);
+  // Retire toutes les bulles, puis ajoute `nom` (si non vide) via le champ Projets.
+  const retirer = page.locator('.graphe-projet-puce-retirer');
+  while (await retirer.count() > 0) await retirer.first().click();
+  if (!nom) return;
+  await page.locator('#graphe-projets').fill(nom);
+  await page.locator('.graphe-projets-suggestions li', { hasText: new RegExp('^' + nom.replace(/\./g, '\\.') + '$') }).click();
+  await page.locator(`.graphe-projet-puce[data-projet="${nom}"]`).waitFor();
 }
 
 const bouton = (page) => page.locator('#graphe-supprimer');

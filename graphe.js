@@ -1,13 +1,18 @@
 /**
- * graphe.html — visualisation des dependances d'un projet, rendue par
+ * graphe.html — visualisation des dependances de projets, rendue par
  * Mermaid (charge depuis CDN, version majeure figee dans graphe.html).
  *
- * Le projet affiche vient du champ #tw-project de nav.js (cf. nav.js).
- * Contrairement aux autres pages, cette page n'a jamais en memoire les
- * donnees d'un projet avant de l'avoir demande : elle relance donc
- * /api/graphe a chaque changement de state.project, meme quand
- * l'evenement `tw-filter-change` porte `clientOnly: true` (cf. l'en-tete
- * de tests/graphe.spec.js).
+ * Les projets affiches viennent du champ a bulles #graphe-projets (cf.
+ * tests/graphe-projets.spec.js) : recherche floue (sous-sequence, insensible
+ * a la casse) sur window.twNav.projectsReady, une bulle par projet choisi,
+ * persistees en localStorage ('graphe-projets'). /api/graphe est appele avec
+ * un parametre `projet` par bulle ; sans bulle, aucun appel et un message.
+ *
+ * Le filtre projet de la nav (#tw-project) ne choisit plus rien : il
+ * restreint seulement l'affichage aux noeuds du projet filtre ou de ses
+ * sous-projets (prefixe a frontiere de point, comme main.js), aretes
+ * pendantes retirees. Un changement de ce filtre redessine depuis la
+ * derniere reponse, sans nouvel appel serveur.
  *
  * Forme de la reponse attendue de GET /api/graphe (voir construire_graphe
  * dans main_fastapi.py) :
@@ -190,19 +195,23 @@
     // taches directes sont emises au premier niveau, et seuls ses
     // sous-projets recoivent un cadre (regle du 23/09, cf. l'en-tete du
     // fichier et tests/graphe.spec.js).
-    function emettreArbre(noeudArbre, parProjet, lignes, cadres, estRacine) {
+    // `sansCadre` : racine sans cadre (un seul projet choisi). Une racine
+    // cadree (plusieurs projets choisis) porte son nom complet comme libelle.
+    function emettreArbre(noeudArbre, parProjet, lignes, cadres, estRacine, sansCadre) {
         const taches = parProjet.get(noeudArbre.chemin) || [];
-        if (!estRacine) {
-            lignes.push(`subgraph ${idSousGraphe(noeudArbre.chemin)}["${echapperLabel(dernierSegment(noeudArbre.chemin))}"]`);
+        const sansCadreCourant = estRacine && sansCadre;
+        if (!sansCadreCourant) {
+            const libelle = estRacine ? noeudArbre.chemin : dernierSegment(noeudArbre.chemin);
+            lignes.push(`subgraph ${idSousGraphe(noeudArbre.chemin)}["${echapperLabel(libelle)}"]`);
             cadres.push(noeudArbre.chemin);
         }
         for (const n of taches) {
             lignes.push(`${idNoeud(n.uuid)}["${echapperLabel(n.description)}"]`);
         }
         for (const enfant of noeudArbre.enfants.values()) {
-            emettreArbre(enfant, parProjet, lignes, cadres, false);
+            emettreArbre(enfant, parProjet, lignes, cadres, false, sansCadre);
         }
-        if (!estRacine) {
+        if (!sansCadreCourant) {
             lignes.push('end');
         }
     }
@@ -225,7 +234,10 @@
         return resultat;
     }
 
-    function construireDefinitionMermaid(racine, noeuds, aretes) {
+    // `racines` : projets choisis, sans descendant d'un autre (absorbe par son
+    // ancetre). Une seule racine : pas de cadre (regle du 23/09) ; plusieurs :
+    // chacune a son cadre, sous-projets imbriques dedans.
+    function construireDefinitionMermaid(racines, noeuds, aretes) {
         const parProjet = new Map();
         for (const n of noeuds) {
             const cle = n.project || '(sans projet)';
@@ -233,19 +245,24 @@
             parProjet.get(cle).push(n);
         }
 
-        const dansRacine = [];
+        const parRacine = new Map(racines.map(r => [r, []]));
         const horsRacine = [];
         for (const cle of parProjet.keys()) {
-            if (cle === racine || cle.startsWith(racine + '.')) dansRacine.push(cle);
+            const racine = racines.find(r => cle === r || cle.startsWith(r + '.'));
+            if (racine) parRacine.get(racine).push(cle);
             else horsRacine.push(cle);
         }
 
         const lignes = ['flowchart TD'];
         const cadres = [];
-        const arbre = construireArbreProjets(racine, dansRacine);
-        emettreArbre(arbre, parProjet, lignes, cadres, true);
+        const sansCadre = racines.length === 1;
+        for (const [racine, chemins] of parRacine) {
+            if (chemins.length === 0) continue;
+            const arbre = construireArbreProjets(racine, chemins);
+            emettreArbre(arbre, parProjet, lignes, cadres, true, sansCadre);
+        }
         for (const projet of horsRacine) {
-            emettreArbre({ chemin: projet, enfants: new Map() }, parProjet, lignes, cadres, false);
+            emettreArbre({ chemin: projet, enfants: new Map() }, parProjet, lignes, cadres, false, false);
         }
         for (const a of aretes) {
             lignes.push(`${idNoeud(a.de)} --> ${idNoeud(a.vers)}`);
@@ -604,7 +621,7 @@
                 definirMessage('Suppression refusée : ' + raison, { erreur: true });
                 return;
             }
-            await chargerEtDessiner(projetCourant());
+            await chargerEtDessiner(selection.slice());
             definirMessage('Tâche supprimée : ' + description);
         } catch (e) {
             console.error(e);
@@ -706,7 +723,7 @@
         panZoom.center();
     }
 
-    async function dessiner(racine, noeuds, aretes) {
+    async function dessiner(racines, noeuds, aretes) {
         viderSvg();
         resetInteractionLiaison();
         noeudsCourants = new Map(noeuds.map(n => [n.uuid, n]));
@@ -717,7 +734,7 @@
         }
         definirMessage('');
         const aretesUniques = dedupeAretes(aretes);
-        const { definition, cadres } = construireDefinitionMermaid(racine, noeuds, aretesUniques);
+        const { definition, cadres } = construireDefinitionMermaid(racines, noeuds, aretesUniques);
         try {
             const { svg } = await window.mermaid.render('graphe-mermaid-svg', definition);
             const conteneur = elt('graphe-svg');
@@ -743,12 +760,52 @@
         }
     }
 
-    async function chargerEtDessiner(projet) {
+    // ----- Filtre projet de la nav : restriction cote client -----
+
+    function filtreNav() {
+        return window.twNav ? String(window.twNav.getState().project || '').trim() : '';
+    }
+
+    // Meme regle que main.js (getFilteredTasks) : le projet ou un
+    // sous-projet a frontiere de point. Les aretes dont une extremite est
+    // retiree disparaissent aussi.
+    function appliquerFiltreNav(noeuds, aretes) {
+        const vise = filtreNav();
+        if (!vise) return { noeuds, aretes };
+        const gardes = noeuds.filter(n => {
+            const porte = n.project || '';
+            return porte === vise || porte.startsWith(vise + '.');
+        });
+        const uuids = new Set(gardes.map(n => n.uuid));
+        return {
+            noeuds: gardes,
+            aretes: aretes.filter(a => uuids.has(a.de) && uuids.has(a.vers)),
+        };
+    }
+
+    // Derniere reponse du serveur ({ projets, noeuds, aretes }), pour
+    // redessiner sans appel quand seul le filtre de la nav change.
+    let derniereReponse = null;
+
+    function redessiner() {
+        if (!derniereReponse) return;
+        const { noeuds, aretes } = appliquerFiltreNav(derniereReponse.noeuds, derniereReponse.aretes);
+        return dessiner(racinesDe(derniereReponse.projets), noeuds, aretes);
+    }
+
+    // Les projets choisis, moins ceux qui descendent d'un autre choisi.
+    function racinesDe(projets) {
+        return projets.filter(p => !projets.some(q => q !== p && p.startsWith(q + '.')));
+    }
+
+    async function chargerEtDessiner(projets) {
         const idRequete = ++requeteEnCours;
+        derniereReponse = null;
         definirMessage('Chargement...');
         viderSvg();
         try {
-            const r = await fetch('/api/graphe?projet=' + encodeURIComponent(projet));
+            const requete = projets.map(p => 'projet=' + encodeURIComponent(p)).join('&');
+            const r = await fetch('/api/graphe?' + requete);
             if (idRequete !== requeteEnCours) return; // reponse perimee
             if (!r.ok) {
                 definirMessage('Erreur : le serveur a renvoyé une erreur (' + r.status + ').', { erreur: true });
@@ -756,7 +813,8 @@
             }
             const d = await r.json();
             if (idRequete !== requeteEnCours) return;
-            await dessiner(projet, d.noeuds || [], d.aretes || []);
+            derniereReponse = { projets, noeuds: d.noeuds || [], aretes: d.aretes || [] };
+            await redessiner();
         } catch (e) {
             if (idRequete !== requeteEnCours) return;
             console.error(e);
@@ -764,19 +822,174 @@
         }
     }
 
-    function projetCourant() {
-        return window.twNav ? String(window.twNav.getState().project || '').trim() : '';
-    }
-
     function actualiser() {
-        const projet = projetCourant();
-        if (!projet) {
+        if (selection.length === 0) {
             requeteEnCours++; // invalide toute requete deja partie
+            derniereReponse = null;
             viderSvg();
-            definirMessage('Choisissez un projet dans le filtre pour afficher son graphe.');
+            resetInteractionLiaison();
+            noeudsCourants = new Map();
+            aretesCourantes = [];
+            definirMessage('Choisissez au moins un projet pour afficher son graphe.');
             return;
         }
-        chargerEtDessiner(projet);
+        chargerEtDessiner(selection.slice());
+    }
+
+    // ----- Champ Projets a bulles -----
+
+    const CLE_SELECTION = 'graphe-projets';
+    const MAX_SUGGESTIONS = 8;
+    let selection = lireSelection();
+    let projetsConnusCache = [];
+    let suggestionsAffichees = [];
+    let suggestionActive = -1;
+    let requeteSuggestions = 0;
+
+    function lireSelection() {
+        try {
+            const brut = JSON.parse(localStorage.getItem(CLE_SELECTION));
+            if (Array.isArray(brut)) {
+                return brut.filter((p, i) => typeof p === 'string' && p && brut.indexOf(p) === i);
+            }
+        } catch (e) { /* stockage indisponible ou corrompu : selection vide */ }
+        return [];
+    }
+
+    function ecrireSelection() {
+        try { localStorage.setItem(CLE_SELECTION, JSON.stringify(selection)); } catch (e) { /* ignore */ }
+    }
+
+    // nav.js remplace projectsReady apres sa creation : on le relit a chaque
+    // besoin tant que la liste obtenue est vide.
+    async function projetsConnus() {
+        if (projetsConnusCache.length) return projetsConnusCache;
+        try {
+            const liste = window.twNav ? await window.twNav.projectsReady : [];
+            if (Array.isArray(liste) && liste.length) projetsConnusCache = liste;
+        } catch (e) { /* liste indisponible : aucune suggestion */ }
+        return projetsConnusCache;
+    }
+
+    // Sous-sequence insensible a la casse : les lettres tapees apparaissent
+    // dans l'ordre, pas forcement contigues.
+    function correspondFlou(nom, saisie) {
+        const n = nom.toLowerCase();
+        let pos = 0;
+        for (const c of saisie) {
+            pos = n.indexOf(c, pos);
+            if (pos === -1) return false;
+            pos++;
+        }
+        return true;
+    }
+
+    function calculerSuggestions(projets, saisie) {
+        const q = saisie.trim().toLowerCase().replace(/\s+/g, '');
+        if (!q) return [];
+        const candidats = projets.filter(p => !selection.includes(p) && correspondFlou(p, q));
+        // Les correspondances contigues d'abord, sinon l'ordre de la liste.
+        const contigus = candidats.filter(p => p.toLowerCase().includes(q));
+        const autres = candidats.filter(p => !p.toLowerCase().includes(q));
+        return contigus.concat(autres).slice(0, MAX_SUGGESTIONS);
+    }
+
+    function champProjets() { return elt('graphe-projets'); }
+    function listeSuggestions() { return document.querySelector('.graphe-projets-suggestions'); }
+
+    function afficherSuggestions() {
+        const liste = listeSuggestions();
+        liste.innerHTML = '';
+        suggestionsAffichees.forEach((nom, i) => {
+            const li = document.createElement('li');
+            li.className = 'graphe-projets-suggestion';
+            if (i === suggestionActive) li.classList.add('graphe-projets-suggestion--active');
+            li.textContent = nom;
+            // mousedown + preventDefault : le champ garde le focus
+            li.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                ajouterProjet(nom);
+            });
+            liste.appendChild(li);
+        });
+        liste.hidden = suggestionsAffichees.length === 0;
+    }
+
+    async function majSuggestions() {
+        const id = ++requeteSuggestions;
+        const projets = await projetsConnus();
+        if (id !== requeteSuggestions) return;
+        suggestionsAffichees = calculerSuggestions(projets, champProjets().value);
+        suggestionActive = -1;
+        afficherSuggestions();
+    }
+
+    function afficherPuces() {
+        const conteneur = elt('graphe-projets-puces');
+        conteneur.innerHTML = '';
+        for (const nom of selection) {
+            const puce = document.createElement('span');
+            puce.className = 'graphe-projet-puce';
+            puce.dataset.projet = nom;
+            const libelle = document.createElement('span');
+            libelle.textContent = nom;
+            const retirer = document.createElement('button');
+            retirer.type = 'button';
+            retirer.className = 'graphe-projet-puce-retirer';
+            retirer.textContent = '×';
+            retirer.setAttribute('aria-label', 'Retirer ' + nom);
+            retirer.addEventListener('click', () => retirerProjet(nom));
+            puce.append(libelle, retirer);
+            conteneur.appendChild(puce);
+        }
+    }
+
+    function selectionChangee() {
+        ecrireSelection();
+        afficherPuces();
+        actualiser();
+    }
+
+    function ajouterProjet(nom) {
+        if (!selection.includes(nom)) selection.push(nom);
+        champProjets().value = '';
+        requeteSuggestions++;
+        suggestionsAffichees = [];
+        suggestionActive = -1;
+        afficherSuggestions();
+        selectionChangee();
+    }
+
+    function retirerProjet(nom) {
+        selection = selection.filter(p => p !== nom);
+        selectionChangee();
+    }
+
+    function initChampProjets() {
+        const champ = champProjets();
+        afficherPuces();
+        projetsConnus(); // echauffement : la premiere frappe n'attend plus
+        champ.addEventListener('input', majSuggestions);
+        champ.addEventListener('focus', () => { if (champ.value) majSuggestions(); });
+        champ.addEventListener('blur', () => { listeSuggestions().hidden = true; });
+        champ.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                if (!suggestionsAffichees.length) return;
+                e.preventDefault();
+                suggestionActive = e.key === 'ArrowDown'
+                    ? Math.min(suggestionActive + 1, suggestionsAffichees.length - 1)
+                    : Math.max(suggestionActive - 1, 0);
+                afficherSuggestions();
+            } else if (e.key === 'Enter') {
+                // Sans suggestion active, la premiere ; sans suggestion du
+                // tout, rien (projets connus seulement).
+                e.preventDefault();
+                const choix = suggestionsAffichees[Math.max(suggestionActive, 0)];
+                if (choix) ajouterProjet(choix);
+            } else if (e.key === 'Backspace' && !champ.value && selection.length) {
+                retirerProjet(selection[selection.length - 1]);
+            }
+        });
     }
 
     function initBoutons() {
@@ -853,9 +1066,12 @@
         }
         initTaskEditor();
         initBoutons();
+        initChampProjets();
         initInteractionsGlobales();
         window.addEventListener('resize', surRedimensionnement);
-        document.addEventListener('tw-filter-change', actualiser);
+        // Le filtre projet de la nav ne selectionne rien : il restreint
+        // l'affichage, sans nouvel appel serveur.
+        document.addEventListener('tw-filter-change', redessiner);
         // nav.js : ajout de tache via l'editeur generique -> rafraichir.
         document.addEventListener('tw-task-added', actualiser);
         actualiser();

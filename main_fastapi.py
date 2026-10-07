@@ -619,8 +619,8 @@ def _dans_projet(project_tache, projet):
 
 
 def construire_graphe(taches, projet):
-    """Fonction pure : export pending (liste de dicts) + nom de projet ->
-    dict de reponse pour GET /api/graphe.
+    """Fonction pure : export pending (liste de dicts) + nom de projet (ou
+    liste de noms, dont on prend l'union) -> dict de reponse pour GET /api/graphe.
 
     Regles (voir test_graphe.py) :
     - noeuds du projet : project == projet ou sous-projet, frontiere de point ;
@@ -629,9 +629,11 @@ def construire_graphe(taches, projet):
     - aretes seulement entre deux noeuds presents dans le resultat ;
     - tri des noeuds par (project, description), insensible a la casse.
     """
+    projets = [projet] if isinstance(projet, str) else list(projet)
     par_uuid = {t["uuid"]: t for t in taches if "uuid" in t}
 
-    uuids_projet = {uuid for uuid, t in par_uuid.items() if _dans_projet(t.get("project"), projet)}
+    uuids_projet = {uuid for uuid, t in par_uuid.items()
+                    if any(_dans_projet(t.get("project"), p) for p in projets)}
 
     # Voisins directs : un hop seulement, dans un sens ou dans l'autre, a
     # partir d'une tache du projet. Ne pas etendre a partir d'un voisin.
@@ -674,20 +676,23 @@ def construire_graphe(taches, projet):
                 aretes.append({"de": dep, "vers": uuid})
 
     return {
-        "projet": projet,
+        "projet": projets[0] if projets else "",
+        "projets": projets,
         "noeuds": noeuds,
         "aretes": aretes,
     }
 
 
 @app.get("/api/graphe")
-async def get_graphe(projet: str = Query(...)):
-    """Graphe des dependances autour d'un projet (et ses sous-projets).
+async def get_graphe(projet: List[str] = Query(...)):
+    """Graphe des dependances autour d'un ou plusieurs projets (et leurs
+    sous-projets) : `projet` peut etre repete, on prend l'union.
 
     Le filtrage par projet se fait en Python sur l'export pending complet,
     pas via un filtre project: envoye a Taskwarrior (cf. test_graphe.py).
     """
-    if not projet.strip():
+    projets = [p.strip() for p in projet if p.strip()]
+    if not projets:
         raise HTTPException(status_code=400, detail="Le parametre projet est requis")
 
     result = run_task_command("task status:pending export")
@@ -699,7 +704,7 @@ async def get_graphe(projet: str = Query(...)):
     except json.JSONDecodeError as e:
         raise HTTPException(status_code=500, detail=f"JSON decode error: {str(e)}")
 
-    return construire_graphe(taches, projet)
+    return construire_graphe(taches, projets)
 
 
 class ImportCsvRequest(BaseModel):
