@@ -1,0 +1,297 @@
+"""
+Wrapper de securite entre les agents et Taskwarrior.
+
+Trois gestes : copier une base, l'auditer en lecture seule, appliquer un lot
+valide (apres sauvegarde, sur une base inchangee depuis l'audit).
+
+Toute commande `task` passe par `executer_task`, qui pose TASKRC et retire
+TASKDATA herite (il l'emporterait sur le taskrc).
+"""
+
+import argparse
+import hashlib
+import json
+import os
+import subprocess
+import sys
+import tempfile
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from config import BASE_PROD  # noqa: E402
+
+
+class WtmErreur(Exception):
+    """Erreur attendue : refus de securite ou echec d'une commande."""
+
+
+def executer_task(taskrc, args, entree=None):
+    """Lance `task` (liste d'arguments, sans shell) sur le taskrc donne."""
+    env = dict(os.environ)
+    env['TASKRC'] = taskrc
+    env.pop('TASKDATA', None)
+    fini = subprocess.run(['task', *args], env=env, input=entree,
+                          capture_output=True, text=True, encoding='utf-8',
+                          shell=False)
+    return fini.returncode, fini.stdout, fini.stderr
+
+
+def _normaliser(chemin):
+    """Chemin comparable : slashs, casse, sans separateur ni `/data` final."""
+    c = chemin.strip().replace('\\', '/').lower().rstrip('/')
+    if c.endswith('/data'):
+        c = c[:-5].rstrip('/')
+    return c
+
+
+def base_effective(taskrc):
+    """Dossier de donnees effectif du taskrc, tel que Taskwarrior le rapporte."""
+    code, sortie, err = executer_task(taskrc, ['_get', 'rc.data.location'])
+    if code != 0:
+        raise WtmErreur('base effective illisible : ' + err.strip())
+    return sortie.strip()
+
+
+def _exporter(taskrc):
+    code, sortie, err = executer_task(taskrc, ['export'])
+    if code != 0:
+        raise WtmErreur('export impossible : ' + err.strip())
+    try:
+        return json.loads(sortie) if sortie.strip() else []
+    except ValueError as exc:
+        raise WtmErreur('export illisible : {}'.format(exc))
+
+
+def empreinte(taches):
+    """Empreinte sha256 des couples uuid|modified, independante de l'ordre."""
+    lignes = sorted('{}|{}'.format(t.get('uuid', ''), t.get('modified', ''))
+                    for t in taches)
+    return hashlib.sha256('\n'.join(lignes).encode('utf-8')).hexdigest()
+
+
+def _deps(tache):
+    d = tache.get('depends') or []
+    if isinstance(d, str):
+        d = d.split(',')
+    return [x.strip() for x in d if x and x.strip()]
+
+
+def _anomalie(code, tache, detail, correction=None):
+    return {'code': code, 'uuid': tache['uuid'],
+            'description': tache.get('description', ''),
+            'detail': detail, 'correction': correction}
+
+
+def anomalies(taches):
+    """Anomalies des taches pending/waiting (dicts code/uuid/description/detail/correction)."""
+    connus = {t['uuid'] for t in taches}
+    sujets = [t for t in taches if t.get('status') in ('pending', 'waiting')]
+    par_uuid = {t['uuid']: t for t in sujets}
+    trouvees = []
+
+    for t in sujets:
+        for d in _deps(t):
+            if d not in connus:
+                trouvees.append(_anomalie(
+                    'depends-inconnu', t, 'depend de {} absent'.format(d),
+                    ['depends:-' + d]))
+
+    # Cycles : parcours en profondeur sur les dependances entre sujets.
+    etat = {}
+    dans_cycle = set()
+
+    def visiter(u, chemin):
+        etat[u] = 1
+        chemin.append(u)
+        for d in _deps(par_uuid[u]):
+            if d not in par_uuid:
+                continue
+            if etat.get(d) == 1:
+                dans_cycle.update(chemin[chemin.index(d):])
+            elif d not in etat:
+                visiter(d, chemin)
+        chemin.pop()
+        etat[u] = 2
+
+    for u in par_uuid:
+        if u not in etat:
+            visiter(u, [])
+    for u in sorted(dans_cycle):
+        trouvees.append(_anomalie('cycle', par_uuid[u], 'dans un cycle de dependances'))
+
+    for t in sujets:
+        if not t.get('estTime'):
+            trouvees.append(_anomalie('sans-esttime', t, 'estTime absent'))
+        if t.get('scheduled') and t.get('due') and t['scheduled'] > t['due']:
+            trouvees.append(_anomalie(
+                'scheduled-apres-due', t,
+                'scheduled {} apres due {}'.format(t['scheduled'], t['due'])))
+        if 'milestone' in (t.get('tags') or []) and not _deps(t):
+            trouvees.append(_anomalie('jalon-sans-sous-tache', t,
+                                      'jalon sans depends'))
+    return trouvees
+
+
+def _importer(taskrc, taches):
+    """Importe des taches en passant par un fichier temporaire UTF-8."""
+    if not taches:
+        return
+    fd, chemin = tempfile.mkstemp(suffix='.json')
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as f:
+            json.dump(taches, f, ensure_ascii=False)
+        code, _, err = executer_task(taskrc, ['import', chemin])
+    finally:
+        os.unlink(chemin)
+    if code != 0:
+        raise WtmErreur('import echoue : ' + err.strip())
+
+
+def copier(source_taskrc, dest_dir):
+    """Copie la base de `source_taskrc` dans `dest_dir` ; rend le taskrc de la copie."""
+    if not source_taskrc:
+        raise WtmErreur('source obligatoire')
+    if not os.path.isfile(source_taskrc):
+        raise WtmErreur('taskrc source introuvable : ' + source_taskrc)
+    dest = os.path.abspath(dest_dir)
+    if os.path.isdir(dest) and os.listdir(dest):
+        raise WtmErreur('destination non vide : ' + dest)
+    n_dest = _normaliser(dest)
+    n_prod = _normaliser(BASE_PROD)
+    if n_dest == n_prod or n_dest.startswith(n_prod + '/'):
+        raise WtmErreur('destination sous la base de prod refusee')
+    n_src = _normaliser(base_effective(source_taskrc))
+    if n_dest == n_src or n_dest.startswith(n_src + '/'):
+        raise WtmErreur('destination egale a la base de la source')
+
+    taches = _exporter(source_taskrc)
+
+    os.makedirs(os.path.join(dest, 'data'), exist_ok=True)
+    with open(source_taskrc, encoding='utf-8') as f:
+        lignes = [l for l in f.read().splitlines()
+                  if not l.strip().startswith('data.location')]
+    lignes.insert(0, 'data.location=' + os.path.join(dest, 'data').replace('\\', '/'))
+    taskrc = os.path.join(dest, 'taskrc')
+    with open(taskrc, 'w', encoding='utf-8') as f:
+        f.write('\n'.join(lignes) + '\n')
+
+    _importer(taskrc, taches)
+    if {t['uuid'] for t in _exporter(taskrc)} != {t['uuid'] for t in taches}:
+        raise WtmErreur('la copie ne contient pas les memes taches que la source')
+    return taskrc
+
+
+def auditer(taskrc, sortie_dir):
+    """Audit en lecture seule : ecrit sauvegarde.json, rapport.md et lot.json."""
+    taches = _exporter(taskrc)
+    trouvees = anomalies(taches)
+    os.makedirs(sortie_dir, exist_ok=True)
+    sauvegarde = os.path.join(sortie_dir, 'sauvegarde.json')
+    with open(sauvegarde, 'w', encoding='utf-8') as f:
+        json.dump(taches, f, ensure_ascii=False)
+
+    def cellule(x):
+        return str(x).replace('|', '/').replace('\n', ' ')
+
+    lignes = ['# Rapport d\'audit', '',
+              '| anomalie | uuid | description | correction proposee |',
+              '|---|---|---|---|']
+    for a in trouvees:
+        corr = ' '.join(a['correction']) if a['correction'] else '(aucune)'
+        lignes.append('| {} | {} | {} | {} |'.format(
+            a['code'], a['uuid'], cellule(a['description']), cellule(corr)))
+    rapport = os.path.join(sortie_dir, 'rapport.md')
+    with open(rapport, 'w', encoding='utf-8') as f:
+        f.write('\n'.join(lignes) + '\n')
+
+    lot = {'version': 1,
+           'id': 'lot-' + empreinte(taches)[:12],
+           'empreinte': empreinte(taches),
+           'sauvegarde': sauvegarde,
+           'operations': [{'op': 'modify', 'uuid': a['uuid'], 'args': a['correction']}
+                          for a in trouvees if a['correction']]}
+    chemin_lot = os.path.join(sortie_dir, 'lot.json')
+    with open(chemin_lot, 'w', encoding='utf-8') as f:
+        json.dump(lot, f, ensure_ascii=False, indent=2)
+    return {'lot': chemin_lot, 'rapport': rapport, 'sauvegarde': sauvegarde,
+            'anomalies': trouvees}
+
+
+def appliquer(lot_path, taskrc, cible_prod=False):
+    """Applique un lot apres controles ; s'arrete a la premiere erreur."""
+    try:
+        with open(lot_path, encoding='utf-8') as f:
+            lot = json.load(f)
+    except (OSError, ValueError) as exc:
+        raise WtmErreur('lot illisible : {}'.format(exc))
+
+    sauv = lot.get('sauvegarde')
+    if not sauv or not os.path.isfile(sauv) or os.path.getsize(sauv) == 0:
+        raise WtmErreur('sauvegarde absente ou vide : {}'.format(sauv))
+
+    if _normaliser(base_effective(taskrc)) == _normaliser(BASE_PROD) and not cible_prod:
+        raise WtmErreur('base de prod visee sans --cible-prod')
+
+    if empreinte(_exporter(taskrc)) != lot.get('empreinte'):
+        raise WtmErreur('la base a change depuis l\'audit (empreinte differente)')
+
+    operations = lot.get('operations', [])
+    for op in operations:
+        if op.get('op') == 'modify':
+            for a in [op.get('uuid', '')] + list(op.get('args', [])):
+                if not str(a).isascii():
+                    raise WtmErreur('argument non ASCII refuse : {!r}'.format(a))
+
+    faites = 0
+    for op in operations:
+        if op.get('op') == 'modify':
+            code, _, err = executer_task(
+                taskrc, ['rc.confirmation=off', op['uuid'], 'modify', *op['args']])
+        elif op.get('op') == 'import':
+            try:
+                _importer(taskrc, op.get('taches', []))
+                code, err = 0, ''
+            except WtmErreur as exc:
+                code, err = 1, str(exc)
+        else:
+            code, err = 1, 'operation inconnue : {!r}'.format(op.get('op'))
+        if code != 0:
+            raise WtmErreur('echec a l\'operation {} ({} reussies avant) : {}'.format(
+                faites + 1, faites, err.strip()))
+        faites += 1
+    return {'appliquees': faites}
+
+
+def main(argv=None):
+    """Point d'entree CLI ; rend 0, ou 2 sur WtmErreur."""
+    p = argparse.ArgumentParser(prog='wtm')
+    sub = p.add_subparsers(dest='cmd', required=True)
+    c = sub.add_parser('copie')
+    c.add_argument('--source', required=True)
+    c.add_argument('--dest', required=True)
+    a = sub.add_parser('audit')
+    a.add_argument('--taskrc', required=True)
+    a.add_argument('--sortie', required=True)
+    ap = sub.add_parser('appliquer')
+    ap.add_argument('lot')
+    ap.add_argument('--taskrc', required=True)
+    ap.add_argument('--cible-prod', action='store_true')
+    args = p.parse_args(argv)
+    try:
+        if args.cmd == 'copie':
+            print(copier(args.source, args.dest))
+        elif args.cmd == 'audit':
+            res = auditer(args.taskrc, args.sortie)
+            print('{} anomalie(s) ; lot : {} ; rapport : {}'.format(
+                len(res['anomalies']), res['lot'], res['rapport']))
+        else:
+            res = appliquer(args.lot, args.taskrc, cible_prod=args.cible_prod)
+            print('{} operation(s) appliquee(s)'.format(res['appliquees']))
+    except WtmErreur as exc:
+        print('wtm : {}'.format(exc), file=sys.stderr)
+        return 2
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())
