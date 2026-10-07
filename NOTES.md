@@ -1,4 +1,4 @@
-# NOTES — état au 2026-10-06
+# NOTES — état au 2026-10-07
 
 ## Fait (commits locaux, rien poussé)
 - Accents sous Windows : `7a8f21a` (octets UTF-8 réinterprétés dans l'ACP avant task.exe),
@@ -8,7 +8,7 @@
   `../WebTaskManager-prod` (branche `prod`, venv propre), `Webtaskmanager-prod.ps1` sur :1875,
   verrou `verifier_isolation_prod` (refus de démarrer sur la prod hors de ce dossier),
   `lancer-dev.ps1` sur :8000. Mise à jour de la prod : `git merge master` dans le worktree.
-- pytest : 256 verts, 9 ignorés.
+- pytest : 308 verts, 13 ignorés (2026-10-07). Playwright `tests/import.spec.js` : 18/18.
 
 ## Fait le 2026-10-06
 1. **Emoji** : mesuré sur taskwarrior-test, 😀 passe (même par argv seul, sans réparation).
@@ -99,6 +99,34 @@
     et enfin la liste de tags à la saisie dans l'éditeur.
 - Piège d'instrument : lire l'export Taskwarrior en Python avec `PYTHONUTF8=1`, sinon les
   accents s'affichent en `Ã©` (cp1252) alors que la base est saine.
+
+## Fait le 2026-10-07 : import CSV
+- `docs/tags.md` (`09c5e1b`) : `serviceUsinage`, `serviceProjet`, `serviceProd` ajoutés ;
+  `+meeting` peut être saisi à la main (sans `scheduled` : à planifier plus tard), pas
+  seulement importé de l'agenda. `longfier` est une personne, volontairement hors liste.
+- Fichier de l'utilisateur `Desktop/2026-10-05-modele-import.csv` : tags alignés sur la liste,
+  converti en UTF-8 avec BOM, semaines -> jours (7 j). Analyse : 73 tâches, 0 erreur.
+  L'utilisateur l'importe lui-même (premier essai refusé en bloc, rien n'avait été écrit).
+- Durées Taskwarrior dans l'importeur (`25073b4`) : semaines, quinzaines, mois (30 j),
+  trimestres (91 j), années (365 j), `P2W`, et équivalents français. Mesuré avec `task calc`
+  sur le fork 3.5.0.6. **`m` seul = mois** (comme Taskwarrior) : `30m` donne 30 jours.
+- Import partiel (`a30fe9c`) : ligne en erreur écartée, et en cascade toute ligne qui en
+  dépend ; erreur d'en-tête -> rien d'importable. Aperçu : `importables`, `ecartees` ;
+  `POST /api/import {csv, partiel: true}`. Bouton « Ajouter les N lignes valides » et
+  Annuler, sous l'aperçu. Corrige aussi l'aperçu qui numérotait les tâches par rang
+  (une ligne vide ou un doublon décalait le marquage des erreurs).
+
+## Prochaine session : bug d'affichage de la page d'import
+- Repéré par l'utilisateur après `a30fe9c` ; il le décrira. Fichiers : `import.html`,
+  `import.js`, `import.css` (classe `ecartee`, bloc `#import-actions` déplacé sous l'aperçu,
+  liste `.import-ecartees` dans le résultat). Test rouge d'abord (`tests/import.spec.js`).
+- Défaut connu, non corrigé : après un import réussi, le bouton reste actif (un second clic
+  réimporte le même fichier, sans doublon : mise à jour des mêmes tâches).
+- Prod : `git merge master` dans `../WebTaskManager-prod` toujours à faire (liste de tags
+  `53cfb70`, durées `25073b4`, import partiel `a30fe9c`), puis redémarrage :1875.
+- Piège d'instrument : Node n'est pas dans le PATH des shells de l'agent. Playwright :
+  `$env:Path='C:\Users\irpaui\AppData\Local\node-v24.17.0-win-x64;'+$env:Path` puis
+  `node node_modules/@playwright/test/cli.js test …`, avec `TASKRC` sur taskwarrior-dev.
 
 ## Plus tard (pas les prochaines sessions)
 - Stratégie planificateur `+delegation` → `+monitoring` : la tâche `+monitoring` dépend de la
