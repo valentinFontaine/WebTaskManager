@@ -94,6 +94,7 @@
         lienSelectionneEl: null, // element <path> correspondant
     };
     let noeudsCourants = new Map(); // uuid -> noeud (donnees /api/graphe du dernier rendu)
+    let aretesCourantes = []; // { de, vers } du dernier rendu
 
     // Distinction clic / glisser sur un noeud : voir la note d'en-tete.
     const SEUIL_GLISSER_PX = 5;
@@ -301,6 +302,10 @@
         return elt('graphe-modifier');
     }
 
+    function boutonSupprimer() {
+        return elt('graphe-supprimer');
+    }
+
     function majBoutonRelier() {
         boutonRelier().disabled = liaison.selectionnes.size === 0;
     }
@@ -312,7 +317,10 @@
     // Visible seulement pour exactement une selection, et jamais pendant un
     // geste "Relier" en cours (cf. l'en-tete de tests/graphe-modifier.spec.js).
     function majBoutonModifier() {
-        boutonModifier().hidden = liaison.modeLiaison || liaison.selectionnes.size !== 1;
+        const cache = liaison.modeLiaison || liaison.selectionnes.size !== 1;
+        boutonModifier().hidden = cache;
+        // Meme regle pour Supprimer (cf. tests/graphe-supprimer.spec.js).
+        boutonSupprimer().hidden = cache;
     }
 
     // Remise a zero de l'etat d'edition des dependances, appelee en tete de
@@ -545,6 +553,65 @@
         porteur.appendChild(bouton);
     }
 
+    // Suppression d'une tache : grosse confirmation d'abord (cf.
+    // tests/graphe-supprimer.spec.js). Annuler a le focus, pour qu'un Entree
+    // machinal ne supprime rien.
+    let uuidASupprimer = null;
+
+    function modaleSuppression() {
+        return elt('graphe-confirmation-suppression');
+    }
+
+    function demanderSuppression(uuid) {
+        const noeud = noeudsCourants.get(uuid);
+        if (!noeud) return;
+        uuidASupprimer = uuid;
+        elt('graphe-suppression-description').textContent = noeud.description || uuid;
+        // Taches du graphe qui dependent de celle-ci (arete de -> vers :
+        // "vers" depend de "de") : elles perdront cette dependance.
+        const dependantes = aretesCourantes
+            .filter(a => a.de === uuid)
+            .map(a => noeudsCourants.get(a.vers))
+            .filter(Boolean)
+            .map(n => n.description);
+        const zone = elt('graphe-suppression-dependantes');
+        zone.textContent = dependantes.length
+            ? 'Attention : ' + dependantes.length + ' tâche(s) en dépendent et perdront ce lien : '
+              + dependantes.join(', ') + '.'
+            : '';
+        zone.hidden = dependantes.length === 0;
+        modaleSuppression().hidden = false;
+        elt('graphe-suppression-annuler').focus();
+    }
+
+    function fermerSuppression() {
+        uuidASupprimer = null;
+        modaleSuppression().hidden = true;
+    }
+
+    async function confirmerSuppression() {
+        const uuid = uuidASupprimer;
+        if (!uuid) return;
+        const description = (noeudsCourants.get(uuid) || {}).description || uuid;
+        fermerSuppression();
+        try {
+            const r = await fetch('/api/task/' + encodeURIComponent(uuid) + '/delete', { method: 'DELETE' });
+            const d = await r.json().catch(() => null);
+            // La route renvoie 200 meme en cas d'echec Taskwarrior :
+            // seul `success` fait foi.
+            if (!r.ok || !d || !d.success) {
+                const raison = (d && (d.detail || d.message)) || 'erreur ' + r.status + '.';
+                definirMessage('Suppression refusée : ' + raison, { erreur: true });
+                return;
+            }
+            await chargerEtDessiner(projetCourant());
+            definirMessage('Tâche supprimée : ' + description);
+        } catch (e) {
+            console.error(e);
+            definirMessage('Erreur réseau lors de la suppression.', { erreur: true });
+        }
+    }
+
     function initTaskEditor() {
         if (taskEditor || typeof TaskEditor === 'undefined') return;
         taskEditor = new TaskEditor({
@@ -643,6 +710,7 @@
         viderSvg();
         resetInteractionLiaison();
         noeudsCourants = new Map(noeuds.map(n => [n.uuid, n]));
+        aretesCourantes = aretes;
         if (noeuds.length === 0) {
             definirMessage('Aucune tâche trouvée pour ce projet.');
             return;
@@ -730,6 +798,17 @@
             const [uuid] = liaison.selectionnes;
             ouvrirEdition(uuid);
         });
+        boutonSupprimer().addEventListener('click', () => {
+            if (liaison.selectionnes.size !== 1) return;
+            const [uuid] = liaison.selectionnes;
+            demanderSuppression(uuid);
+        });
+        elt('graphe-suppression-annuler').addEventListener('click', fermerSuppression);
+        elt('graphe-suppression-confirmer').addEventListener('click', confirmerSuppression);
+        // Clic sur le fond assombri = annuler.
+        modaleSuppression().addEventListener('click', (e) => {
+            if (e.target === modaleSuppression()) fermerSuppression();
+        });
     }
 
     // Distingue clic et glisser (cf. note d'en-tete) : le mousedown est pose
@@ -746,7 +825,8 @@
         });
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
-                if (liaison.modeLiaison) annulerModeLiaison();
+                if (!modaleSuppression().hidden) fermerSuppression();
+                else if (liaison.modeLiaison) annulerModeLiaison();
             } else if (e.key === 'Delete') {
                 if (liaison.lienSelectionne) {
                     e.preventDefault();

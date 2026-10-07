@@ -168,3 +168,92 @@ body {
     stroke: #c0392b;
     stroke-width: 1px;
 }
+
+/* Suppression d'une tache : bouton rouge et grosse confirmation
+   (cf. graphe.js, demanderSuppression). */
+.graphe-toolbar button.graphe-btn-danger,
+.graphe-confirmation button.graphe-btn-danger {
+    background: #c0392b;
+    border-color: #a93226;
+    color: white;
+}
+
+.graphe-toolbar button.graphe-btn-danger:hover,
+.graphe-confirmation button.graphe-btn-danger:hover {
+    background: #a93226;
+}
+
+.graphe-confirmation {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(0, 0, 0, 0.55);
+}
+
+.graphe-confirmation[hidden] {
+    display: none;
+}
+
+.graphe-confirmation-boite {
+    max-width: 520px;
+    width: 100%;
+    padding: 28px 24px;
+    border: 4px solid #c0392b;
+    border-radius: 12px;
+    background: white;
+    text-align: center;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+}
+
+.graphe-confirmation-icone {
+    font-size: 3rem;
+    line-height: 1;
+}
+
+.graphe-confirmation h2 {
+    margin: 12px 0 16px;
+    font-size: 2rem;
+    color: #c0392b;
+}
+
+.graphe-confirmation-tache {
+    margin: 8px 0 16px;
+    font-size: 1.15rem;
+    font-weight: bold;
+    overflow-wrap: anywhere;
+}
+
+.graphe-confirmation-dependantes {
+    margin: 0 0 12px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    background: #fdecea;
+    color: #922b21;
+}
+
+.graphe-confirmation-note {
+    color: #666;
+    font-size: 0.9rem;
+}
+
+.graphe-confirmation-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 12px;
+    margin-top: 20px;
+}
+
+.graphe-confirmation-actions button {
+    padding: 10px 20px;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+    background: white;
+    color: #333;
+    cursor: pointer;
+    font-size: 1rem;
+}

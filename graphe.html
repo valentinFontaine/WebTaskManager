@@ -25,10 +25,27 @@
         <button type="button" id="graphe-relier" aria-label="Relier" disabled>Relier</button>
         <button type="button" id="graphe-modifier" aria-label="Modifier" hidden>Modifier</button>
         <button type="button" id="graphe-retirer-lien" hidden>Retirer le lien</button>
+        <button type="button" id="graphe-supprimer" class="graphe-btn-danger" hidden>Supprimer la tâche</button>
     </div>
 
     <div id="graphe-message" class="graphe-message"></div>
     <div id="graphe-svg"></div>
+
+    <div id="graphe-confirmation-suppression" class="graphe-confirmation" hidden
+         role="alertdialog" aria-modal="true" aria-labelledby="graphe-suppression-titre">
+        <div class="graphe-confirmation-boite">
+            <div class="graphe-confirmation-icone" aria-hidden="true">⚠️</div>
+            <h2 id="graphe-suppression-titre">Êtes-vous sûr ?!?</h2>
+            <p>Vous allez supprimer la tâche :</p>
+            <p id="graphe-suppression-description" class="graphe-confirmation-tache"></p>
+            <p id="graphe-suppression-dependantes" class="graphe-confirmation-dependantes" hidden></p>
+            <p class="graphe-confirmation-note">Elle disparaîtra de toutes les vues. Il n'y a pas d'annulation depuis l'interface.</p>
+            <div class="graphe-confirmation-actions">
+                <button type="button" id="graphe-suppression-annuler">Annuler</button>
+                <button type="button" id="graphe-suppression-confirmer" class="graphe-btn-danger">Oui, supprimer définitivement</button>
+            </div>
+        </div>
+    </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
