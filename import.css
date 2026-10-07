@@ -15,8 +15,9 @@ body {
 #import-page {
     max-width: none;
     width: auto;
-    flex: 1 1 auto;
-    min-height: 0;
+    /* Grandit pour remplir la fenetre, ne retrecit jamais : un apercu long
+       doit allonger le cadre (et la page), pas deborder par-dessus les boutons. */
+    flex: 1 0 auto;
     margin: 16px;
     padding: 16px;
     display: flex;
@@ -66,8 +67,7 @@ body {
 }
 
 .import-corps {
-    flex: 1 1 auto;
-    min-height: 0;
+    flex: 1 0 auto;
     display: flex;
     flex-wrap: wrap;
     gap: 16px;

@@ -433,6 +433,35 @@ test.describe('import.html — import partiel et annulation', () => {
     expect(apresTableau).toBe(true);
   });
 
+  // Bug du 2026-10-07 : au-dela d'une quarantaine de lignes, le cadre etait
+  // tasse a la hauteur de la fenetre (flex + min-height: 0), le tableau
+  // debordait par-dessus les boutons et l'ascenseur s'arretait avant la fin.
+  test('apercu long : les boutons restent sous le tableau et atteignables au defilement', async ({ page }) => {
+    const taches = Array.from({ length: 80 }, (_, i) => ({
+      uuid: `u-${i}`, description: `Tache ${i}`, project: 'Proj', ligne: i + 2, nouvelle: true,
+    }));
+    await preparer(page, {
+      apercu: { taches, erreurs: [], graphe: { noeuds: [], aretes: [] } },
+    });
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto('/import.html');
+    await choisirFichier(page, CSV_SIMPLE);
+    await expect(page.locator('#import-apercu-tableau tbody tr')).toHaveCount(80);
+
+    const geometrie = await page.evaluate(() => {
+      const tableau = document.getElementById('import-apercu-tableau').getBoundingClientRect();
+      const actions = document.getElementById('import-actions').getBoundingClientRect();
+      const cadre = document.getElementById('import-page').getBoundingClientRect();
+      return { basTableau: tableau.bottom, hautActions: actions.top, basActions: actions.bottom, basCadre: cadre.bottom };
+    });
+    expect(geometrie.hautActions).toBeGreaterThanOrEqual(geometrie.basTableau);
+    expect(geometrie.basCadre).toBeGreaterThanOrEqual(geometrie.basActions);
+
+    const annuler = page.locator('#import-bouton-annuler');
+    await annuler.scrollIntoViewIfNeeded();
+    await expect(annuler).toBeInViewport();
+  });
+
   test('erreurs avec lignes importables : bouton Ajouter, lignes ecartees marquees', async ({ page }) => {
     await preparer(page, { apercu: reponseApercuPartielle() });
     await page.goto('/import.html');
