@@ -15,6 +15,7 @@ const { test, expect } = require('@playwright/test');
 
 const A = 'aaaa1111-0000-0000-0000-000000000001';
 const B = 'aaaa2222-0000-0000-0000-000000000002';
+const C = 'aaaa3333-0000-0000-0000-000000000003';
 const HORS = 'bbbb4444-0000-0000-0000-000000000004';
 
 function noeud(uuid, description, dansProjet = true) {
@@ -27,6 +28,8 @@ function noeud(uuid, description, dansProjet = true) {
 const NOEUDS = [
   noeud(A, 'Concevoir arbre de transmission'),
   noeud(B, 'Tracer plan carter'),
+  // Libelle plus etroit que la ligne de boutons : la boite doit s'elargir.
+  noeud(C, 'Plan'),
   noeud(HORS, 'Fournir la specification amont', false),
 ];
 const ARETES = [{ de: HORS, vers: A }, { de: A, vers: B }];
@@ -88,6 +91,36 @@ test.describe('graphe.html — terminer une tache depuis un noeud', () => {
     await expect(boutonTerminer(page, B)).toBeVisible();
     await expect(boutonTerminer(page, HORS)).toHaveCount(0);
     expect(erreurs).toEqual([]);
+  });
+
+  // toBeVisible ne voit pas le rognage par le foreignObject de Mermaid : un
+  // bouton pose hors de la boite mesuree au rendu etait present, "visible"
+  // pour Playwright, et invisible a l'ecran (stylo compris). On compare donc
+  // les boites.
+  test('stylo et coche tiennent dans la boite du noeud (pas de rognage)', async ({ page }) => {
+    await preparer(page);
+    await ouvrirOrion(page);
+
+    for (const uuid of [A, B, C]) {
+      const g = page.locator(`[data-uuid="${uuid}"]`);
+      const boites = await g.evaluate(el => {
+        const fo = el.querySelector('foreignObject').getBoundingClientRect();
+        return [...el.querySelectorAll('button')].map(b => {
+          const r = b.getBoundingClientRect();
+          return { nom: b.getAttribute('aria-label'), dedans:
+            r.width > 0 && r.left >= fo.left - 1 && r.right <= fo.right + 1
+            && r.top >= fo.top - 1 && r.bottom <= fo.bottom + 1 };
+        });
+      });
+      expect(boites.map(b => b.nom).sort()).toEqual(['Modifier la tâche', 'Terminer la tâche']);
+      for (const b of boites) expect(b, b.nom).toMatchObject({ dedans: true });
+      // Le texte non plus n'est pas rogne.
+      const texteRogne = await g.evaluate(el => {
+        const div = el.querySelector('foreignObject > div');
+        return div.scrollWidth > div.clientWidth + 1;
+      });
+      expect(texteRogne, uuid).toBe(false);
+    }
   });
 
   test('clic : POST /done sur le bon uuid, graphe recharge, la tache disparait', async ({ page }) => {

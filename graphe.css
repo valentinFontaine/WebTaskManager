@@ -120,20 +120,31 @@ body {
     opacity: 0.8;
 }
 
-/* Bouton stylo, pose en DOM apres le rendu Mermaid (cf. graphe.js,
-   ajouterBoutonEdition) dans le foreignObject HTML du libelle. */
-.graphe-btn-modifier {
-    margin-left: 6px;
-    padding: 0 4px;
+/* Boutons stylo et coche des noeuds. Leur place est reservee dans le
+   libelle Mermaid (span.graphe-actions, cf. graphe.js, emettreArbre) : sa
+   taille est fixee ici, AVANT le rendu, pour que Mermaid la mesure. Ne pas
+   prefixer par #graphe-svg : Mermaid mesure le libelle hors de ce conteneur. */
+/* Ligne a part, sous le texte : le centre du noeud reste sur le texte, ou
+   un clic selectionne (cf. tests/graphe-redessin.spec.js). */
+.graphe-actions {
+    display: flex;
+    justify-content: center;
+    width: 3.4em;
+    height: 1.3em;
+    margin: 2px auto 0;
+}
+
+.graphe-btn-noeud {
+    width: 1.7em;
+    padding: 0;
     border: none;
     background: transparent;
     cursor: pointer;
     font-size: 0.9em;
     line-height: 1;
-    vertical-align: middle;
 }
 
-.graphe-btn-modifier:hover {
+.graphe-btn-noeud:hover {
     opacity: 0.7;
 }
 

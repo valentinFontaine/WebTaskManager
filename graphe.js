@@ -45,10 +45,13 @@
  * dupliquer/contourner cet echappement au risque de casser la securite deja
  * en place (securityLevel 'loose' + htmlLabels rend Mermaid capable
  * d'interpreter du HTML dans un libelle, donc une description mal echappee y
- * deviendrait une injection) ; et le label rendu est de toute facon un
- * foreignObject HTML (htmlLabels), donc y ajouter un <button> apres coup est
- * strictement equivalent visuellement sans repasser par cette syntaxe.
- * Seuls les noeuds `dans_projet: true` recoivent le bouton (voir
+ * deviendrait une injection). Mais Mermaid dimensionne la boite au rendu :
+ * un bouton ajoute apres coup deborde du foreignObject et y est rogne,
+ * invisible a l'ecran bien que "visible" pour Playwright. Le libelle porte
+ * donc une ligne vide de taille fixe sous le texte (span.graphe-actions, chaine
+ * constante, aucune donnee de tache), ou sont poses le stylo et la coche
+ * "Terminer" (cf. tests/graphe-terminer.spec.js).
+ * Seuls les noeuds `dans_projet: true` recoivent les boutons (voir
  * appliquerAttributsNoeuds). Au clic, la tache complete est recuperee via
  * GET /api/tasks (et non depuis le noeud /api/graphe, qui n'expose ni tags,
  * ni priority, ni scheduled) puis passee a taskEditor.showForTask.
@@ -226,7 +229,11 @@
             cadres.push(noeudArbre.chemin);
         }
         for (const n of taches) {
-            lignes.push(`${idNoeud(n.uuid)}["${echapperLabel(n.description)}"]`);
+            // Place reservee aux boutons (cf. ajouterBoutonsNoeud) : Mermaid
+            // dimensionne la boite au rendu, un bouton ajoute apres coup hors
+            // de cette place serait rogne par le foreignObject.
+            const actions = n.dans_projet ? "<span class='graphe-actions'></span>" : '';
+            lignes.push(`${idNoeud(n.uuid)}["${echapperLabel(n.description)}${actions}"]`);
         }
         for (const enfant of noeudArbre.enfants.values()) {
             emettreArbre(enfant, parProjet, lignes, cadres, false, sansCadre);
@@ -303,10 +310,7 @@
             if (n.externe) g.classList.add('externe');
             if (n.fige) g.classList.add('fige');
             if (!n.dans_projet) g.classList.add('hors-projet');
-            if (n.dans_projet) {
-                ajouterBoutonEdition(g, n.uuid);
-                ajouterBoutonTerminer(g, n.uuid);
-            }
+            if (n.dans_projet) ajouterBoutonsNoeud(g, n.uuid);
             g.addEventListener('mousedown', (e) => {
                 mousedownNoeud = { uuid: n.uuid, x: e.clientX, y: e.clientY };
             });
@@ -572,50 +576,40 @@
         }
     }
 
-    // Pose le bouton stylo dans le libelle HTML du noeud (foreignObject posee
-    // par Mermaid, htmlLabels). Voir la note d'en-tete du fichier : ajoute en
-    // DOM apres le rendu, pas dans le texte du libelle Mermaid.
-    function ajouterBoutonEdition(g, uuid) {
-        const labelDiv = g.querySelector('.label foreignObject > div, foreignObject > div');
-        const porteur = labelDiv || g.querySelector('.label') || g;
+    // Pose les boutons stylo et coche dans la place reservee au rendu
+    // (span.graphe-actions, cf. emettreArbre et graphe.css). Hors de cette
+    // place, le foreignObject de Mermaid les rognerait.
+    function ajouterBoutonsNoeud(g, uuid) {
+        const porteur = g.querySelector('.graphe-actions')
+            || g.querySelector('.label foreignObject > div, foreignObject > div')
+            || g;
+        porteur.appendChild(creerBoutonNoeud('graphe-btn-modifier', 'Modifier la tâche', '✏️',
+            () => ouvrirEdition(uuid)));
+        porteur.appendChild(creerBoutonNoeud('graphe-btn-terminer', 'Terminer la tâche', '✔️',
+            () => terminerTache(uuid)));
+    }
+
+    function creerBoutonNoeud(classe, libelle, icone, action) {
         const bouton = document.createElement('button');
         bouton.type = 'button';
-        bouton.className = 'graphe-btn-modifier';
-        bouton.setAttribute('aria-label', 'Modifier la tâche');
-        bouton.textContent = '✏️';
+        bouton.className = 'graphe-btn-noeud ' + classe;
+        bouton.setAttribute('aria-label', libelle);
+        bouton.title = libelle;
+        bouton.textContent = icone;
         // Empeche le glisser/zoom du graphe (svg-pan-zoom ecoute mousedown sur
-        // le SVG) et l'ouverture depuis un autre gestionnaire de clic porte
-        // par le noeud : la propagation est coupee avant toute chose.
+        // le SVG) et la selection du noeud : la propagation est coupee avant
+        // toute chose.
         bouton.addEventListener('mousedown', (e) => e.stopPropagation());
         bouton.addEventListener('click', (e) => {
             e.stopPropagation();
             e.preventDefault();
-            ouvrirEdition(uuid);
+            action();
         });
-        porteur.appendChild(bouton);
+        return bouton;
     }
 
-    // Bouton coche, a cote du stylo : termine la tache sans confirmation,
-    // comme les taskcards (cf. tests/graphe-terminer.spec.js).
-    function ajouterBoutonTerminer(g, uuid) {
-        const labelDiv = g.querySelector('.label foreignObject > div, foreignObject > div');
-        const porteur = labelDiv || g.querySelector('.label') || g;
-        const bouton = document.createElement('button');
-        bouton.type = 'button';
-        bouton.className = 'graphe-btn-modifier graphe-btn-terminer';
-        bouton.setAttribute('aria-label', 'Terminer la tâche');
-        bouton.title = 'Terminer la tâche';
-        bouton.textContent = '✔️';
-        // Meme coupure de propagation que le stylo (cf. ajouterBoutonEdition).
-        bouton.addEventListener('mousedown', (e) => e.stopPropagation());
-        bouton.addEventListener('click', (e) => {
-            e.stopPropagation();
-            e.preventDefault();
-            terminerTache(uuid);
-        });
-        porteur.appendChild(bouton);
-    }
-
+    // Termine la tache sans confirmation, comme les taskcards
+    // (cf. tests/graphe-terminer.spec.js).
     async function terminerTache(uuid) {
         const description = (noeudsCourants.get(uuid) || {}).description || uuid;
         try {
