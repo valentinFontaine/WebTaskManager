@@ -303,7 +303,10 @@
             if (n.externe) g.classList.add('externe');
             if (n.fige) g.classList.add('fige');
             if (!n.dans_projet) g.classList.add('hors-projet');
-            if (n.dans_projet) ajouterBoutonEdition(g, n.uuid);
+            if (n.dans_projet) {
+                ajouterBoutonEdition(g, n.uuid);
+                ajouterBoutonTerminer(g, n.uuid);
+            }
             g.addEventListener('mousedown', (e) => {
                 mousedownNoeud = { uuid: n.uuid, x: e.clientX, y: e.clientY };
             });
@@ -590,6 +593,46 @@
             ouvrirEdition(uuid);
         });
         porteur.appendChild(bouton);
+    }
+
+    // Bouton coche, a cote du stylo : termine la tache sans confirmation,
+    // comme les taskcards (cf. tests/graphe-terminer.spec.js).
+    function ajouterBoutonTerminer(g, uuid) {
+        const labelDiv = g.querySelector('.label foreignObject > div, foreignObject > div');
+        const porteur = labelDiv || g.querySelector('.label') || g;
+        const bouton = document.createElement('button');
+        bouton.type = 'button';
+        bouton.className = 'graphe-btn-modifier graphe-btn-terminer';
+        bouton.setAttribute('aria-label', 'Terminer la tâche');
+        bouton.title = 'Terminer la tâche';
+        bouton.textContent = '✔️';
+        // Meme coupure de propagation que le stylo (cf. ajouterBoutonEdition).
+        bouton.addEventListener('mousedown', (e) => e.stopPropagation());
+        bouton.addEventListener('click', (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            terminerTache(uuid);
+        });
+        porteur.appendChild(bouton);
+    }
+
+    async function terminerTache(uuid) {
+        const description = (noeudsCourants.get(uuid) || {}).description || uuid;
+        try {
+            const r = await fetch('/api/task/' + encodeURIComponent(uuid) + '/done', { method: 'POST' });
+            const d = await r.json().catch(() => null);
+            // Comme pour la suppression : seul `success` fait foi.
+            if (!r.ok || !d || !d.success) {
+                const raison = (d && (d.detail || d.message)) || 'erreur ' + r.status + '.';
+                definirMessage('Clôture refusée : ' + raison, { erreur: true });
+                return;
+            }
+            await chargerEtDessiner(selection.slice());
+            definirMessage('Tâche terminée : ' + description);
+        } catch (e) {
+            console.error(e);
+            definirMessage('Erreur réseau lors de la clôture.', { erreur: true });
+        }
     }
 
     // Suppression d'une tache : grosse confirmation d'abord (cf.
