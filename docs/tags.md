@@ -101,7 +101,8 @@ Liste arrêtée le 2026-10-06 (inventaire de la prod : `docs/inventaire-tags.md`
 | `+habit` | routine récurrente (mobilité, repas…) |
 | `+shopping` | à acheter |
 | `+biocoop` | à acheter dans ce magasin ; d'autres magasins pourront suivre le même modèle |
-| `+home` | maison, bricolage |
+| `+home` | maison |
+| `+bricolage` | bricolage et travaux (rénovation, chantier). Remplace `+travaux` (2026-10-11) |
 | `+couture` | couture |
 | `+finance` | impôts, argent, placements |
 | `+health` | santé |
