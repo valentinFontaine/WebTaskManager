@@ -114,6 +114,13 @@ body {
     stroke-dasharray: 4 2;
 }
 
+/* Sans estTime : le planificateur ne peut pas placer la tache. Declare
+   avant hors-projet, qui garde la main sur le fond d'un noeud voisin. */
+#graphe-svg g.node.sans-duree rect,
+#graphe-svg g.node.sans-duree polygon {
+    fill: #fde2e1;
+}
+
 #graphe-svg g.node.hors-projet rect,
 #graphe-svg g.node.hors-projet polygon {
     fill: #eee;

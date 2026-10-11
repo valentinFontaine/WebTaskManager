@@ -299,7 +299,8 @@
 
     // Mermaid ne pose pas d'attribut dedie sur ses noeuds : on retrouve le
     // groupe SVG de chaque noeud par son id (prefixe "flowchart-<id>-") et on
-    // y ajoute data-uuid, plus les classes CSS externe/fige/hors-projet.
+    // y ajoute data-uuid, plus les classes CSS externe/fige/hors-projet, et
+    // sans-duree pour une tache sans estTime (non planifiable).
     function appliquerAttributsNoeuds(conteneur, noeuds) {
         for (const n of noeuds) {
             const idSan = idNoeud(n.uuid);
@@ -310,6 +311,7 @@
             if (n.externe) g.classList.add('externe');
             if (n.fige) g.classList.add('fige');
             if (!n.dans_projet) g.classList.add('hors-projet');
+            if (!n.estTime) g.classList.add('sans-duree');
             if (n.dans_projet) ajouterBoutonsNoeud(g, n.uuid);
             g.addEventListener('mousedown', (e) => {
                 mousedownNoeud = { uuid: n.uuid, x: e.clientX, y: e.clientY };
