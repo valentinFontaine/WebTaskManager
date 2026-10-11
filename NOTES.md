@@ -43,6 +43,12 @@ docstring de `decoupage.py`.
 - Piège de déploiement : après `git merge master` en prod, **redémarrer :1875**. Le frontend
   est servi en direct, pas le Python : une page à jour peut parler à un backend ancien.
 - PATH de Node : session dédiée, prompt `PROMPT-node-path.md` (non suivi par git).
+- 2026-10-11 : dates de l'éditeur corrigées (`c56e19d`, en prod) : il affichait l'UTC et
+  reculait `scheduled`/`due` de 1-2 h à chaque enregistrement. Garde-fou :
+  `tests/dates-fuseau.spec.js`. Tâches déjà décalées : à revoir à la main par l'utilisateur.
+- **Prochain chantier : 24 échecs Playwright préexistants**, surtout `plan-retard.spec.js` et
+  `plan-statut.spec.js` (aussi 1 dans modifier-champs, modify-tags, graphe-modifier, nav-ajout,
+  task-manager). Déjà rouges sans le correctif des dates (vérifié le 2026-10-11).
 
 ## Plus tard (pas les prochaines sessions)
 - Clôture automatique des jalons par `done` : **désactivée le 2026-10-07**, l'utilisateur veut fermer
