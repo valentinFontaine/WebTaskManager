@@ -952,6 +952,48 @@ function setupEventListeners() {
     // Écouter la suppression
     calendar.on('beforeDeleteEvent', handleBeforeDeleteEvent);
 
+    // Edit de la fenetre de detail : l'editeur general, pas le formulaire de
+    // TOAST UI (qui reste celui de la planification par glisser).
+    calendar.on('clickEvent', ({ event }) => { evenementDetaille = event; });
+    document.addEventListener('click', ouvrirEditeurDepuisDetail, true);
+}
+
+/** Evenement dont TOAST UI affiche la fenetre de detail. */
+let evenementDetaille = null;
+
+/**
+ * Intercepte, en phase de capture, le clic sur Edit de la fenetre de detail :
+ * il n'atteint jamais TOAST UI, qui ouvrirait son propre formulaire. On ouvre
+ * a la place l'editeur general sur la tache, lue dans `allTasks` pour avoir
+ * tous ses champs (un bloc de plan ne porte que son uuid dans `raw`).
+ */
+function ouvrirEditeurDepuisDetail(e) {
+    const bouton = e.target.closest
+        && e.target.closest('.toastui-calendar-detail-container .toastui-calendar-edit-button');
+    if (!bouton || !evenementDetaille) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    const raw = evenementDetaille.raw || {};
+    const uuid = raw.uuid || evenementDetaille.id;
+    const tache = allTasks.find(t => t.uuid === uuid) || raw;
+    evenementDetaille = null;
+    fermerDetailToastUi();
+
+    if (typeof taskEditor !== 'undefined') {
+        taskEditor.showForTask(tache);
+    } else {
+        console.error('taskEditor is not defined in calendar-planner');
+    }
+}
+
+/** TOAST UI n'expose pas de fermeture de sa fenetre de detail : un clic sur
+ * son voile la ferme, comme un clic de l'utilisateur hors de la fenetre. */
+function fermerDetailToastUi() {
+    const voile = document.querySelector('.toastui-calendar-popup-overlay');
+    if (voile && document.querySelector('.toastui-calendar-detail-container')) {
+        voile.click();
+    }
 }
 
 function handleSelectDateTimeEvent(eventInfo) {
