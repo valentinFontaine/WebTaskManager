@@ -52,9 +52,10 @@ test('Edit ouvre l\'editeur general, pas le formulaire de TOAST UI', async ({ pa
   await expect(edit).toBeVisible();
   await edit.click();
 
-  // La page porte deux #task-editor-modal (nav.js et calendrier) : on vise
-  // celle qui s'affiche.
-  const editeur = page.locator('#task-editor-modal:visible');
+  // Un seul element porte cet id : le gabarit de l'editeur le portait aussi
+  // jusqu'au 2026-10-11 (renomme task-editor-template).
+  await expect(page.locator('[id="task-editor-modal"]')).toHaveCount(1);
+  const editeur = page.locator('#task-editor-modal');
   await expect(editeur).toBeVisible();
   await expect(editeur.locator('#task-editor-description')).toHaveValue('Tache du calendrier');
   await expect(editeur.locator('#task-editor-project')).toHaveValue('NPD.Orion');

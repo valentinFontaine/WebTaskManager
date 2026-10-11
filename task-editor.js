@@ -104,9 +104,9 @@ class TaskEditor {
             const tempDiv = document.createElement('div');
             tempDiv.innerHTML = html;
             
-            this.template = tempDiv.querySelector('#task-editor-modal');
+            this.template = tempDiv.querySelector('#task-editor-template');
             if (!this.template) {
-                console.error('Template task-editor-modal non trouvé');
+                console.error('Template task-editor-template non trouvé');
                 return;
             }
             
