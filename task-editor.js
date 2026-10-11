@@ -660,11 +660,13 @@ class TaskEditor {
     }
     
     formatDateForTask(dateString) {
-        // Convertir le format datetime-local en format TaskWarrior
+        // Le champ datetime-local est en heure locale du navigateur. On envoie
+        // l'instant en UTC explicite (20261012T080000Z) : Taskwarrior lit une
+        // date sans `Z` dans le fuseau du serveur, pas forcement le notre.
         if (!dateString) return '';
-        
-        // Retourner la chaîne avec les secondes ajoutées si nécessaire
-        return dateString.length === 16 ? `${dateString}:00` : dateString;
+        const date = new Date(dateString);
+        if (isNaN(date.getTime())) return dateString;
+        return date.toISOString().replace(/\.\d{3}Z$/, 'Z').replace(/[-:]/g, '');
     }
 
     formatDateForInput(dateString) {
@@ -682,13 +684,19 @@ class TaskEditor {
             
             // Create ISO format string: YYYY-MM-DDTHH:MM:SSZ
             const isoString = `${year}-${month}-${day}T${hour}:${minute}:${second}Z`;
-            const date = new Date(isoString);
-            return date.toISOString().slice(0, 16);
+            return this.formatLocalForInput(new Date(isoString));
         }
-        
+
         // Fallback for other date formats
-        const date = new Date(dateString);
-        return date.toISOString().slice(0, 16);
+        return this.formatLocalForInput(new Date(dateString));
+    }
+
+    formatLocalForInput(date) {
+        // datetime-local attend l'heure LOCALE ; toISOString() donnerait l'UTC.
+        if (isNaN(date.getTime())) return '';
+        const p = (n) => String(n).padStart(2, '0');
+        return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}`
+            + `T${p(date.getHours())}:${p(date.getMinutes())}`;
     }
 
     formatDurationString(durationString) {

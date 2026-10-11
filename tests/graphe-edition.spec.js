@@ -48,13 +48,11 @@
  * - tags : array -> `join(', ')` a l'affichage -> `split(',').map(trim)` a
  *   la sauvegarde. Round-trip stable pour des tags sans espace interne.
  * - due / scheduled : `formatDateForInput` convertit le format TaskWarrior
- *   (`AAAAMMJJTHHMMSSZ`) en `datetime-local` (`AAAA-MM-JJTHH:MM`, UTC, sans
- *   secondes) pour l'affichage, puis `formatDateForTask` rajoute ":00" a la
- *   sauvegarde si la valeur fait 16 caracteres. Le corps envoye n'est donc
- *   PAS egal a la valeur brute d'origine mais a
- *   `formatDateForTask(formatDateForInput(brut))` -- ce contrat calcule
- *   cette valeur attendue avec les memes regles (voir `versDateFormulaire`)
- *   plutot que de comparer a la chaine brute.
+ *   (`AAAAMMJJTHHMMSSZ`) en `datetime-local` (heure LOCALE, sans secondes),
+ *   puis `formatDateForTask` renvoie l'instant en UTC compact. Le corps
+ *   envoye est donc la valeur brute, secondes remises a zero (voir
+ *   `versDateFormulaire`). Avant le 2026-10-11, le champ montrait l'UTC et
+ *   la sauvegarde reculait la date du decalage horaire (dates-fuseau.spec.js).
  * - estTime : recopie telle quelle du champ duree vers `estTime` (pas de
  *   reformatage dans populateForm), donc round-trip a l'identique.
  * - priority / project : recopies telles quelles.
@@ -106,18 +104,8 @@ function messageErreur(page) {
  */
 function versDateFormulaire(dateBrute) {
   if (!dateBrute) return null;
-  let entree = dateBrute;
-  if (/^\d{8}T\d{6}Z$/.test(dateBrute)) {
-    const annee = dateBrute.substring(0, 4);
-    const mois = dateBrute.substring(4, 6);
-    const jour = dateBrute.substring(6, 8);
-    const heure = dateBrute.substring(9, 11);
-    const minute = dateBrute.substring(11, 13);
-    const seconde = dateBrute.substring(13, 15);
-    entree = `${annee}-${mois}-${jour}T${heure}:${minute}:${seconde}Z`;
-  }
-  const pourFormulaire = new Date(entree).toISOString().slice(0, 16); // formatDateForInput
-  return pourFormulaire.length === 16 ? `${pourFormulaire}:00` : pourFormulaire; // formatDateForTask
+  // Round-trip : meme instant, a la minute (le champ n'a pas de secondes).
+  return /^\d{8}T\d{6}Z$/.test(dateBrute) ? dateBrute.slice(0, 13) + '00Z' : dateBrute;
 }
 
 /** Jeu de noeuds/aretes construit a la main, projet NPD.Orion (copie de graphe.spec.js). */
