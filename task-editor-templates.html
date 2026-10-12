@@ -53,12 +53,12 @@
                     <div class="form-row">
                         <div class="form-group">
                             <label for="task-editor-due"><slot name="due-label">Due Date</slot>:</label>
-                            <input type="datetime-local" id="task-editor-due">
+                            <input type="text" id="task-editor-due" placeholder="jj/mm/aaaa hh:mm" autocomplete="off">
                         </div>
                         
                         <div class="form-group">
                             <label for="task-editor-scheduled"><slot name="scheduled-label">Scheduled</slot>:</label>
-                            <input type="datetime-local" id="task-editor-scheduled">
+                            <input type="text" id="task-editor-scheduled" placeholder="jj/mm/aaaa hh:mm" autocomplete="off">
                         </div>
                     </div>
                 </div>

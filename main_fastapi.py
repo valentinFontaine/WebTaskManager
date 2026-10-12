@@ -77,6 +77,15 @@ def argv_for_task_exe(command, acp=None):
     return ''.join(out)
 
 
+def erreur_taskwarrior(stderr):
+    """Le message d'erreur de Taskwarrior, sans ses lignes d'information
+    ("TASKRC override: ...", "Configuration override ...")."""
+    lignes = [l.strip() for l in (stderr or '').splitlines()
+              if l.strip() and not l.startswith(('TASKRC override', 'TASKDATA override',
+                                                  'Configuration override'))]
+    return '\n'.join(lignes) or 'Taskwarrior a refuse la modification.'
+
+
 def run_task_command(command):
     """Execute a TaskWarrior command and return the result"""
     try:
@@ -1117,6 +1126,9 @@ async def modify_task(task_id: str, task_data: TaskModify):
         return ResponseModel(
             success=result.success,
             message=result.stdout if result.success else result.stderr,
+            # L'editeur n'affiche que `error` : sans lui, l'utilisateur ne voyait
+            # que "Failed to update task" (ex. echeance d'une tache recurrente).
+            error=None if result.success else erreur_taskwarrior(result.stderr),
             task=None
         )
     else:

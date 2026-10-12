@@ -47,8 +47,8 @@ test.describe('Editeur : dates en heure locale, aller-retour sans decalage', () 
 
     const modale = page.locator('#' + MODAL_ID);
     // Ce que voit l'utilisateur : l'heure locale (CEST +2, CET +1).
-    await expect(modale.locator('#task-editor-scheduled')).toHaveValue('2026-10-12T10:00');
-    await expect(modale.locator('#task-editor-due')).toHaveValue('2026-12-15T10:00');
+    await expect(modale.locator('#task-editor-scheduled')).toHaveValue('12/10/2026 10:00');
+    await expect(modale.locator('#task-editor-due')).toHaveValue('15/12/2026 10:00');
 
     await modale.locator('#task-editor-save').click();
     await expect.poll(() => requetesModify.length).toBeGreaterThan(0);
@@ -85,7 +85,7 @@ test.describe('Calendrier et editeur montrent la meme heure', () => {
 
     // eslint-disable-next-line no-undef
     await page.evaluate((t) => taskEditor.showForTask(t), tache);
-    await expect(page.locator('#task-editor-scheduled')).toHaveValue(`2026-10-12T${grille}`);
+    await expect(page.locator('#task-editor-scheduled')).toHaveValue(`12/10/2026 ${grille}`);
   });
 });
 

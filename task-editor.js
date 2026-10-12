@@ -581,11 +581,22 @@ class TaskEditor {
             if (projectField) {
                 taskData.project = projectField.value; // Inclure même si vide
             }
+            // Une date illisible n'est pas envoyee : Taskwarrior la refuserait
+            // ou, pire, l'interpreterait autrement que l'utilisateur.
+            for (const champ of [dueField, scheduledField]) {
+                if (!champ) continue;
+                const illisible = champ.value.trim() !== '' && !this.lireDateSaisie(champ.value);
+                champ.setCustomValidity(illisible ? 'Date attendue au format jj/mm/aaaa hh:mm' : '');
+                if (illisible) {
+                    champ.reportValidity();
+                    return;
+                }
+            }
             if (dueField) {
-                taskData.due = dueField.value; // Inclure même si vide
+                taskData.due = dueField.value.trim(); // Inclure même si vide
             }
             if (scheduledField) {
-                taskData.scheduled = scheduledField.value; // Inclure même si vide
+                taskData.scheduled = scheduledField.value.trim(); // Inclure même si vide
             }
         }
         
@@ -660,17 +671,31 @@ class TaskEditor {
     }
     
     formatDateForTask(dateString) {
-        // Le champ datetime-local est en heure locale du navigateur. On envoie
+        // Le champ est saisi en heure locale du navigateur. On envoie
         // l'instant en UTC explicite (20261012T080000Z) : Taskwarrior lit une
         // date sans `Z` dans le fuseau du serveur, pas forcement le notre.
         if (!dateString) return '';
-        const date = new Date(dateString);
-        if (isNaN(date.getTime())) return dateString;
+        const date = this.lireDateSaisie(dateString);
+        if (!date) return dateString;
         return date.toISOString().replace(/\.\d{3}Z$/, 'Z').replace(/[-:]/g, '');
     }
 
+    lireDateSaisie(texte) {
+        // Format europeen jj/mm/aaaa, heure facultative hh:mm (ou hhhmm) sur
+        // 24 h ; sans heure : minuit. Rend null si la date n'existe pas (31/02).
+        const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2})[:hH](\d{2}))?$/.exec(texte.trim());
+        if (!m) return null;
+        const [jour, mois, annee, heure, minute] = [m[1], m[2], m[3], m[4] || 0, m[5] || 0].map(Number);
+        if (heure > 23 || minute > 59) return null;
+        const date = new Date(annee, mois - 1, jour, heure, minute);
+        if (date.getFullYear() !== annee || date.getMonth() !== mois - 1 || date.getDate() !== jour) {
+            return null;
+        }
+        return date;
+    }
+
     formatDateForInput(dateString) {
-        // Convert TaskWarrior date format to HTML datetime-local format
+        // Format TaskWarrior (20250131T055530Z) -> champ jj/mm/aaaa hh:mm, heure locale
         if (!dateString) return '';
         
         // Handle TaskWarrior format: 20250131T055530Z
@@ -692,11 +717,12 @@ class TaskEditor {
     }
 
     formatLocalForInput(date) {
-        // datetime-local attend l'heure LOCALE ; toISOString() donnerait l'UTC.
+        // Heure LOCALE (toISOString() donnerait l'UTC), format europeen
+        // jj/mm/aaaa hh:mm sur 24 h, relu par lireDateSaisie.
         if (isNaN(date.getTime())) return '';
         const p = (n) => String(n).padStart(2, '0');
-        return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}`
-            + `T${p(date.getHours())}:${p(date.getMinutes())}`;
+        return `${p(date.getDate())}/${p(date.getMonth() + 1)}/${date.getFullYear()}`
+            + ` ${p(date.getHours())}:${p(date.getMinutes())}`;
     }
 
     formatDurationString(durationString) {

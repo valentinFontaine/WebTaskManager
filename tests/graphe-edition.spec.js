@@ -48,7 +48,7 @@
  * - tags : array -> `join(', ')` a l'affichage -> `split(',').map(trim)` a
  *   la sauvegarde. Round-trip stable pour des tags sans espace interne.
  * - due / scheduled : `formatDateForInput` convertit le format TaskWarrior
- *   (`AAAAMMJJTHHMMSSZ`) en `datetime-local` (heure LOCALE, sans secondes),
+ *   (`AAAAMMJJTHHMMSSZ`) en `jj/mm/aaaa hh:mm` (heure LOCALE, sans secondes),
  *   puis `formatDateForTask` renvoie l'instant en UTC compact. Le corps
  *   envoye est donc la valeur brute, secondes remises a zero (voir
  *   `versDateFormulaire`). Avant le 2026-10-11, le champ montrait l'UTC et

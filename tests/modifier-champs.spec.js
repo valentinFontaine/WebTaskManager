@@ -137,7 +137,7 @@ test.describe('Edition de chaque champ depuis la page principale', () => {
     const d = `Champ echeance ${Date.now()}`;
     await creer(request, d);
     await ouvrirEditeur(page, d);
-    await page.fill('#task-editor-due', '2030-05-06T09:30');
+    await page.fill('#task-editor-due', '06/05/2030 09:30');
     await enregistrer(page);
     const t = await relire(request, d);
     expect(t.due).toBeTruthy();
@@ -150,7 +150,7 @@ test.describe('Edition de chaque champ depuis la page principale', () => {
     const d = `Champ planif ${Date.now()}`;
     await creer(request, d);
     await ouvrirEditeur(page, d);
-    await page.fill('#task-editor-scheduled', '2030-05-07T14:00');
+    await page.fill('#task-editor-scheduled', '07/05/2030 14:00');
     await enregistrer(page);
     const t = await relire(request, d);
     const attendu = new Date('2030-05-07T14:00').toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z';
@@ -173,6 +173,21 @@ test.describe('Edition de chaque champ depuis la page principale', () => {
     await page.fill('#task-editor-scheduled', '');
     await enregistrer(page);
     expect((await relire(request, d)).scheduled).toBeUndefined();
+  });
+
+  test('echeance et planification : effacement des deux', async ({ page, request }) => {
+    const d = `Champ dates vides ${Date.now()}`;
+    await creer(request, d, { due: '2030-05-06T09:30:00', scheduled: '2030-05-07T14:00:00' });
+    await ouvrirEditeur(page, d);
+    // Le champ montre bien la date avant qu'on l'efface (format europeen).
+    await expect(page.locator('#task-editor-due')).toHaveValue(/^06\/05\/2030 \d\d:\d\d$/);
+    await expect(page.locator('#task-editor-scheduled')).toHaveValue(/^07\/05\/2030 \d\d:\d\d$/);
+    await page.fill('#task-editor-due', '');
+    await page.fill('#task-editor-scheduled', '');
+    await enregistrer(page);
+    const t = await relire(request, d);
+    expect(t.due).toBeUndefined();
+    expect(t.scheduled).toBeUndefined();
   });
 
   test('duree : effacement', async ({ page, request }) => {
@@ -205,8 +220,8 @@ test.describe('Edition de chaque champ depuis la page principale', () => {
     await retirerToutesLesPuces(page);
     await page.fill('#task-editor-tags', 'tstchamps, tous');
     await page.fill('#task-editor-project', 'TestChamps.Tous');
-    await page.fill('#task-editor-due', '2030-06-01T10:00');
-    await page.fill('#task-editor-scheduled', '2030-05-30T08:00');
+    await page.fill('#task-editor-due', '01/06/2030 10:00');
+    await page.fill('#task-editor-scheduled', '30/05/2030 08:00');
     await enregistrer(page);
     const t = await relire(request, apres);
     expect(t.priority).toBe('L');

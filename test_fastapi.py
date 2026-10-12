@@ -1097,3 +1097,26 @@ class TestTagsValides:
         monkeypatch.setattr(main_fastapi, "CHEMIN_DOC_TAGS", str(doc))
         tags = client.get("/api/tags").json()["tags"]
         assert tags == ["cao", "pro", "running", "sport", "trail"]
+
+
+class TestModifyErreurLisible:
+    """Un refus de Taskwarrior doit arriver dans `error`, que l'editeur affiche.
+
+    Bug du 2026-10-12 : effacer l'echeance d'une tache recurrente echoue
+    (Taskwarrior l'interdit) et l'utilisateur ne voyait que "Failed to update
+    task" : le message reel etait range dans `message`, que l'editeur ignore.
+    """
+
+    @patch('main_fastapi.run_task_command')
+    def test_refus_de_taskwarrior_dans_error(self, mock_command):
+        mock_command.return_value = CommandResult(
+            success=False, stdout="",
+            stderr=("TASKRC override: C:/x/taskrc\n"
+                    "Configuration override rc.confirmation=off\n"
+                    "You cannot remove the due date from a recurring task.\n"),
+            returncode=2)
+
+        data = client.put("/api/task/1/modify", json={"due": "", "scheduled": ""}).json()
+
+        assert data["success"] is False
+        assert data["error"] == "You cannot remove the due date from a recurring task."
