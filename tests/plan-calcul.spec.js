@@ -80,6 +80,7 @@ test.describe('E2 — calcul du plan depuis le calendrier', () => {
     const vus = await preparer(page, { etats: [{ statut: 'en_cours' }] });
     await page.goto('/calendar-planner.html');
     await page.locator('#calculer-plan-btn').click();
+    await page.locator('#plan-calcul-lancer').click();
     await expect.poll(() => vus.calculer).toBeGreaterThan(0);
   });
 
@@ -89,6 +90,7 @@ test.describe('E2 — calcul du plan depuis le calendrier', () => {
     await preparer(page, { etats: [{ statut: 'en_cours' }] });
     await page.goto('/calendar-planner.html');
     await page.locator('#calculer-plan-btn').click();
+    await page.locator('#plan-calcul-lancer').click();
     await expect(page.locator('#calculer-plan-btn')).toBeDisabled();
   });
 
@@ -96,6 +98,7 @@ test.describe('E2 — calcul du plan depuis le calendrier', () => {
     await preparer(page, { etats: [{ statut: 'en_cours' }] });
     await page.goto('/calendar-planner.html');
     await page.locator('#calculer-plan-btn').click();
+    await page.locator('#plan-calcul-lancer').click();
     await expect(page.locator('#plan-etat')).toContainText(/cours|calcul/i);
   });
 
@@ -108,6 +111,7 @@ test.describe('E2 — calcul du plan depuis le calendrier', () => {
     await page.goto('/calendar-planner.html');
     const avant = vus.plan;
     await page.locator('#calculer-plan-btn').click();
+    await page.locator('#plan-calcul-lancer').click();
     await expect.poll(() => vus.plan, { timeout: 15000 }).toBeGreaterThan(avant);
   });
 
@@ -117,6 +121,7 @@ test.describe('E2 — calcul du plan depuis le calendrier', () => {
     });
     await page.goto('/calendar-planner.html');
     await page.locator('#calculer-plan-btn').click();
+    await page.locator('#plan-calcul-lancer').click();
     await expect(page.locator('#calculer-plan-btn')).toBeEnabled({ timeout: 15000 });
   });
 
@@ -130,6 +135,7 @@ test.describe('E2 — calcul du plan depuis le calendrier', () => {
     });
     await page.goto('/calendar-planner.html');
     await page.locator('#calculer-plan-btn').click();
+    await page.locator('#plan-calcul-lancer').click();
     await expect(page.locator('#plan-etat')).toContainText(/ortools introuvable/,
       { timeout: 15000 });
   });
@@ -142,6 +148,7 @@ test.describe('E2 — calcul du plan depuis le calendrier', () => {
     });
     await page.goto('/calendar-planner.html');
     await page.locator('#calculer-plan-btn').click();
+    await page.locator('#plan-calcul-lancer').click();
     await expect(page.locator('#plan-etat')).toContainText(/deja en cours/i);
   });
 
@@ -152,6 +159,7 @@ test.describe('E2 — calcul du plan depuis le calendrier', () => {
     });
     await page.goto('/calendar-planner.html');
     await page.locator('#calculer-plan-btn').click();
+    await page.locator('#plan-calcul-lancer').click();
     await expect(page.locator('#calculer-plan-btn')).toBeEnabled({ timeout: 15000 });
     const apresFin = vus.etat;
     await page.waitForTimeout(3000);

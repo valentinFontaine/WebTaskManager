@@ -1,0 +1,85 @@
+/* Champ Projets a bulles partage (champ-projets.js). Styles repris de
+   graphe.css, qui garde ses propres classes (graphe-projet-puce...). */
+.champ-projets {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.champ-projets-boite {
+    flex: 1;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 8px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    background: #fff;
+}
+
+.champ-projets-puces {
+    display: contents;
+}
+
+.champ-projets-puce {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 4px 3px 10px;
+    border: 1px solid #4a90e2;
+    border-radius: 999px;
+    background: #e8f1fb;
+    color: #2a5d9f;
+    font-size: 13px;
+}
+
+.champ-projets-puce-retirer {
+    border: none;
+    background: none;
+    color: inherit;
+    cursor: pointer;
+    font-size: 15px;
+    line-height: 1;
+    padding: 0 4px;
+}
+
+.champ-projets-saisie {
+    flex: 1;
+    min-width: 140px;
+    border: none;
+    outline: none;
+    padding: 4px;
+    font-size: 14px;
+}
+
+.champ-projets-suggestions {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 100%;
+    z-index: 10;
+    margin: 2px 0 0;
+    padding: 0;
+    list-style: none;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+
+.champ-projets-suggestions[hidden] {
+    display: none;
+}
+
+.champ-projets-suggestion {
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.champ-projets-suggestion:hover,
+.champ-projets-suggestion--active {
+    background: #e8f1fb;
+}

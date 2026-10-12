@@ -15,6 +15,7 @@
     <link rel="stylesheet" href="calendar-planner.css">
     <link rel="stylesheet" href="task-card-styles.css">
     <link rel="stylesheet" href="task-editor-styles.css">
+    <link rel="stylesheet" href="champ-projets.css">
     
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght=300;400;500;700&display=swap" rel="stylesheet">
@@ -147,11 +148,43 @@
         </div>
     </div>
 
+    <!-- Perimetre du calcul : projets et horizon detaille (tests/plan-perimetre.spec.js) -->
+    <div id="plan-calcul-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Calculer le plan</h3>
+            </div>
+            <div class="modal-body">
+                <div class="plan-calcul-groupe">
+                    <label for="plan-calcul-projets">Projets</label>
+                    <div class="champ-projets">
+                        <div class="champ-projets-boite">
+                            <span id="plan-calcul-projets-puces" class="champ-projets-puces"></span>
+                            <input type="text" id="plan-calcul-projets" class="champ-projets-saisie" autocomplete="off" placeholder="Ajouter un projet…">
+                        </div>
+                        <ul id="plan-calcul-suggestions" class="champ-projets-suggestions" hidden></ul>
+                    </div>
+                    <small>Aucun projet = tous les projets.</small>
+                </div>
+                <div class="plan-calcul-groupe">
+                    <label for="plan-calcul-horizon">Horizon du calcul détaillé (jours)</label>
+                    <input type="number" id="plan-calcul-horizon" value="14" min="1" max="90" step="1">
+                </div>
+                <p id="plan-calcul-erreur" class="plan-calcul-erreur" hidden></p>
+            </div>
+            <div class="modal-footer">
+                <button id="plan-calcul-annuler" class="btn btn-secondary" type="button">Annuler</button>
+                <button id="plan-calcul-lancer" class="btn btn-primary" type="button">Lancer le calcul</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast UI Calendar JS - The order is important-->
     <script src="https://uicdn.toast.com/tui.time-picker/latest/tui-time-picker.js"></script>
     <script src="https://uicdn.toast.com/tui.date-picker/latest/tui-date-picker.js"></script>
     <script src="https://uicdn.toast.com/calendar/v2.1.3/toastui-calendar.min.js"></script>
     <!-- Custom JS -->
+    <script src="champ-projets.js"></script>
     <script src="task-card.js"></script>
     <script src="task-editor.js"></script>
     <script src="calendar-planner.js"></script>

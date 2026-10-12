@@ -107,7 +107,7 @@ def empreinte_du_calcul():
     return _empreinte_calcul
 
 
-def commande_planification(sortie=None):
+def commande_planification(sortie=None, projets=None, horizon_detaille=None):
     """La ligne de commande, isolee pour etre verifiable sans rien executer.
 
     Aucun drapeau d'ecriture : voir la garantie centrale en tete de module.
@@ -115,9 +115,21 @@ def commande_planification(sortie=None):
     variables d'environnement correspondantes (PLANIFICATEUR_CONFIG,
     PLANIFICATEUR_ECHEANCES, PLANIFICATEUR_REUNIONS) sont positionnees --
     pour viser une base de test sans changer le comportement par defaut.
+
+    `projets` (noms deja valides par l'appelant) devient `--filtre` ;
+    `horizon_detaille` (jours) devient `--horizon-detaille`.
     """
     commande = [PYTHON, "-m", "planif", "--sortie",
                os.path.abspath(sortie or SORTIE)]
+    if projets:
+        termes = ["project:" + p for p in projets]
+        if len(termes) == 1:
+            filtre = "status:pending " + termes[0]
+        else:
+            filtre = "status:pending ( " + " or ".join(termes) + " )"
+        commande += ["--filtre", filtre]
+    if horizon_detaille is not None:
+        commande += ["--horizon-detaille", str(horizon_detaille)]
     for option, chemin in (("--config", PLANIFICATEUR_CONFIG),
                            ("--echeances", PLANIFICATEUR_ECHEANCES),
                            ("--reunions", PLANIFICATEUR_REUNIONS)):
@@ -177,7 +189,7 @@ def _planificateur_absent():
     return None
 
 
-def lancer(sortie=None, empreinte=None):
+def lancer(sortie=None, empreinte=None, projets=None, horizon_detaille=None):
     """Demarre un calcul en tache de fond. Rend (accepte, etat_ou_message).
 
     `empreinte` est celle de la base, prise par l'appelant juste avant
@@ -199,7 +211,8 @@ def lancer(sortie=None, empreinte=None):
                  "fini_a": None}
         _empreinte_calcul = empreinte
         _fil = threading.Thread(
-            target=_travail, args=(commande_planification(sortie), time.time()),
+            target=_travail, args=(commande_planification(sortie, projets, horizon_detaille),
+                  time.time()),
             daemon=True)
         _fil.start()
 

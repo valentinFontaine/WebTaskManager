@@ -511,8 +511,77 @@ async function interrogerEtatPlan() {
     }
 }
 
-/** Lance le calcul du plan et demarre le suivi si le backend l'accepte. */
-async function lancerCalculPlan() {
+const CLE_PLAN_PROJETS = 'plan-calcul-projets';
+const CLE_PLAN_HORIZON = 'plan-calcul-horizon';
+const HORIZON_PAR_DEFAUT = 14;
+
+/** Le perimetre retenu d'une ouverture a l'autre (localStorage). */
+function perimetreRetenu() {
+    let projets = [];
+    let horizon = HORIZON_PAR_DEFAUT;
+    try {
+        const brut = JSON.parse(localStorage.getItem(CLE_PLAN_PROJETS));
+        if (Array.isArray(brut)) projets = brut.filter(p => typeof p === 'string' && p);
+        const h = Number(localStorage.getItem(CLE_PLAN_HORIZON));
+        if (Number.isInteger(h) && h >= 1 && h <= 90) horizon = h;
+    } catch (e) { /* stockage indisponible : valeurs par defaut */ }
+    return { projets, horizon_detaille: horizon };
+}
+
+let champProjetsPlan = null;
+
+function ouvrirModaleCalcul() {
+    const modale = document.getElementById('plan-calcul-modal');
+    if (!modale) return;
+    document.getElementById('plan-calcul-horizon').value = perimetreRetenu().horizon_detaille;
+    const erreur = document.getElementById('plan-calcul-erreur');
+    erreur.hidden = true;
+    erreur.textContent = '';
+    modale.classList.add('show');
+    document.getElementById('plan-calcul-projets').focus();
+}
+
+function fermerModaleCalcul() {
+    const modale = document.getElementById('plan-calcul-modal');
+    if (modale) modale.classList.remove('show');
+}
+
+/** Valide la fenetre et lance le calcul ; sinon affiche l'erreur dans la fenetre. */
+function validerModaleCalcul() {
+    const saisie = document.getElementById('plan-calcul-horizon').value.trim();
+    const horizon = Number(saisie);
+    if (saisie === '' || !Number.isInteger(horizon) || horizon < 1 || horizon > 90) {
+        const erreur = document.getElementById('plan-calcul-erreur');
+        erreur.textContent = 'L\'horizon doit être un nombre entier de jours, de 1 à 90.';
+        erreur.hidden = false;
+        return;
+    }
+    const projets = champProjetsPlan ? champProjetsPlan.selection() : [];
+    try { localStorage.setItem(CLE_PLAN_HORIZON, String(horizon)); } catch (e) { /* ignore */ }
+    fermerModaleCalcul();
+    lancerCalculPlan({ projets, horizon_detaille: horizon });
+}
+
+function initModaleCalcul() {
+    const champ = document.getElementById('plan-calcul-projets');
+    if (!champ || !window.ChampProjets) return;
+    champProjetsPlan = ChampProjets.creer({
+        champ,
+        puces: document.getElementById('plan-calcul-projets-puces'),
+        suggestions: document.getElementById('plan-calcul-suggestions'),
+        cleStockage: CLE_PLAN_PROJETS,
+    });
+    document.getElementById('plan-calcul-lancer').addEventListener('click', validerModaleCalcul);
+    document.getElementById('plan-calcul-annuler').addEventListener('click', fermerModaleCalcul);
+}
+
+/**
+ * Lance le calcul du plan et demarre le suivi si le backend l'accepte.
+ * `perimetre` = `{ projets, horizon_detaille }` ; sans argument (recalcul
+ * apres Figer ou Valider), le perimetre retenu de la derniere fenetre.
+ */
+async function lancerCalculPlan(perimetre) {
+    const corps = perimetre || perimetreRetenu();
     const btn = document.getElementById('calculer-plan-btn');
     // Desactive tout de suite, avant meme l'appel reseau : sinon la fenetre
     // entre le clic et la reponse du POST laisse le bouton recliquable, et
@@ -522,7 +591,11 @@ async function lancerCalculPlan() {
     mettreAJourEtatBoutonValider();
     afficherEtatPlan('Lancement du calcul...');
     try {
-        const reponse = await fetch('/api/plan/calculer', { method: 'POST' });
+        const reponse = await fetch('/api/plan/calculer', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(corps),
+        });
         const donnees = await reponse.json();
         if (!donnees.success) {
             // Refus du backend (calcul deja en cours, etc.) : montre, pas
@@ -867,8 +940,9 @@ function setupEventListeners() {
     // suit son etat jusqu'a la fin.
     const calculerPlanBtn = document.getElementById('calculer-plan-btn');
     if (calculerPlanBtn) {
+        initModaleCalcul();
         calculerPlanBtn.addEventListener('click', () => {
-            lancerCalculPlan();
+            ouvrirModaleCalcul();
         });
     }
 
@@ -897,6 +971,11 @@ function setupEventListeners() {
     }
     document.addEventListener('keydown', (e) => {
         if (e.key !== 'Escape') return;
+        const modaleCalcul = document.getElementById('plan-calcul-modal');
+        if (modaleCalcul && modaleCalcul.classList.contains('show')) {
+            fermerModaleCalcul();
+            return;
+        }
         const modale = document.getElementById('plan-retard-modal');
         if (modale && modale.classList.contains('show')) {
             fermerModaleRetard();

@@ -93,6 +93,7 @@ async function ouvrirEtCalculer(page, statut) {
   await expect.poll(() => page.locator('.bloc-plan').count(), { timeout: 15000 })
     .toBeGreaterThan(0);
   await page.locator('#calculer-plan-btn').click();
+  await page.locator('#plan-calcul-lancer').click();
 }
 
 for (const statut of ['INFEASIBLE', 'UNKNOWN']) {

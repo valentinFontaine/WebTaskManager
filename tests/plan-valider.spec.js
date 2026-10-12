@@ -150,6 +150,7 @@ test.describe('E4 -- Valider', () => {
     await preparer(page, { etats: [{ statut: 'en_cours' }] });
     await ouvrir(page);
     await page.locator('#calculer-plan-btn').click();
+    await page.locator('#plan-calcul-lancer').click();
     await expect(page.locator('#valider-plan-btn')).toBeDisabled();
   });
 

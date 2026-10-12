@@ -390,8 +390,36 @@ def empreinte_base():
     return plan_runner.empreinte(taches)
 
 
+_NOM_PROJET = re.compile(r"[\w.-]+")
+
+
+def perimetre_du_calcul(corps):
+    """Valide le corps de /api/plan/calculer. Rend (projets, horizon) ou leve ValueError.
+
+    Un nom de projet va tel quel dans un filtre Taskwarrior : lettres, chiffres,
+    `_`, `-` et `.` seulement. L'horizon est un entier strict de 1 a 90.
+    """
+    if corps is None:
+        return [], None
+    if not isinstance(corps, dict):
+        raise ValueError("corps invalide : objet JSON attendu")
+    projets = corps.get("projets") or []
+    if not isinstance(projets, list):
+        raise ValueError("projets : liste attendue")
+    for nom in projets:
+        if not isinstance(nom, str) or not _NOM_PROJET.fullmatch(nom):
+            raise ValueError("nom de projet invalide : {!r} (lettres, chiffres, "
+                             "_ - . seulement)".format(nom))
+    horizon = corps.get("horizon_detaille")
+    if horizon is not None and (isinstance(horizon, bool)
+                                or not isinstance(horizon, int)
+                                or not 1 <= horizon <= 90):
+        raise ValueError("horizon_detaille : entier de 1 a 90 attendu")
+    return projets, horizon
+
+
 @app.post("/api/plan/calculer")
-async def calculer_plan():
+async def calculer_plan(request: Request):
     """Lance l'ordonnanceur en tache de fond et republie `plan.json`.
 
     N'ECRIT RIEN dans Taskwarrior : la ligne de commande construite par
@@ -402,8 +430,23 @@ async def calculer_plan():
     et l'avancement se lit sur `/api/plan/etat`. L'empreinte de la base est
     prise ici, juste avant de lancer, pour que Valider puisse verifier plus
     tard qu'elle n'a pas change entre-temps.
+
+    Corps JSON optionnel `{projets, horizon_detaille}` : voir
+    `perimetre_du_calcul`. Un perimetre invalide est refuse sans rien lancer.
     """
-    accepte, resultat = plan_runner.lancer(empreinte=empreinte_base())
+    brut = await request.body()
+    corps = None
+    if brut.strip():
+        try:
+            corps = json.loads(brut)
+        except ValueError:
+            return ResponseModel(success=False, error="corps JSON illisible")
+    try:
+        projets, horizon = perimetre_du_calcul(corps)
+    except ValueError as erreur:
+        return ResponseModel(success=False, error=str(erreur))
+    accepte, resultat = plan_runner.lancer(
+        empreinte=empreinte_base(), projets=projets, horizon_detaille=horizon)
     if not accepte:
         return ResponseModel(success=False, error=resultat)
     return ResponseModel(success=True, data=resultat)

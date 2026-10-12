@@ -1043,3 +1043,36 @@ body {
     font-style: italic;
     color: var(--secondary-color);
 }
+
+
+/* Fenetre « Calculer le plan » : les suggestions du champ a bulles doivent
+   deborder de la boite. */
+#plan-calcul-modal .modal-content {
+    overflow: visible;
+}
+
+.plan-calcul-groupe {
+    margin-bottom: 1rem;
+}
+
+.plan-calcul-groupe label {
+    display: block;
+    margin-bottom: 4px;
+    font-weight: 500;
+}
+
+.plan-calcul-groupe small {
+    color: #666;
+}
+
+.plan-calcul-groupe input[type="number"] {
+    width: 6rem;
+    padding: 6px 8px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+}
+
+.plan-calcul-erreur {
+    color: #b00020;
+    margin: 0;
+}

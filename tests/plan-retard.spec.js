@@ -226,6 +226,7 @@ async function ouvrirEtCalculer(page, opts) {
   await expect.poll(() => page.locator('.bloc-plan').count(), { timeout: 15000 })
     .toBeGreaterThan(0);
   await page.locator('#calculer-plan-btn').click();
+  await page.locator('#plan-calcul-lancer').click();
   await expect(page.locator('#plan-etat')).not.toHaveText('Lancement du calcul...',
     { timeout: 15000 });
 }

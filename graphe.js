@@ -623,7 +623,7 @@
                 definirMessage('Clôture refusée : ' + raison, { erreur: true });
                 return;
             }
-            await chargerEtDessiner(selection.slice());
+            await chargerEtDessiner(selection());
             definirMessage('Tâche terminée : ' + description);
         } catch (e) {
             console.error(e);
@@ -682,7 +682,7 @@
                 definirMessage('Suppression refusée : ' + raison, { erreur: true });
                 return;
             }
-            await chargerEtDessiner(selection.slice());
+            await chargerEtDessiner(selection());
             definirMessage('Tâche supprimée : ' + description);
         } catch (e) {
             console.error(e);
@@ -894,7 +894,7 @@
                 return;
             }
             fermerDecoupage();
-            await chargerEtDessiner(selection.slice());
+            await chargerEtDessiner(selection());
             definirMessage('Tâche découpée : ' + description + ' (' + corps.sous_taches.length + ' sous-tâches).');
         } catch (e) {
             console.error(e);
@@ -1130,7 +1130,7 @@
     }
 
     function actualiser() {
-        if (selection.length === 0) {
+        if (selection().length === 0) {
             requeteEnCours++; // invalide toute requete deja partie
             dessinEnCours++; // et tout rendu en cours
             derniereReponse = null;
@@ -1139,162 +1139,30 @@
             definirMessage('Choisissez au moins un projet pour afficher son graphe.');
             return;
         }
-        chargerEtDessiner(selection.slice());
+        chargerEtDessiner(selection());
     }
 
-    // ----- Champ Projets a bulles -----
+    // ----- Champ Projets a bulles (composant partage : champ-projets.js) -----
 
-    const CLE_SELECTION = 'graphe-projets';
-    const MAX_SUGGESTIONS = 8;
-    let selection = lireSelection();
-    let projetsConnusCache = [];
-    let suggestionsAffichees = [];
-    let suggestionActive = -1;
-    let requeteSuggestions = 0;
+    let champProjets = null;
 
-    function lireSelection() {
-        try {
-            const brut = JSON.parse(localStorage.getItem(CLE_SELECTION));
-            if (Array.isArray(brut)) {
-                return brut.filter((p, i) => typeof p === 'string' && p && brut.indexOf(p) === i);
-            }
-        } catch (e) { /* stockage indisponible ou corrompu : selection vide */ }
-        return [];
-    }
-
-    function ecrireSelection() {
-        try { localStorage.setItem(CLE_SELECTION, JSON.stringify(selection)); } catch (e) { /* ignore */ }
-    }
-
-    // nav.js remplace projectsReady apres sa creation : on le relit a chaque
-    // besoin tant que la liste obtenue est vide.
-    async function projetsConnus() {
-        if (projetsConnusCache.length) return projetsConnusCache;
-        try {
-            const liste = window.twNav ? await window.twNav.projectsReady : [];
-            if (Array.isArray(liste) && liste.length) projetsConnusCache = liste;
-        } catch (e) { /* liste indisponible : aucune suggestion */ }
-        return projetsConnusCache;
-    }
-
-    // Sous-sequence insensible a la casse : les lettres tapees apparaissent
-    // dans l'ordre, pas forcement contigues.
-    function correspondFlou(nom, saisie) {
-        const n = nom.toLowerCase();
-        let pos = 0;
-        for (const c of saisie) {
-            pos = n.indexOf(c, pos);
-            if (pos === -1) return false;
-            pos++;
-        }
-        return true;
-    }
-
-    function calculerSuggestions(projets, saisie) {
-        const q = saisie.trim().toLowerCase().replace(/\s+/g, '');
-        if (!q) return [];
-        const candidats = projets.filter(p => !selection.includes(p) && correspondFlou(p, q));
-        // Les correspondances contigues d'abord, sinon l'ordre de la liste.
-        const contigus = candidats.filter(p => p.toLowerCase().includes(q));
-        const autres = candidats.filter(p => !p.toLowerCase().includes(q));
-        return contigus.concat(autres).slice(0, MAX_SUGGESTIONS);
-    }
-
-    function champProjets() { return elt('graphe-projets'); }
-    function listeSuggestions() { return document.querySelector('.graphe-projets-suggestions'); }
-
-    function afficherSuggestions() {
-        const liste = listeSuggestions();
-        liste.innerHTML = '';
-        suggestionsAffichees.forEach((nom, i) => {
-            const li = document.createElement('li');
-            li.className = 'graphe-projets-suggestion';
-            if (i === suggestionActive) li.classList.add('graphe-projets-suggestion--active');
-            li.textContent = nom;
-            // mousedown + preventDefault : le champ garde le focus
-            li.addEventListener('mousedown', (e) => {
-                e.preventDefault();
-                ajouterProjet(nom);
-            });
-            liste.appendChild(li);
-        });
-        liste.hidden = suggestionsAffichees.length === 0;
-    }
-
-    async function majSuggestions() {
-        const id = ++requeteSuggestions;
-        const projets = await projetsConnus();
-        if (id !== requeteSuggestions) return;
-        suggestionsAffichees = calculerSuggestions(projets, champProjets().value);
-        suggestionActive = -1;
-        afficherSuggestions();
-    }
-
-    function afficherPuces() {
-        const conteneur = elt('graphe-projets-puces');
-        conteneur.innerHTML = '';
-        for (const nom of selection) {
-            const puce = document.createElement('span');
-            puce.className = 'graphe-projet-puce';
-            puce.dataset.projet = nom;
-            const libelle = document.createElement('span');
-            libelle.textContent = nom;
-            const retirer = document.createElement('button');
-            retirer.type = 'button';
-            retirer.className = 'graphe-projet-puce-retirer';
-            retirer.textContent = '×';
-            retirer.setAttribute('aria-label', 'Retirer ' + nom);
-            retirer.addEventListener('click', () => retirerProjet(nom));
-            puce.append(libelle, retirer);
-            conteneur.appendChild(puce);
-        }
-    }
-
-    function selectionChangee() {
-        ecrireSelection();
-        afficherPuces();
-        actualiser();
-    }
-
-    function ajouterProjet(nom) {
-        if (!selection.includes(nom)) selection.push(nom);
-        champProjets().value = '';
-        requeteSuggestions++;
-        suggestionsAffichees = [];
-        suggestionActive = -1;
-        afficherSuggestions();
-        selectionChangee();
-    }
-
-    function retirerProjet(nom) {
-        selection = selection.filter(p => p !== nom);
-        selectionChangee();
+    function selection() {
+        return champProjets ? champProjets.selection() : [];
     }
 
     function initChampProjets() {
-        const champ = champProjets();
-        afficherPuces();
-        projetsConnus(); // echauffement : la premiere frappe n'attend plus
-        champ.addEventListener('input', majSuggestions);
-        champ.addEventListener('focus', () => { if (champ.value) majSuggestions(); });
-        champ.addEventListener('blur', () => { listeSuggestions().hidden = true; });
-        champ.addEventListener('keydown', (e) => {
-            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-                if (!suggestionsAffichees.length) return;
-                e.preventDefault();
-                suggestionActive = e.key === 'ArrowDown'
-                    ? Math.min(suggestionActive + 1, suggestionsAffichees.length - 1)
-                    : Math.max(suggestionActive - 1, 0);
-                afficherSuggestions();
-            } else if (e.key === 'Enter') {
-                // Sans suggestion active, la premiere ; sans suggestion du
-                // tout, rien (projets connus seulement).
-                e.preventDefault();
-                const choix = suggestionsAffichees[Math.max(suggestionActive, 0)];
-                if (choix) ajouterProjet(choix);
-            } else if (e.key === 'Backspace' && !champ.value && selection.length) {
-                retirerProjet(selection[selection.length - 1]);
-            }
+        champProjets = ChampProjets.creer({
+            champ: elt('graphe-projets'),
+            puces: elt('graphe-projets-puces'),
+            suggestions: document.querySelector('.graphe-projets-suggestions'),
+            cleStockage: 'graphe-projets',
+            classesSupplementaires: {
+                puce: 'graphe-projet-puce',
+                retirer: 'graphe-projet-puce-retirer',
+                suggestion: 'graphe-projets-suggestion',
+                suggestionActive: 'graphe-projets-suggestion--active',
+            },
+            onChange: actualiser,
         });
     }
 
