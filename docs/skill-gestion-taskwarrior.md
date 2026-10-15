@@ -15,8 +15,9 @@ les taches et ferme les jalons lui-meme. Ne pas l'inventer, le dire.
 - Jamais de commande `task` sur la base de prod. On travaille sur une **copie
   temporaire** (`TASKDATA` pose explicitement, verifie par
   `task rc:<taskrc> _get rc.data.location`). Un `TASKDATA` herite l'emporte sur le taskrc.
-- Toute ecriture vient d'un **lot** (fichier de corrections) que l'utilisateur a valide,
-  apres une sauvegarde `task export`. Pas de lot valide, pas d'ecriture.
+- Toute ecriture vient d'un **lot** que l'utilisateur a valide, apres une sauvegarde
+  `task export`. Pas de lot valide, pas d'ecriture. Chemin normal : le serveur MCP
+  (section 3a) ; `wtm.py appliquer` reste un recours.
 - Ne jamais tuer un processus que tu n'as pas lance. Ne jamais utiliser les ports 1875
   (prod) ni 8000 (dev) : prendre un port libre.
 - `estTime` : formats valides `90min`, `1.5h`, `PT1H30M`. **`1h30` est rejete.**
@@ -31,7 +32,38 @@ les taches et ferme les jalons lui-meme. Ne pas l'inventer, le dire.
   `task scheduled.not: export`. Projets : `task _projects`.
 - Ne jamais afficher l'export en entier : agreger (comptes, listes d'uuid, ecarts).
 
-## 3. Outils (wrapper wtm.py)
+## 3. Outils
+
+### 3a. Serveur MCP `taskwarrior` : le chemin normal pour lire et ecrire
+
+Cinq fonctions (`tools/mcp_taskwarrior.py`, spec `openspec/changes/serveur-mcp-taskwarrior/`).
+La base visee est fixee par le serveur (`WTM_MCP_TASKRC`) : l'agent ne pose ni `TASKRC` ni
+copie, et ne lance aucune commande `task`.
+
+| Fonction | Effet |
+|---|---|
+| `lire(projet, statut, filtre, limite)` | lecture seule ; une ligne par tache (uuid court, projet, description, tags, estTime, due, scheduled, depends). `filtre` : filtre Taskwarrior, sans mot de commande |
+| `proposer_lot(titre, operations)` | valide, essaie sur une copie jetable, fige le lot (`L-xxxx`) ; rend un resume a **recopier tel quel** a l'utilisateur. Un bloquant : pas d'id, rien de fige |
+| `appliquer_lot(id)` | confirmation de l'utilisateur demandee par Claude Code. Refuse si la base a change, si le lot a plus de 24 h ou est deja applique ; sauvegarde, applique, verifie, journalise |
+| `annuler_lot(id)` | confirmation demandee. Defait uniquement ce que le lot a touche ; refuse en bloc si une de ces taches a ete retouchee depuis |
+| `lister_lots(n)` | derniers lots et leur etat |
+
+Operations : `creer` (`description`, `project`, `tags`, `estTime`, `due`, `scheduled`, `wait`,
+`depends` = uuid existants ou `$n` pour la n-ieme tache creee du lot, `priority`,
+`annotations`) ; `modifier` (`uuid` + champs a remplacer, `tags_ajout`/`tags_retrait`,
+`depends_ajout`/`depends_retrait`) ; `decouper` (memes champs que `split` ci-dessous) ;
+`annoter` (`uuid`, `texte`). uuid complet ou court (8). Accents surs partout (ecriture par
+`task import`). `estTime` : `30min`, `1.5h`, `1h30`, `PT1H30M`. Dates : `AAAA-MM-JJ`,
+`JJ/MM/AAAA`. Toute tache doit garder `+pro` ou `+perso`.
+
+Interdits (refuses par le serveur) : `done`, `delete`, `status`, `purge`, `undo`, `sync`,
+config. Avertissements (le lot est fige, l'utilisateur decide) : tag hors de `docs/tags.md`,
+projet nouveau, doublon probable, echeance passee, `scheduled` apres `due`, estTime absent.
+
+Deroule : `lire` → `proposer_lot` → montrer le resume → l'utilisateur dit « applique » →
+`appliquer_lot`. Ne jamais appeler `appliquer_lot` sans ce oui dans la conversation.
+
+### 3b. wtm.py : audit et planification (lecture seule, sur copie)
 
 Script : `C:/Users/irpaui/Documents/Projets/perso/WebTaskManager-prod/tools/wtm.py`
 (version validee ; `python <script> <commande>`).

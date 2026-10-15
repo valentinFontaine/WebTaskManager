@@ -202,6 +202,7 @@ Tout passe par `run_task_command()` (`main_fastapi.py`), qui appelle
 | `task add "<desc>" …` puis `task +LATEST export` | `POST /api/task/add` |
 | `task add …` ×n, puis `task rc.confirmation=off <uuid> modify +milestone estTime:30min depends:…` | `POST /api/task/{uuid}/split` (`decoupage.py`) |
 | `task status:pending export` puis `task <jalon> done` | `POST /api/task/{id}/done` (clôture des jalons) |
+| `task export`, `task import <fichier UTF-8>`, `task rc.confirmation=off <uuid> delete` (annulation d'une création seulement) | serveur MCP `tools/mcp_taskwarrior.py` (lots proposés, appliqués, annulés ; base fixée par `WTM_MCP_TASKRC`, état hors de la base dans `WTM_MCP_ETAT`). Spec : `openspec/changes/serveur-mcp-taskwarrior/` |
 
 **UDA requis dans le `taskrc`** (définition de référence : `example_taskrc.txt`) :
 `estTime` (duration), `assignee` (string).
