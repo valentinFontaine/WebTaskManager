@@ -11,7 +11,7 @@ Fonctions pures testees directement (le serveur MCP n'en est qu'une enveloppe) :
     annuler_lot(taskrc, etat, id) -> str
     lister_lots(etat, n=10, maintenant=None) -> str
     rendre_resume(proposition) -> str
-    creer_serveur(config) -> FastMCP
+    creer_serveur(config) -> MCPServer (mcp 2.x)
 
 Les refus levent `wtm.WtmErreur` ; l'enveloppe MCP les rend en texte « Refusé : ... ».
 
