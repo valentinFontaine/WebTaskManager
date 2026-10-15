@@ -525,3 +525,21 @@ class TestServeurMcp:
         res = asyncio.run(serveur.call_tool('appliquer_lot', {'id': 'L-0000'}))
         texte = json.dumps(res, default=str, ensure_ascii=False)
         assert 'Refusé' in texte
+
+
+class TestLancement:
+    """Claude Code lance le script depuis n'importe quel dossier : sous pytest, la racine
+    du depot est deja dans sys.path, ce qui masquait un import casse (2026-10-15)."""
+
+    def test_script_lance_hors_du_depot_refuse_proprement_sans_taskrc(self, tmp_path):
+        import subprocess
+        script = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                              'tools', 'mcp_taskwarrior.py')
+        env = {k: v for k, v in os.environ.items()
+               if k not in ('WTM_MCP_TASKRC', 'PYTHONPATH', 'TASKDATA')}
+        fini = subprocess.run([sys.executable, script], cwd=str(tmp_path), env=env,
+                              capture_output=True, text=True, encoding='utf-8',
+                              stdin=subprocess.DEVNULL, timeout=60)
+        assert 'Error' not in fini.stderr, fini.stderr
+        assert fini.returncode == 2
+        assert 'WTM_MCP_TASKRC' in fini.stderr

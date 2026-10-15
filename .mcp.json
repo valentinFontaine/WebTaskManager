@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "taskwarrior": {
+      "command": "C:/Users/irpaui/Documents/Projets/perso/WebTaskManager/venv/Scripts/python.exe",
+      "args": ["C:/Users/irpaui/Documents/Projets/perso/WebTaskManager/tools/mcp_taskwarrior.py"],
+      "env": {
+        "WTM_MCP_TASKRC": "C:/Users/irpaui/taskwarrior-dev/taskrc",
+        "WTM_MCP_ETAT": "C:/Users/irpaui/AppData/Local/wtm-mcp-dev",
+        "PYTHONIOENCODING": "utf-8"
+      }
+    }
+  }
+}
