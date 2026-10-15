@@ -246,7 +246,8 @@ def _preparer_split(taches, op):
 
 def _split(taskrc, op):
     """Decoupe une tache : sous-taches importees (UTF-8), puis une seule commande
-    sur le jalon. Si elle echoue, les sous-taches creees sont supprimees."""
+    sur le jalon. Si elle echoue, les sous-taches creees sont supprimees.
+    Rend les uuid des sous-taches creees."""
     _, anciens, plan = _preparer_split(_exporter(taskrc), op)
     maintenant = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
     crees = []
@@ -270,6 +271,7 @@ def _split(taskrc, op):
         for u in nouveaux:
             executer_task(taskrc, ['rc.confirmation=off', u, 'delete'])
         raise WtmErreur('split echoue, sous-taches supprimees : ' + err.strip())
+    return nouveaux
 
 
 def appliquer(lot_path, taskrc, cible_prod=False):
