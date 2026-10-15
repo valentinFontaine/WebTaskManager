@@ -15,6 +15,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -224,6 +225,28 @@ def auditer(taskrc, sortie_dir):
             'anomalies': trouvees}
 
 
+def esttime_iso(valeur):
+    """`30min`, `1h`, `1.5h`, `1h30`, `1h+30min`, `PT1H30M` -> `PT1H30M`. ValueError sinon."""
+    texte = str(valeur).strip()
+    m = re.fullmatch(r'PT(?:(\d+)H)?(?:(\d+)M)?', texte.upper())
+    if m and (m.group(1) or m.group(2)):
+        minutes = int(m.group(1) or 0) * 60 + int(m.group(2) or 0)
+    else:
+        minutes = 0
+        for terme in decoupage.normaliser_esttime(texte).split('+'):
+            t = re.fullmatch(r'\s*(\d+(?:\.\d+)?)\s*(h|min|m)\s*', terme.lower())
+            if not t:
+                raise ValueError('estTime invalide : {}'.format(valeur))
+            minutes += float(t.group(1)) * (60 if t.group(2) == 'h' else 1)
+        if minutes != int(minutes):
+            raise ValueError('estTime invalide : {}'.format(valeur))
+        minutes = int(minutes)
+    if minutes <= 0:
+        raise ValueError('estTime invalide : {}'.format(valeur))
+    h, mn = divmod(minutes, 60)
+    return 'PT' + ('{}H'.format(h) if h else '') + ('{}M'.format(mn) if mn else '')
+
+
 def _preparer_split(taches, op):
     """Valide un `split` sur l'etat `taches` ; rend (tache, anciens depends, plan).
 
@@ -255,9 +278,16 @@ def _split(taskrc, op):
         c = {'uuid': str(_uuid.uuid4()), 'status': 'pending',
              'entry': maintenant, 'description': sous['description'],
              'depends': sous['depends']}
-        for cle in ('project', 'due', 'estTime'):
+        for cle in ('project', 'due'):
             if sous.get(cle):
                 c[cle] = sous[cle]
+        if sous.get('estTime'):
+            # ISO comme `task add` : `import` stockerait le texte brut, illisible
+            # par les filtres Taskwarrior et par le planificateur.
+            try:
+                c['estTime'] = esttime_iso(sous['estTime'])
+            except ValueError as exc:
+                raise WtmErreur('split {} refuse : {}'.format(op['uuid'], exc))
         if sous['tags']:
             c['tags'] = sous['tags']
         crees.append(c)

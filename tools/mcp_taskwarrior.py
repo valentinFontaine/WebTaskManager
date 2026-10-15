@@ -28,8 +28,8 @@ from datetime import datetime, timedelta, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-import decoupage  # noqa: E402  (wtm met la racine du depot dans sys.path)
-import wtm  # noqa: E402
+import wtm  # noqa: E402  (en premier : il met la racine du depot dans sys.path)
+import decoupage  # noqa: E402
 from wtm import WtmErreur  # noqa: E402
 
 FORMAT_UTC = '%Y%m%dT%H%M%SZ'
@@ -112,26 +112,7 @@ def _date_locale(utc):
     return d.astimezone().strftime('%d/%m/%Y')
 
 
-def _esttime_iso(valeur):
-    """`30min`, `1h`, `1.5h`, `1h30`, `1h+30min`, `PT1H30M` -> `PT1H30M`. ValueError sinon."""
-    texte = str(valeur).strip()
-    m = re.fullmatch(r'PT(?:(\d+)H)?(?:(\d+)M)?', texte.upper())
-    if m and (m.group(1) or m.group(2)):
-        minutes = int(m.group(1) or 0) * 60 + int(m.group(2) or 0)
-    else:
-        minutes = 0
-        for terme in decoupage.normaliser_esttime(texte).split('+'):
-            t = re.fullmatch(r'\s*(\d+(?:\.\d+)?)\s*(h|min|m)\s*', terme.lower())
-            if not t:
-                raise ValueError('estTime invalide : {}'.format(valeur))
-            minutes += float(t.group(1)) * (60 if t.group(2) == 'h' else 1)
-        if minutes != int(minutes):
-            raise ValueError('estTime invalide : {}'.format(valeur))
-        minutes = int(minutes)
-    if minutes <= 0:
-        raise ValueError('estTime invalide : {}'.format(valeur))
-    h, mn = divmod(minutes, 60)
-    return 'PT' + ('{}H'.format(h) if h else '') + ('{}M'.format(mn) if mn else '')
+_esttime_iso = wtm.esttime_iso
 
 
 def _duree_compacte(iso):

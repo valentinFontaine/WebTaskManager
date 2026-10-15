@@ -142,4 +142,6 @@ class TestSplitIntegration:
             assert t['project'] == 'Pompe'
             assert t['depends'] == [avant]
         assert final[apres]['depends'] == [cible]    # le successeur dépend toujours du jalon
-        assert sorted(t['estTime'] for t in sous) == ['1h+30min', '2h']   # `1h30` normalise
+        # ISO comme `task add` : `import` stockerait le texte brut, que ni les filtres
+        # Taskwarrior (estTime.above:1h) ni le planificateur ne lisent (mesure du 2026-10-15)
+        assert sorted(t['estTime'] for t in sous) == ['PT1H30M', 'PT2H']
